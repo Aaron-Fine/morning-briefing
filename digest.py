@@ -358,14 +358,26 @@ def assemble_template_data(
     }
 
 
-def run():
-    """Main entry point."""
+def run(dry_run: bool = False, sources_only: bool = False):
+    """Main entry point.
+
+    dry_run: collect sources, call Claude, render HTML, save to output/ — skip email.
+    sources_only: collect sources and dump to output/sources.json — skip Claude and email.
+    """
     log.info("=== Morning Digest starting ===")
 
     config = load_config()
+    output_dir = Path(__file__).parent / "output"
+    output_dir.mkdir(exist_ok=True)
 
     # 1. Collect raw data from all sources
     source_data = collect_sources(config)
+
+    if sources_only:
+        out = output_dir / "sources.json"
+        out.write_text(json.dumps(source_data, indent=2, default=str))
+        log.info(f"=== Sources written to {out} ===")
+        return
 
     # 2. Build prompt and call Claude
     system_prompt, user_content = build_claude_prompt(source_data, config)
@@ -377,6 +389,12 @@ def run():
     # 4. Render HTML
     html = render_email(template_data)
 
+    if dry_run:
+        out = output_dir / "last_digest.html"
+        out.write_text(html)
+        log.info(f"=== Dry run complete — digest saved to {out} ===")
+        return
+
     # 5. Send email
     success = send_digest(html, config)
 
@@ -384,13 +402,18 @@ def run():
         log.info("=== Digest sent successfully ===")
     else:
         log.error("=== Digest send FAILED ===")
-        # Optionally write to file as fallback
-        fallback = Path(__file__).parent / "output" / "last_digest.html"
-        fallback.parent.mkdir(exist_ok=True)
+        fallback = output_dir / "last_digest.html"
         fallback.write_text(html)
         log.info(f"Saved fallback to {fallback}")
         sys.exit(1)
 
 
 if __name__ == "__main__":
-    run()
+    import argparse
+    parser = argparse.ArgumentParser(description="Morning Digest generator")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Run full pipeline but save HTML to output/ instead of sending email")
+    parser.add_argument("--sources-only", action="store_true",
+                        help="Collect sources and dump to output/sources.json, skip Claude and email")
+    args = parser.parse_args()
+    run(dry_run=args.dry_run, sources_only=args.sources_only)
