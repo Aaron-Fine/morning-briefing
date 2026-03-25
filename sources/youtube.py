@@ -5,6 +5,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import requests
+from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +70,7 @@ def fetch_recent_videos(config: dict) -> list[dict]:
 
             for snippet, published in recent_items:
                 video_id = snippet["resourceId"]["videoId"]
+                transcript = _get_transcript(video_id)
                 videos.append({
                     "channel": ch["name"],
                     "title": snippet["title"],
@@ -75,7 +78,8 @@ def fetch_recent_videos(config: dict) -> list[dict]:
                     "url": f"https://www.youtube.com/watch?v={video_id}",
                     "published": published.isoformat(),
                     "duration_label": durations.get(video_id, ""),
-                    "description": snippet.get("description", "")[:300],
+                    "description": snippet.get("description", "")[:800],
+                    **({"transcript": transcript} if transcript else {}),
                 })
 
         except Exception as e:
@@ -85,6 +89,25 @@ def fetch_recent_videos(config: dict) -> list[dict]:
     # Sort by publish time, newest first
     videos.sort(key=lambda v: v["published"], reverse=True)
     return videos
+
+
+def _get_transcript(video_id: str, max_chars: int = 2000) -> Optional[str]:
+    """Fetch auto-generated or manual transcript for a video, truncated to max_chars.
+
+    Returns None if no transcript is available (disabled, private, etc.).
+    """
+    try:
+        segments = YouTubeTranscriptApi.get_transcript(video_id)
+        text = " ".join(s["text"] for s in segments)
+        if len(text) > max_chars:
+            # Truncate at a word boundary
+            text = text[:max_chars].rsplit(" ", 1)[0] + "…"
+        return text
+    except (TranscriptsDisabled, NoTranscriptFound):
+        return None
+    except Exception as e:
+        log.debug(f"Transcript unavailable for {video_id}: {e}")
+        return None
 
 
 def _get_video_durations(video_ids: list[str], api_key: str) -> dict[str, str]:
