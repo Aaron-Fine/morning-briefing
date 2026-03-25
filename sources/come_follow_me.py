@@ -1,9 +1,7 @@
 """Determine the current Come Follow Me lesson and provide a scripture/thought."""
 
 import logging
-from datetime import datetime, date
-import requests
-from bs4 import BeautifulSoup
+from datetime import date, timedelta
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +62,40 @@ SCHEDULE_2026 = [
     ("2026-12-14", "2026-12-20", 50, "Jeremiah 30-33; 36; Lamentations 1; 3", "I Will Write It in Their Hearts", "Jeremiah 31:33"),
     ("2026-12-21", "2026-12-27", 51, "Ezekiel 1-3; 33-34; 36-37; 47; Daniel 1-2; 6", "I Will Put My Spirit within You", "Ezekiel 37:27"),
 ]
+
+
+# General Conference sessions (Saturday + Sunday, first weekend of April and October)
+# Sessions run ~10:00 AM and ~2:00 PM MT each day.
+GENERAL_CONFERENCE_DATES = [
+    date(2026, 4, 4),   # Spring 2026 — Saturday
+    date(2026, 4, 5),   # Spring 2026 — Sunday
+    date(2026, 10, 3),  # Fall 2026 — Saturday
+    date(2026, 10, 4),  # Fall 2026 — Sunday
+    date(2027, 4, 3),   # Spring 2027 — Saturday
+    date(2027, 4, 4),   # Spring 2027 — Sunday
+    date(2027, 10, 2),  # Fall 2027 — Saturday
+    date(2027, 10, 3),  # Fall 2027 — Sunday
+]
+
+
+def get_upcoming_church_events(lookahead_days: int = 10) -> list[dict]:
+    """Return General Conference sessions within the lookahead window.
+
+    Returns list of dicts: {date, event, description}
+    """
+    today = date.today()
+    cutoff = today + timedelta(days=lookahead_days)
+    events = []
+    for d in GENERAL_CONFERENCE_DATES:
+        if today <= d <= cutoff:
+            label = "Saturday" if d.weekday() == 5 else "Sunday"
+            season = "Spring" if d.month == 4 else "Fall"
+            events.append({
+                "date": d.isoformat(),
+                "event": f"LDS General Conference — {season} {d.year} ({label})",
+                "description": "Worldwide broadcast of LDS General Conference sessions.",
+            })
+    return events
 
 
 def get_current_lesson(config: dict) -> dict:
