@@ -1,6 +1,7 @@
 """Fetch weather from Open-Meteo (free, no API key required)."""
 
 import logging
+from datetime import datetime
 import requests
 
 log = logging.getLogger(__name__)
@@ -40,8 +41,10 @@ def fetch_weather(config: dict) -> dict:
 
         forecast_days = []
         for i in range(min(5, len(daily.get("time", [])))):
+            day_date = datetime.strptime(daily["time"][i], "%Y-%m-%d")
             forecast_days.append({
                 "date": daily["time"][i],
+                "day_name": day_date.strftime("%a"),
                 "high_f": round(daily["temperature_2m_max"][i]),
                 "low_f": round(daily["temperature_2m_min"][i]),
                 "precip_chance": daily["precipitation_probability_max"][i],

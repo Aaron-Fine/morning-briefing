@@ -52,6 +52,7 @@ def fetch_recent_videos(config: dict) -> list[dict]:
             resp.raise_for_status()
             items = resp.json().get("items", [])
 
+            recent_items = []
             for item in items:
                 snippet = item["snippet"]
                 published = datetime.fromisoformat(
@@ -59,17 +60,21 @@ def fetch_recent_videos(config: dict) -> list[dict]:
                 )
                 if published < cutoff:
                     continue
+                recent_items.append((snippet, published))
 
+            # Batch fetch durations for all recent videos from this channel
+            video_ids = [s["resourceId"]["videoId"] for s, _ in recent_items]
+            durations = _get_video_durations(video_ids, api_key) if video_ids else {}
+
+            for snippet, published in recent_items:
                 video_id = snippet["resourceId"]["videoId"]
-                duration = _get_video_duration(video_id, api_key)
-
                 videos.append({
                     "channel": ch["name"],
                     "title": snippet["title"],
                     "video_id": video_id,
                     "url": f"https://www.youtube.com/watch?v={video_id}",
                     "published": published.isoformat(),
-                    "duration_label": duration,
+                    "duration_label": durations.get(video_id, ""),
                     "description": snippet.get("description", "")[:300],
                 })
 
@@ -82,27 +87,32 @@ def fetch_recent_videos(config: dict) -> list[dict]:
     return videos
 
 
-def _get_video_duration(video_id: str, api_key: str) -> str:
-    """Get human-readable duration for a video."""
-    try:
-        resp = requests.get(
-            f"{YOUTUBE_API_BASE}/videos",
-            params={
-                "part": "contentDetails",
-                "id": video_id,
-                "key": api_key,
-            },
-            timeout=10,
-        )
-        resp.raise_for_status()
-        items = resp.json().get("items", [])
-        if not items:
-            return ""
-
-        duration_iso = items[0]["contentDetails"]["duration"]
-        return _parse_iso_duration(duration_iso)
-    except Exception:
-        return ""
+def _get_video_durations(video_ids: list[str], api_key: str) -> dict[str, str]:
+    """Batch-fetch human-readable durations for multiple videos (max 50 per call)."""
+    if not video_ids:
+        return {}
+    durations = {}
+    # YouTube API accepts up to 50 IDs per request
+    for i in range(0, len(video_ids), 50):
+        batch = video_ids[i : i + 50]
+        try:
+            resp = requests.get(
+                f"{YOUTUBE_API_BASE}/videos",
+                params={
+                    "part": "contentDetails",
+                    "id": ",".join(batch),
+                    "key": api_key,
+                },
+                timeout=10,
+            )
+            resp.raise_for_status()
+            for item in resp.json().get("items", []):
+                vid = item["id"]
+                dur = item.get("contentDetails", {}).get("duration", "")
+                durations[vid] = _parse_iso_duration(dur)
+        except Exception as e:
+            log.warning(f"Batch duration fetch failed: {e}")
+    return durations
 
 
 def _parse_iso_duration(iso: str) -> str:

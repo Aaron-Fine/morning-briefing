@@ -16,7 +16,7 @@ delivery:
   subject_template: "Morning Digest — {date}"
 
 claude:
-  model: "claude-sonnet-4-20250514"
+  model: "claude-opus-4-20250514"
   max_tokens: 8000
   # Set ANTHROPIC_API_KEY as env var
 
@@ -73,10 +73,19 @@ rss:
   freshrss_password: ""
   feeds:
     - { url: "https://kagi.com/api/rss/world", name: "Kagi World News" }
+    - { url: "http://rss.cnn.com/rss/cnn_topstories.rss", name: "CNN" }
+    - { url: "https://feeds.npr.org/1001/rss.xml", name: "NPR" }
+    - { url: "https://api.axios.com/feed/", name: "Axios" }
+    - { url: "https://www.aljazeera.com/xml/rss/all.xml", name: "Al Jazeera" }
+    - { url: "https://www.theatlantic.com/feed/all/", name: "The Atlantic" }
     - { url: "https://feeds.breakingdefense.com/BreakingDefense", name: "Breaking Defense" }
     - { url: "https://www.airandspaceforces.com/feed/", name: "Air & Space Forces" }
     - { url: "https://spacenews.com/feed/", name: "SpaceNews" }
     - { url: "https://malcontentnews.substack.com/feed", name: "Malcontent News" }
+    - url: "https://natesnewsletter.substack.com/feed"
+      name: "Nate's AI Newsletter"
+      tag: "ai-newsletter"
+      compress: true
 
 come_follow_me:
   # Scrape weekly from churchofjesuschrist.org

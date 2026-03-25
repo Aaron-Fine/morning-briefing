@@ -51,7 +51,10 @@ EMAIL_TEMPLATE = Template('''\
   .tag-ai { color: #6c3483; background: #ebdef0; }
   .tag-domestic { color: #7d6608; background: #fef9e7; }
   .tag-defense { color: #1b4f72; background: #d4e6f1; }
+  .tag-space { color: #1a5276; background: #d6eaf8; }
+  .tag-tech { color: #4a235a; background: #f4ecf7; }
   .tag-local { color: #1e8449; background: #d5f5e3; }
+  .tag-science { color: #7e5109; background: #fef5e7; }
   .scan-hl { font-size: 14px; font-weight: 500; line-height: 1.4; }
   .scan-ctx { font-size: 13px; color: #555; margin-top: 2px; line-height: 1.45; }
   .scan-link { font-size: 11px; color: #888; margin-top: 3px; }
@@ -123,7 +126,7 @@ EMAIL_TEMPLATE = Template('''\
     <span>{{ weather.city }}, {{ weather.state }} — {{ weather.condition }}</span>
     <span class="bar-mono" style="float:right;">{{ weather.current_temp_f }}°F</span>
     {% if weather.forecast|length > 2 %}
-    <br><span class="bar-detail">Tomorrow {{ weather.forecast[1].high_f }}°F {{ weather.forecast[1].condition }}. {{ weather.forecast[2].condition }} Sun {{ weather.forecast[2].high_f }}°F.</span>
+    <br><span class="bar-detail">Tomorrow {{ weather.forecast[1].high_f }}°F {{ weather.forecast[1].condition }}. {{ weather.forecast[2].day_name }} {{ weather.forecast[2].high_f }}°F {{ weather.forecast[2].condition }}.</span>
     {% endif %}
   </div>
   {% endif %}
@@ -206,16 +209,6 @@ EMAIL_TEMPLATE = Template('''\
   </div>
   {% endif %}
 
-  <!-- ATLANTIC -->
-  {% if atlantic_note %}
-  <div class="section">
-    <div class="sec-label">From The Atlantic</div>
-    <div class="card" style="margin-bottom:0">
-      <div class="card-body">{{ atlantic_note }}</div>
-    </div>
-  </div>
-  {% endif %}
-
   <!-- WEEKEND READS (Friday only) -->
   {% if weekend_reads %}
   <div class="section">
@@ -260,8 +253,7 @@ EMAIL_TEMPLATE = Template('''\
   <!-- FOOTER -->
   <div class="footer">
     Generated at {{ generated_at }} · Powered by Claude API<br>
-    Sources: Kagi, The Atlantic, Reuters, CNN, NPR, Axios, Al Jazeera, Breaking Defense,<br>
-    Air &amp; Space Forces, Cache Valley Daily, HJ News, UPR<br>
+    Sources: {{ rss_source_names }}<br>
     YouTube: {{ youtube_channel_count }} Always Watch channels via YouTube Data API<br>
     Come Follow Me: churchofjesuschrist.org · Markets: Yahoo Finance<br>
   </div>

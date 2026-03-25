@@ -4,3 +4,4 @@ __pycache__/
 last_digest.html
 output/
 .DS_Store
+.claude/

@@ -38,10 +38,12 @@ def fetch_markets(config: dict) -> list[dict]:
             change = q.get("regularMarketChangePercent", 0)
             
             # Format price based on type
+            # Index values (^GSPC, ^DJI) don't get a $ prefix
+            is_index = symbol.startswith("^")
             if price > 1000:
                 price_str = f"{price:,.0f}"
-            elif price > 10:
-                price_str = f"${price:.2f}"
+            elif is_index:
+                price_str = f"{price:.2f}"
             else:
                 price_str = f"${price:.2f}"
 

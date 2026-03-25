@@ -8,7 +8,8 @@ Every morning at 6:00 AM MT, this container:
 
 1. **Collects** data from multiple sources:
    - YouTube Data API (new uploads from your Always Watch channels)
-   - RSS feeds (Kagi News, Breaking Defense, SpaceNews, Malcontent News, etc.)
+   - RSS feeds (Kagi, CNN, NPR, Axios, Al Jazeera, The Atlantic, Breaking Defense, SpaceNews, etc.)
+   - Local news RSS (Cache Valley Daily, Herald Journal)
    - Open-Meteo weather API (Cache Valley forecast, no key needed)
    - Yahoo Finance (S&P 500, Dow, oil prices)
    - Come Follow Me lesson schedule (LDS, Old Testament 2026)
@@ -37,7 +38,7 @@ Every morning at 6:00 AM MT, this container:
 
 | Key | Where | Free? |
 |-----|-------|-------|
-| Anthropic API | [console.anthropic.com](https://console.anthropic.com/settings/keys) | Pay-per-use (~$1-3/mo) |
+| Anthropic API | [console.anthropic.com](https://console.anthropic.com/settings/keys) | Pay-per-use (~$3-8/mo with Opus) |
 | YouTube Data API v3 | [console.cloud.google.com](https://console.cloud.google.com/apis/credentials) | Yes (10,000 units/day) |
 | Gmail App Password | [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) | Yes |
 
@@ -94,7 +95,7 @@ docker compose up -d
 
 **digest.quiet_day_policy** — Set to `always_send` because even one good deep dive justifies the email.
 
-**youtube.always_watch** — Your 17 channels. Every new upload from these channels appears in the digest. Add/remove channels by editing this list.
+**youtube.always_watch** — Your 16 channels. Every new upload from these channels appears in the digest. Add/remove channels by editing this list.
 
 **youtube.lookback_hours** — How far back to check for uploads (default: 48h)
 
@@ -114,13 +115,11 @@ When you migrate from Feedly to FreshRSS:
 
 ### The Atlantic
 
-The Atlantic's website is paywalled and their RSS feed is limited. Options:
-- Add their RSS for headlines: `https://www.theatlantic.com/feed/all/`
-- For full content, the script would need authenticated access (cookie-based or via their app). This isn't implemented yet — for now, Claude references The Atlantic's current issue based on what's publicly known.
+The Atlantic's RSS feed (`https://www.theatlantic.com/feed/all/`) is included by default. It provides headlines and summaries — enough for Claude to reference in the digest. Full article content requires a subscription (read via the app or website).
 
 ## Cost
 
-Typical daily cost: **$0.03–0.08** in Anthropic API usage (one Sonnet call with ~5-10K input tokens, ~3-5K output tokens). Monthly cost should be under $3.
+Typical daily cost: **$0.15–0.40** in Anthropic API usage (one Opus call with ~5-10K input tokens, ~3-5K output tokens). Monthly cost should be under $12.
 
 YouTube Data API: Free tier is 10,000 quota units/day. Checking 17 channels uses ~34 units (2 per channel). Well within limits.
 

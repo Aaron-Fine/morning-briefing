@@ -5,15 +5,15 @@ Collects data from all configured sources, sends it to Claude for synthesis
 and editorial judgment, renders the HTML email, and sends it.
 """
 
-import os
-import sys
 import json
 import logging
+import sys
+import time
 from datetime import datetime, date
 from pathlib import Path
 
-import yaml
 import anthropic
+import yaml
 
 from sources.youtube import fetch_recent_videos
 from sources.weather import fetch_weather
@@ -69,15 +69,26 @@ def collect_sources(config: dict) -> dict:
     log.info("  → RSS feeds")
     data["rss"] = fetch_rss(config)
 
-    # Market count
+    # Local news (separate from main RSS so Claude can distinguish them)
+    local_sources = config.get("local_news", {}).get("sources", [])
+    if local_sources:
+        log.info("  → Local news")
+        local_rss_config = {"feeds": local_sources, "provider": "direct"}
+        data["local_news"] = fetch_rss(local_rss_config)
+    else:
+        data["local_news"] = []
+
+    # Source counts
     data["source_counts"] = {
         "youtube_videos": len(data.get("youtube", [])),
         "rss_items": len(data.get("rss", [])),
+        "local_news_items": len(data.get("local_news", [])),
         "youtube_channels": len(config.get("youtube", {}).get("always_watch", [])),
     }
 
     log.info(
         f"  Collected: {data['source_counts']['rss_items']} RSS items, "
+        f"{data['source_counts']['local_news_items']} local news items, "
         f"{data['source_counts']['youtube_videos']} YouTube videos"
     )
     return data
@@ -97,9 +108,15 @@ def build_claude_prompt(source_data: dict, config: dict) -> str:
     youtube = source_data.get("youtube", [])
     rss = source_data.get("rss", [])
 
-    system_prompt = f"""You are the editor of Aaron's Morning Digest, a daily email briefing. 
-Your voice is that of an informed colleague — direct, analytical, occasionally wry. Never newscaster. 
-Never blog-post. Think Philip DeFranco's story selection instincts crossed with Belle of the Ranch's 
+    weekend_reads_schema = ""
+    if is_friday:
+        weekend_reads_schema = """  "weekend_reads": [
+    {{"url": "...", "title": "...", "source": "...", "read_time": "~N min", "description": "1 sentence pitch"}}
+  ],"""
+
+    system_prompt = f"""You are the editor of Aaron's Morning Digest, a daily email briefing.
+Your voice is that of an informed colleague — direct, analytical, occasionally wry. Never newscaster.
+Never blog-post. Think Philip DeFranco's story selection instincts crossed with Belle of the Ranch's
 "medium dive" depth on carefully selected topics.
 
 Today is {date_display}. Aaron lives in Providence, Utah (Cache Valley).
@@ -110,8 +127,8 @@ The JSON must match this exact structure:
 {{
   "at_a_glance": [
     {{
-      "tag": "war|ai|domestic|defense|local",
-      "tag_label": "War|AI|US|Defense|Local",
+      "tag": "war|ai|domestic|defense|space|tech|local|science",
+      "tag_label": "War|AI|US|Defense|Space|Tech|Local|Science",
       "headline": "short headline",
       "context": "1-3 sentences of context",
       "links": [{{"url": "...", "label": "Source: title"}}]
@@ -135,28 +152,40 @@ The JSON must match this exact structure:
   "local_items": ["<strong>Bold headline</strong> — context sentence."],
   "week_ahead": [{{"date": "Mon", "event": "description"}}],
   "spiritual_reflection": "2-3 sentences connecting this week's scripture study lesson to today's world. Thoughtful, not preachy.",
-  "atlantic_note": "<p>Brief note on current Atlantic content worth reading.</p>",
-  {'"weekend_reads": [' if is_friday else ''}
-  {'{{"url": "...", "title": "...", "source": "...", "read_time": "~N min", "description": "1 sentence pitch"}}' if is_friday else ''}
-  {'],' if is_friday else ''}
+{weekend_reads_schema}
 }}
 
 RULES:
 - At a Glance: {config['digest']['at_a_glance']['normal_items']} items on a normal day, up to {config['digest']['at_a_glance']['max_items']} on busy days, minimum {config['digest']['at_a_glance']['min_items']}
 - Deep Dives: exactly {config['digest']['deep_dives']['count']}, with Further Reading links (1-2 per dive)
 - Skip celebrity gossip and internet drama unless linked to a topic discussed elsewhere
+- Tags: war (conflicts/geopolitics), ai (AI/LLMs/agentic), domestic (US politics/policy), defense (DoD/missile/military), space (launches/satellites/exploration), tech (self-hosting/EVs/consumer tech/open source), local (Cache Valley/Utah), science (research/applied science)
 - Primary topics: {', '.join(config['topics']['primary'])}
 - Secondary topics: {', '.join(config['topics']['secondary'])}
 - Tertiary topics: {', '.join(config['topics']['tertiary'])}
 - Professional context: DoD / Dept of War, missile warning/defense, UARC/FFRDC, space technology
 - For YouTube, write a 2-3 sentence summary for each video explaining why it's worth watching
-- Local items: Cache Valley focus, max {config['digest']['local']['max_items']} items
+- Local items: Cache Valley focus, max {config['digest']['local']['max_items']} items. Use the LOCAL NEWS section as your source for these — do not fabricate local stories.
 - Week ahead: {config['digest']['week_ahead']['count']} upcoming events worth knowing about
 - Deep dive body uses <p> tags for paragraphs
 - All URLs in output must come from the source data below — never fabricate URLs
-- It is better to leave out a section than to make up data for a section
-{"- Include weekend_reads: 3 long-form pieces worth setting aside time for this weekend" if is_friday else "- This is not Friday, so omit weekend_reads from the JSON"}
+- It is better to leave out a section entirely than to make up data for it. If a section has no relevant source data, omit it or return an empty array.
+- SOURCE HANDLING — AI-generated newsletters: Some RSS sources (tagged "ai-newsletter"
+  or "compress: true") are AI-generated content wrapped in heavy editorial padding.
+  For these sources, extract ONLY concrete claims, product announcements, data points,
+  and named examples. Strip all motivational framing ("this changes everything"),
+  rhetorical questions, reader-directed hype ("you need to understand this now"),
+  and structural scaffolding (TLDR/Executive Summary/nesting-doll layers).
+  Treat these sources as raw signal buried in noise — compress aggressively.
+  A 5,000-word Nate's Newsletter post should yield at most 2-3 bullet-worthy facts
+  for the At a Glance section, or contribute context to a Deep Dive sourced primarily
+  from harder journalism. Never let AI-newsletter prose style leak into the digest voice.
+{"- Include weekend_reads: 3 long-form pieces worth setting aside time for this weekend. URLs must come from source data." if is_friday else "- This is not Friday, so omit weekend_reads from the JSON."}
 """
+
+    local_news = source_data.get("local_news", [])
+    rss_display = rss[:60]
+    rss_truncated = len(rss) - len(rss_display)
 
     user_content = f"""Here is today's source data. Synthesize this into the digest.
 
@@ -176,8 +205,11 @@ Date Range: {cfm.get('date_range', '')}
 === YOUTUBE (new uploads from Always Watch channels) ===
 {json.dumps(youtube, indent=2) if youtube else "No new uploads in the past 48 hours."}
 
-=== RSS / NEWS ({len(rss)} items) ===
-{json.dumps(rss[:60], indent=2)}
+=== RSS / NEWS ({len(rss)} items{f', showing first 60 — {rss_truncated} older items omitted' if rss_truncated > 0 else ''}) ===
+{json.dumps(rss_display, indent=2)}
+
+=== LOCAL NEWS ({len(local_news)} items) ===
+{json.dumps(local_news, indent=2) if local_news else "No local news items available."}
 
 Remember: output ONLY valid JSON, no markdown fencing, no commentary outside the JSON.
 """
@@ -185,21 +217,41 @@ Remember: output ONLY valid JSON, no markdown fencing, no commentary outside the
     return system_prompt, user_content
 
 
-def call_claude(system_prompt: str, user_content: str, config: dict) -> dict:
-    """Send prompt to Claude and parse the JSON response."""
+def call_claude(system_prompt: str, user_content: str, config: dict, max_retries: int = 2) -> dict:
+    """Send prompt to Claude and parse the JSON response.
+
+    Retries on transient errors (overloaded, network issues) with exponential backoff.
+    """
     client = anthropic.Anthropic()  # uses ANTHROPIC_API_KEY env var
 
-    model = config.get("claude", {}).get("model", "claude-sonnet-4-20250514")
+    model = config.get("claude", {}).get("model", "claude-opus-4-20250514")
     max_tokens = config.get("claude", {}).get("max_tokens", 8000)
 
-    log.info(f"Calling Claude ({model})...")
+    last_error = None
+    for attempt in range(max_retries + 1):
+        try:
+            if attempt > 0:
+                wait = 2 ** attempt * 5  # 10s, 20s
+                log.info(f"Retrying in {wait}s (attempt {attempt + 1}/{max_retries + 1})...")
+                time.sleep(wait)
 
-    response = client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_content}],
-    )
+            log.info(f"Calling Claude ({model})...")
+            response = client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_content}],
+            )
+            break
+        except (anthropic.APIStatusError, anthropic.APIConnectionError) as e:
+            last_error = e
+            log.warning(f"Claude API error: {e}")
+            if attempt == max_retries:
+                raise
+            # Only retry on overloaded (529) or server errors (5xx) or connection issues
+            if isinstance(e, anthropic.APIStatusError) and e.status_code < 500:
+                raise
+            continue
 
     raw = response.content[0].text.strip()
 
@@ -258,9 +310,16 @@ def assemble_template_data(
             "reflection": claude_output.get("spiritual_reflection", ""),
         }
 
+    # Build dynamic source list for footer
+    rss_names = [f["name"] for f in config.get("rss", {}).get("feeds", [])]
+    local_names = [s["name"] for s in config.get("local_news", {}).get("sources", [])]
+    all_source_names = rss_names + local_names
+    rss_source_names = ", ".join(all_source_names) if all_source_names else "RSS feeds"
+
     return {
         "date_display": today.strftime("%A, %B %-d, %Y"),
         "generated_at": today.strftime("%-I:%M %p %Z"),
+        "rss_source_names": rss_source_names,
         "spiritual": spiritual,
         "weather": weather,
         "markets": markets,
@@ -270,7 +329,6 @@ def assemble_template_data(
         "youtube_channel_count": len(all_channels),
         "local_items": claude_output.get("local_items", []),
         "week_ahead": claude_output.get("week_ahead", []),
-        "atlantic_note": claude_output.get("atlantic_note", ""),
         "weekend_reads": claude_output.get("weekend_reads", []),
         "deep_dives": claude_output.get("deep_dives", []),
     }
@@ -303,7 +361,8 @@ def run():
     else:
         log.error("=== Digest send FAILED ===")
         # Optionally write to file as fallback
-        fallback = Path(__file__).parent / "last_digest.html"
+        fallback = Path(__file__).parent / "output" / "last_digest.html"
+        fallback.parent.mkdir(exist_ok=True)
         fallback.write_text(html)
         log.info(f"Saved fallback to {fallback}")
         sys.exit(1)
