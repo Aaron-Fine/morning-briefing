@@ -57,18 +57,12 @@ EMAIL_TEMPLATE = Template('''\
   .tag-tech { color: #4a235a; background: #f4ecf7; }
   .tag-local { color: #1e8449; background: #d5f5e3; }
   .tag-science { color: #7e5109; background: #fef5e7; }
+  .tag-econ { color: #1a5276; background: #d5f5e3; }
+  .tag-cyber { color: #633974; background: #f5eef8; }
   .scan-hl { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; line-height: 1.4; }
   .scan-ctx { font-size: 13px; color: #555; line-height: 1.45; }
   .scan-link { font-size: 11px; color: #666; margin-top: 4px; }
   .scan-link a { color: #666; text-decoration: none; border-bottom: 1px dotted #aaa; }
-
-  .yt-item { padding: 10px 0; border-bottom: 1px solid #e5e2dd; }
-  .yt-item:last-child { border-bottom: none; }
-  .yt-ch { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; color: #922b21; background: #f9ebea; padding: 2px 7px; border-radius: 3px; display: inline-block; margin-right: 6px; }
-  .yt-title { font-size: 14px; font-weight: 500; }
-  .yt-meta { font-size: 12px; color: #666; margin-top: 2px; }
-  .yt-sum { font-size: 13px; color: #555; margin-top: 3px; line-height: 1.45; }
-  .yt-quiet { color: #666; font-size: 13px; font-style: italic; padding: 6px 0; }
 
   .local-item { padding: 6px 0; font-size: 13px; color: #555; line-height: 1.5; }
   .local-item strong { color: #1a1a1a; font-weight: 500; }
@@ -88,6 +82,13 @@ EMAIL_TEMPLATE = Template('''\
   .fr-label { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #666; margin-bottom: 6px; }
   .fr a { display: block; font-size: 13px; color: #1b4f72; text-decoration: none; line-height: 1.5; margin-bottom: 2px; }
   .fr .src { color: #666; font-size: 11px; }
+
+  .seam-sub { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #7b241c; margin-bottom: 10px; }
+  .seam-item { padding: 10px 0; border-bottom: 1px solid #e5e2dd; }
+  .seam-item:last-child { border-bottom: none; }
+  .seam-topic { font-size: 14px; font-weight: 600; line-height: 1.4; margin-bottom: 3px; }
+  .seam-desc { font-size: 13px; color: #555; line-height: 1.45; }
+  .seam-sources { font-size: 12px; color: #888; margin-top: 4px; font-style: italic; }
 
   .weekend-item { padding: 8px 0; border-bottom: 1px solid #e5e2dd; }
   .weekend-item:last-child { border-bottom: none; }
@@ -171,28 +172,6 @@ EMAIL_TEMPLATE = Template('''\
   </div>
   {% endif %}
 
-  <!-- YOUTUBE -->
-  {% if youtube_videos or youtube_quiet_note %}
-  <div class="section">
-    <h2 class="sec-label">From Your Channels</h2>
-    {% for v in youtube_videos %}
-    <div class="yt-item">
-      <div>
-        <span class="yt-ch">{{ v.channel }}</span>
-        <span class="yt-title">{{ v.title }}</span>
-        <div class="yt-meta">{% if v.duration_label %}{{ v.duration_label }} · {% endif %}<a href="{{ v.url }}" aria-label="Watch: {{ v.title }}" style="color:#666;text-decoration:none;">watch ↗</a></div>
-        {% if v.summary %}
-        <div class="yt-sum">{{ v.summary }}</div>
-        {% endif %}
-      </div>
-    </div>
-    {% endfor %}
-    {% if youtube_quiet_note %}
-    <div class="yt-quiet">{{ youtube_quiet_note }}</div>
-    {% endif %}
-  </div>
-  {% endif %}
-
   <!-- CACHE VALLEY -->
   {% if local_items %}
   <div class="section">
@@ -254,11 +233,45 @@ EMAIL_TEMPLATE = Template('''\
   </div>
   {% endif %}
 
+  <!-- PERSPECTIVE SEAMS -->
+  {% if contested_narratives or coverage_gaps %}
+  <div class="section">
+    <h2 class="sec-label">Perspective Seams</h2>
+
+    {% if contested_narratives %}
+    <div style="margin-bottom: 16px;">
+      <div class="seam-sub">Contested Narratives</div>
+      {% for cn in contested_narratives %}
+      <div class="seam-item">
+        <div class="seam-topic">{{ cn.topic }}</div>
+        <div class="seam-desc">{{ cn.description }}</div>
+        <div class="seam-sources">{{ cn.sources_a }} vs. {{ cn.sources_b }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if coverage_gaps %}
+    <div>
+      <div class="seam-sub">Covered There, Not Here</div>
+      {% for cg in coverage_gaps %}
+      <div class="seam-item">
+        <div class="seam-topic">{{ cg.topic }}</div>
+        <div class="seam-desc">{{ cg.description }}</div>
+        <div class="seam-sources">Present in {{ cg.present_in }} · Absent from {{ cg.absent_from }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <!-- FOOTER -->
   <div class="footer">
     Generated at {{ generated_at }} · Powered by Kimi K2.5 · Fireworks AI<br>
     Sources: {{ rss_source_names }}<br>
-    YouTube: {{ youtube_channel_count }} channels via RSS · Come Follow Me: churchofjesuschrist.org · Markets: Finnhub<br>
+    {% if yt_source_names %}Analysis transcripts: {{ yt_source_names }}<br>{% endif %}
+    Come Follow Me: churchofjesuschrist.org · Markets: Finnhub<br>
   </div>
 
 </div>

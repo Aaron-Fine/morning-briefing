@@ -103,12 +103,22 @@ def collect_sources(config: dict) -> dict:
     return data
 
 
-def build_claude_prompt(source_data: dict, config: dict) -> str:
-    """Build the system + user prompt for Claude to synthesize the digest."""
-    
+def _group_rss_by_category(rss: list[dict]) -> dict[str, list[dict]]:
+    """Group RSS items by their category field for tiered treatment."""
+    groups: dict[str, list[dict]] = {}
+    for item in rss:
+        cat = item.get("category", "uncategorized")
+        groups.setdefault(cat, []).append(item)
+    return groups
+
+
+def build_synthesis_prompt(source_data: dict, config: dict) -> tuple[str, str]:
+    """Build the system + user prompt for the main synthesis pass (Stage 2).
+
+    Sources are grouped by category for tiered editorial treatment.
+    """
     today = datetime.now()
     is_friday = today.weekday() == 4
-    day_name = today.strftime("%A")
     date_display = today.strftime("%A, %B %-d, %Y")
 
     cfm = source_data.get("come_follow_me", {})
@@ -116,8 +126,8 @@ def build_claude_prompt(source_data: dict, config: dict) -> str:
     markets = source_data.get("markets", [])
     launches = source_data.get("launches", [])
     church_events = source_data.get("church_events", [])
-    youtube = source_data.get("youtube", [])
     rss = source_data.get("rss", [])
+    analysis_transcripts = source_data.get("analysis_transcripts", [])
 
     weekend_reads_schema = ""
     if is_friday:
@@ -138,8 +148,8 @@ The JSON must match this exact structure:
 {{
   "at_a_glance": [
     {{
-      "tag": "war|ai|domestic|defense|space|tech|local|science",
-      "tag_label": "War|AI|US|Defense|Space|Tech|Local|Science",
+      "tag": "war|ai|domestic|defense|space|tech|local|science|econ|cyber",
+      "tag_label": "War|AI|US|Defense|Space|Tech|Local|Science|Econ|Cyber",
       "headline": "short headline",
       "context": "1-3 sentences of context",
       "links": [{{"url": "...", "label": "Source: title"}}]
@@ -153,13 +163,6 @@ The JSON must match this exact structure:
       "further_reading": [{{"url": "...", "title": "...", "source": "outlet name"}}]
     }}
   ],
-  "youtube_summaries": [
-    {{
-      "video_id": "...",
-      "summary": "2-3 sentence summary of why this is worth watching",
-      "link": [{{"url": "...", "label": "Source: title"}}]
-    }}
-  ],
   "local_items": ["<strong>Bold headline</strong> — context sentence."],
   "week_ahead": [{{"date": "Mon", "event": "description"}}],
   "spiritual_reflection": "2-3 sentences connecting this week's scripture study lesson to today's world. Thoughtful, not preachy.",
@@ -170,7 +173,7 @@ RULES:
 - At a Glance: {config['digest']['at_a_glance']['normal_items']} items on a normal day, up to {config['digest']['at_a_glance']['max_items']} on busy days, minimum {config['digest']['at_a_glance']['min_items']}
 - Deep Dives: exactly {config['digest']['deep_dives']['count']}, with Further Reading links (1-2 per dive)
 - Skip celebrity gossip and internet drama unless linked to a topic discussed elsewhere
-- Tags: war (conflicts/geopolitics), ai (AI/LLMs/agentic), domestic (US politics/policy), defense (DoD/missile/military), space (launches/satellites/exploration), tech (self-hosting/EVs/consumer tech/open source), local (Cache Valley/Utah), science (research/applied science)
+- Tags: war (conflicts/geopolitics), ai (AI/LLMs/agentic), domestic (US politics/policy), defense (DoD/missile/military), space (launches/satellites/exploration), tech (self-hosting/EVs/consumer tech/open source), local (Cache Valley/Utah), science (research/applied science), econ (economics/trade/macro), cyber (cybersecurity)
 - Primary topics: {', '.join(config['topics']['primary'])}
 - Secondary topics: {', '.join(config['topics']['secondary'])}
 - Tertiary topics: {', '.join(config['topics']['tertiary'])}
@@ -178,24 +181,89 @@ RULES:
   Defense and space stories with substantive new developments (new contracts, test results,
   policy shifts, budget moves, launches) are strong deep dive candidates. Do not manufacture importance —
   a slow news day in these areas is fine to reflect honestly.
-- For YouTube, write a 2-3 sentence summary for each video explaining what it covers and why it's worth watching. Videos include a "transcript" field with the opening portion of the auto-generated transcript when available — use it for accurate content summaries. Fall back to the description field if no transcript is present.
 - Local items: Cache Valley focus, max {config['digest']['local']['max_items']} items. Use the LOCAL NEWS section as your source for these — do not fabricate local stories. Omit the section entirely if no qualifying events are found.
 - Week ahead: up to {config['digest']['week_ahead']['count']} upcoming events. Draw from UPCOMING LAUNCHES and CHURCH CALENDAR sections. Supplement with events explicitly dated in news articles. Prioritize the most consequential or personally relevant events. Do not infer or invent. Omit the section entirely if nothing qualifies.
 - Deep dive body uses <p> tags for paragraphs
 - All URLs in output must come from the source data below — never fabricate URLs
 - It is better to leave out a section entirely than to make up data for it. If a section has no relevant source data, omit it or return an empty array.
-- SOURCE HANDLING — items with "tag": "compress" in the source data are AI-generated
-  newsletters wrapped in heavy editorial padding. Extract ONLY concrete facts, product
-  names, data points, and named examples. Strip all framing, rhetorical questions, and
-  hype. A long compress-tagged piece yields at most 2-3 bullet-worthy facts, or
-  supporting context for a Deep Dive sourced primarily from harder journalism. Never
-  let its prose style leak into the digest voice.
 {"- Include weekend_reads: 3 long-form pieces worth setting aside time for this weekend. URLs must come from source data." if is_friday else "- This is not Friday, so omit weekend_reads from the JSON."}
+
+SOURCE TREATMENT BY CATEGORY (each source has a "category" field):
+- "non-western": Non-Western English-language outlets (Al Jazeera, SCMP, Nikkei, Hindu, Dawn, Asia Times).
+  Compare their framing against other coverage. When their framing diverges significantly from Western
+  sources on the same event, note the divergence in context. Compress overlap but preserve divergent angles.
+- "western-analysis": Western independent analysis (The Atlantic). Use for interpretation and framing —
+  the "what it means" layer alongside factual reporting.
+- "substack-independent": Independent analyst newsletters (Chartbook, China Talk, Drezner, etc.).
+  Treat as the "what it means" interpretation layer. These provide context and framing but should not
+  drive story selection alone without corroboration from harder journalism.
+- "defense-mil": Defense and military specialist feeds. Use for domain depth on defense, space, and
+  military topics. Strong deep dive candidates when they report substantive developments.
+- "ai-tech": AI and technology sources. Treat as specialist analysis on AI topics.
+- "econ-trade": Economics and trade mechanics. Surface when relevant to geopolitics or policy.
+- "global-south": Africa, Latin America, developing world coverage. Only surface when they cover stories
+  missing from Western sources, or when their framing contradicts the Western consensus.
+- "perspective-diversity": Sources included for viewpoint stress-testing (The Diff, Slow Boring).
+  Do NOT summarize routinely — only surface when they offer a take that contradicts the consensus
+  of the other sources. These are the "stress test" layer.
+- "youtube-analysis": Pre-compressed YouTube analysis transcripts. Treat as independent analysis inputs.
+  Attribute to the channel name. Use the same editorial treatment as substack-independent.
+- "cyber": Cybersecurity feeds. Surface notable incidents, vulnerabilities, or policy developments.
+
+COMPRESSION RULES:
+- Multiple sources covering the same event: merge into one At a Glance item with multiple source links.
+  Prefer the most specific or best-sourced version as the backbone.
+- Items with "tag": "compress": AI-generated newsletters. Extract ONLY concrete facts, product names,
+  data points. Strip all framing, rhetorical questions, and hype. Max 2-3 bullet-worthy facts.
+- Substack posts that are primarily link roundups (vs. original analysis): compress aggressively,
+  extract only novel facts not available from harder sources.
+- Non-Western overlap with other coverage on the same story: compress, BUT preserve any divergent
+  framing as a parenthetical or note in the context field.
 """
 
     local_news = source_data.get("local_news", [])
-    rss_display = rss[:80]
-    rss_truncated = len(rss) - len(rss_display)
+
+    # Group RSS items by category for structured presentation
+    rss_groups = _group_rss_by_category(rss)
+
+    # Build category-grouped RSS section
+    rss_sections = []
+    category_order = [
+        "non-western", "western-analysis", "defense-mil", "substack-independent",
+        "ai-tech", "econ-trade", "global-south", "perspective-diversity", "cyber",
+        "uncategorized",
+    ]
+    total_rss = 0
+    for cat in category_order:
+        items = rss_groups.get(cat, [])
+        if not items:
+            continue
+        # Cap total items to prevent context overflow
+        remaining = 100 - total_rss
+        if remaining <= 0:
+            break
+        display_items = items[:remaining]
+        total_rss += len(display_items)
+        rss_sections.append(
+            f'--- {cat.upper()} ({len(display_items)} items) ---\n'
+            f'{json.dumps(display_items, indent=2)}'
+        )
+
+    rss_block = "\n\n".join(rss_sections) if rss_sections else "No RSS items available."
+
+    # Build analysis transcripts section
+    transcript_block = ""
+    if analysis_transcripts:
+        transcript_items = []
+        for t in analysis_transcripts:
+            transcript_items.append({
+                "channel": t["channel"],
+                "title": t["title"],
+                "url": t["url"],
+                "category": t.get("category", "youtube-analysis"),
+                "compressed_transcript": t.get("compressed_transcript", ""),
+            })
+        transcript_block = json.dumps(transcript_items, indent=2)
 
     user_content = f"""Here is today's source data. Synthesize this into the digest.
 
@@ -218,11 +286,11 @@ Date Range: {cfm.get('date_range', '')}
 === CHURCH CALENDAR (next 10 days) ===
 {json.dumps(church_events, indent=2) if church_events else "No General Conference sessions in this window."}
 
-=== YOUTUBE (new uploads from Always Watch channels) ===
-{json.dumps(youtube, indent=2) if youtube else "No new uploads in the past 48 hours."}
+=== RSS / NEWS ({total_rss} items, grouped by source category) ===
+{rss_block}
 
-=== RSS / NEWS ({len(rss)} items{f', showing first 80 — {rss_truncated} older items omitted' if rss_truncated > 0 else ''}) ===
-{json.dumps(rss_display, indent=2)}
+=== ANALYSIS TRANSCRIPTS (pre-compressed YouTube, {len(analysis_transcripts)} videos) ===
+{transcript_block if transcript_block else "No analysis transcripts available."}
 
 === LOCAL NEWS ({len(local_news)} items) ===
 {json.dumps(local_news, indent=2) if local_news else "No local news items available."}
@@ -385,37 +453,116 @@ def compress_transcripts(transcripts: list[dict], config: dict) -> list[dict]:
     return results
 
 
-def assemble_template_data(
-    claude_output: dict, source_data: dict, config: dict
+def detect_seams(
+    synthesis_output: dict, source_data: dict, config: dict
 ) -> dict:
-    """Merge Claude's editorial output with raw source data for template rendering."""
+    """Stage 3: Detect narrative disagreements and coverage gaps.
+
+    Runs on already-synthesized output. Returns dict with
+    'contested_narratives' and 'coverage_gaps' lists.
+    Non-fatal: returns empty results on failure.
+    """
+    seam_config = config.get("llm", {}).get("seam_detection", {})
+
+    system_prompt = """You are a media analysis assistant. You will receive a synthesized news digest
+(At a Glance items and Deep Dives) plus a summary of which source categories covered which stories.
+
+Your job is to identify:
+
+1. CONTESTED NARRATIVES: Stories where different source categories framed the same event differently.
+   Example: one set of sources reports X as routine, while another frames it as alarming.
+   Only flag genuine disagreements in framing, interpretation, or emphasis — not minor wording differences.
+
+2. COVERAGE GAPS: Stories that appeared in some source categories but were absent from others.
+   Only flag substantive omissions where the absence is itself informative.
+
+RULES:
+- Do NOT resolve disagreements or declare which framing is correct.
+- Do NOT editorialize. State what each side says, neutrally.
+- Your job is to make the disagreement visible, not to adjudicate it.
+- Weight toward structural/framing disagreements rather than simple factual disputes.
+- Maximum 3 contested narratives and 3 coverage gaps. Return fewer if fewer qualify.
+- If nothing qualifies, return empty arrays.
+
+OUTPUT FORMAT: JSON object:
+{
+  "contested_narratives": [
+    {
+      "topic": "short topic label",
+      "description": "1-2 sentences describing the disagreement",
+      "sources_a": "which sources/categories frame it one way",
+      "sources_b": "which sources/categories frame it differently"
+    }
+  ],
+  "coverage_gaps": [
+    {
+      "topic": "short topic label",
+      "description": "1-2 sentences describing what was covered and by whom",
+      "present_in": "source categories that covered it",
+      "absent_from": "source categories that did not"
+    }
+  ]
+}"""
+
+    # Build a category coverage map from raw RSS data
+    rss = source_data.get("rss", [])
+    category_coverage = {}
+    for item in rss:
+        cat = item.get("category", "uncategorized")
+        category_coverage.setdefault(cat, []).append(item.get("title", ""))
+    # Include analysis transcripts
+    for t in source_data.get("analysis_transcripts", []):
+        category_coverage.setdefault("youtube-analysis", []).append(
+            f"{t['channel']}: {t['title']}"
+        )
+
+    coverage_summary = "\n".join(
+        f"- {cat}: {', '.join(titles[:10])}"
+        for cat, titles in category_coverage.items()
+        if titles
+    )
+
+    user_content = f"""Here is today's synthesized digest output:
+
+=== AT A GLANCE ===
+{json.dumps(synthesis_output.get('at_a_glance', []), indent=2)}
+
+=== DEEP DIVES ===
+{json.dumps(synthesis_output.get('deep_dives', []), indent=2)}
+
+=== SOURCE CATEGORY COVERAGE MAP ===
+(Which source categories had stories about which topics)
+{coverage_summary}
+
+Identify contested narratives and coverage gaps. Output ONLY valid JSON."""
+
+    try:
+        log.info("Running seam detection (Stage 3)...")
+        result = call_llm(
+            system_prompt,
+            user_content,
+            config,
+            max_retries=1,
+            llm_override=seam_config,
+        )
+        cn = result.get("contested_narratives", [])
+        cg = result.get("coverage_gaps", [])
+        log.info(f"  Seam detection: {len(cn)} contested narratives, {len(cg)} coverage gaps")
+        return result
+    except Exception as e:
+        log.warning(f"Seam detection failed (non-fatal): {e}")
+        return {"contested_narratives": [], "coverage_gaps": []}
+
+
+def assemble_template_data(
+    claude_output: dict, seam_data: dict, source_data: dict, config: dict
+) -> dict:
+    """Merge synthesis output + seam data with raw source data for template rendering."""
     today = datetime.now()
-    
+
     weather = source_data.get("weather", {})
     markets = source_data.get("markets", [])
     cfm = source_data.get("come_follow_me", {})
-    youtube_raw = source_data.get("youtube", [])
-
-    # Merge YouTube summaries from Claude with raw video data
-    yt_summaries = {
-        s["video_id"]: s["summary"]
-        for s in claude_output.get("youtube_summaries", [])
-    }
-    youtube_videos = []
-    for v in youtube_raw:
-        v["summary"] = yt_summaries.get(v["video_id"], "")
-        youtube_videos.append(v)
-
-    # Count channels with no uploads
-    all_channels = config.get("youtube", {}).get("always_watch", [])
-    channels_with_uploads = {v["channel"] for v in youtube_videos}
-    quiet_count = len(all_channels) - len(channels_with_uploads)
-    youtube_quiet_note = ""
-    if quiet_count > 0:
-        youtube_quiet_note = (
-            f"No new uploads from the other {quiet_count} "
-            f"Always Watch channels in the past 48 hours."
-        )
 
     # Spiritual thought
     spiritual = None
@@ -428,20 +575,22 @@ def assemble_template_data(
     # Build dynamic source list for footer
     rss_names = [f["name"] for f in config.get("rss", {}).get("feeds", [])]
     local_names = [s["name"] for s in config.get("local_news", {}).get("sources", [])]
+    yt_names = [c["name"] for c in config.get("youtube", {}).get("analysis_channels", [])]
     all_source_names = rss_names + local_names
     rss_source_names = ", ".join(all_source_names) if all_source_names else "RSS feeds"
+    yt_source_names = ", ".join(yt_names) if yt_names else ""
 
     return {
         "date_display": today.strftime("%A, %B %-d, %Y"),
         "generated_at": today.strftime("%-I:%M %p %Z"),
         "rss_source_names": rss_source_names,
+        "yt_source_names": yt_source_names,
         "spiritual": spiritual,
         "weather": weather,
         "markets": markets,
         "at_a_glance": claude_output.get("at_a_glance", []),
-        "youtube_videos": youtube_videos,
-        "youtube_quiet_note": youtube_quiet_note,
-        "youtube_channel_count": len(all_channels),
+        "contested_narratives": seam_data.get("contested_narratives", []),
+        "coverage_gaps": seam_data.get("coverage_gaps", []),
         "local_items": claude_output.get("local_items", []),
         "week_ahead": claude_output.get("week_ahead", []),
         "weekend_reads": claude_output.get("weekend_reads", []),
@@ -470,12 +619,22 @@ def run(dry_run: bool = False, sources_only: bool = False):
         log.info(f"=== Sources written to {out} ===")
         return
 
-    # 2. Build prompt and call Claude
-    system_prompt, user_content = build_claude_prompt(source_data, config)
+    # 2. Stage 1: Compress analysis transcripts
+    transcripts = source_data.get("analysis_transcripts", [])
+    if transcripts:
+        log.info(f"Stage 1: Compressing {len(transcripts)} transcript(s)...")
+        source_data["analysis_transcripts"] = compress_transcripts(transcripts, config)
+
+    # 3. Stage 2: Main synthesis with tiered source treatment
+    log.info("Stage 2: Main synthesis...")
+    system_prompt, user_content = build_synthesis_prompt(source_data, config)
     claude_output = call_llm(system_prompt, user_content, config)
 
-    # 3. Assemble template data
-    template_data = assemble_template_data(claude_output, source_data, config)
+    # 4. Stage 3: Seam detection
+    seam_data = detect_seams(claude_output, source_data, config)
+
+    # 5. Assemble template data
+    template_data = assemble_template_data(claude_output, seam_data, source_data, config)
 
     # 4. Render HTML
     html = render_email(template_data)

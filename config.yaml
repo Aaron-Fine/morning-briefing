@@ -158,7 +158,7 @@ digest:
     count: 2
     include_further_reading: true
   youtube:
-    always_watch_all: true  # list every upload from Always Watch
+    analysis_synthesis: true  # feed compressed transcripts into synthesis pipeline
   weekend_reads:
     enabled: true
     day: "friday"
