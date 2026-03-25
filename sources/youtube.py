@@ -1,36 +1,26 @@
-"""Fetch recent uploads from YouTube channels via the Data API v3."""
+"""Fetch recent uploads from YouTube channels via public channel RSS feeds.
 
-import os
+No API key required — uses YouTube's public Atom feeds parsed with feedparser.
+"""
+
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-import requests
+import feedparser
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
 
 log = logging.getLogger(__name__)
 
-YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3"
-
-
-def _get_api_key() -> str:
-    key = os.environ.get("YOUTUBE_API_KEY", "")
-    if not key:
-        raise ValueError("YOUTUBE_API_KEY environment variable not set")
-    return key
-
-
-def _get_uploads_playlist_id(channel_id: str) -> str:
-    """Convert channel ID to uploads playlist ID (UC... -> UU...)."""
-    return "UU" + channel_id[2:]
+YOUTUBE_RSS_BASE = "https://www.youtube.com/feeds/videos.xml?channel_id="
 
 
 def fetch_recent_videos(config: dict) -> list[dict]:
     """Return recent videos from Always Watch channels.
-    
-    Returns list of dicts: {channel, title, video_id, url, published, duration_label}
+
+    Returns list of dicts: {channel, title, video_id, url, published, description}
+    Includes transcript field when auto-captions are available.
     """
-    api_key = _get_api_key()
     yt_config = config.get("youtube", {})
     channels = yt_config.get("always_watch", [])
     lookback = yt_config.get("lookback_hours", 48)
@@ -40,67 +30,78 @@ def fetch_recent_videos(config: dict) -> list[dict]:
 
     for ch in channels:
         try:
-            playlist_id = _get_uploads_playlist_id(ch["id"])
-            resp = requests.get(
-                f"{YOUTUBE_API_BASE}/playlistItems",
-                params={
-                    "part": "snippet",
-                    "playlistId": playlist_id,
-                    "maxResults": 5,
-                    "key": api_key,
-                },
-                timeout=10,
+            feed = feedparser.parse(
+                YOUTUBE_RSS_BASE + ch["id"],
+                request_headers={"User-Agent": "MorningDigest/1.0"},
             )
-            resp.raise_for_status()
-            items = resp.json().get("items", [])
-
-            recent_items = []
-            for item in items:
-                snippet = item["snippet"]
-                published = datetime.fromisoformat(
-                    snippet["publishedAt"].replace("Z", "+00:00")
-                )
-                if published < cutoff:
+            for entry in feed.entries:
+                published = _parse_entry_date(entry)
+                if not published or published < cutoff:
                     continue
-                recent_items.append((snippet, published))
 
-            # Batch fetch durations for all recent videos from this channel
-            video_ids = [s["resourceId"]["videoId"] for s, _ in recent_items]
-            durations = _get_video_durations(video_ids, api_key) if video_ids else {}
+                video_id = _extract_video_id(entry)
+                if not video_id:
+                    continue
 
-            for snippet, published in recent_items:
-                video_id = snippet["resourceId"]["videoId"]
                 transcript = _get_transcript(video_id)
-                videos.append({
+                video = {
                     "channel": ch["name"],
-                    "title": snippet["title"],
+                    "title": entry.get("title", "").strip(),
                     "video_id": video_id,
                     "url": f"https://www.youtube.com/watch?v={video_id}",
                     "published": published.isoformat(),
-                    "duration_label": durations.get(video_id, ""),
-                    "description": snippet.get("description", "")[:800],
-                    **({"transcript": transcript} if transcript else {}),
-                })
+                    "description": _get_description(entry)[:800],
+                }
+                if transcript:
+                    video["transcript"] = transcript
+                videos.append(video)
 
         except Exception as e:
             log.warning(f"Failed to fetch videos for {ch['name']}: {e}")
             continue
 
-    # Sort by publish time, newest first
     videos.sort(key=lambda v: v["published"], reverse=True)
     return videos
 
 
-def _get_transcript(video_id: str, max_chars: int = 2000) -> Optional[str]:
-    """Fetch auto-generated or manual transcript for a video, truncated to max_chars.
+def _extract_video_id(entry) -> Optional[str]:
+    """Extract video ID from entry — prefer yt:videoId tag, fall back to link URL."""
+    # feedparser exposes yt:videoId as entry.yt_videoid
+    video_id = entry.get("yt_videoid", "")
+    if video_id:
+        return video_id
+    # Fall back: parse from watch URL
+    link = entry.get("link", "")
+    if "v=" in link:
+        return link.split("v=")[-1].split("&")[0]
+    return None
 
-    Returns None if no transcript is available (disabled, private, etc.).
+
+def _parse_entry_date(entry) -> Optional[datetime]:
+    """Parse published date from feed entry."""
+    from time import mktime
+    for field in ("published_parsed", "updated_parsed"):
+        val = entry.get(field)
+        if val:
+            return datetime.fromtimestamp(mktime(val), tz=timezone.utc)
+    return None
+
+
+def _get_description(entry) -> str:
+    """Extract video description from feed entry."""
+    # feedparser maps media:description into summary for YouTube feeds
+    return entry.get("summary", "")
+
+
+def _get_transcript(video_id: str, max_chars: int = 2000) -> Optional[str]:
+    """Fetch auto-generated or manual transcript, truncated to max_chars.
+
+    Returns None if no transcript is available.
     """
     try:
         segments = YouTubeTranscriptApi.get_transcript(video_id)
         text = " ".join(s["text"] for s in segments)
         if len(text) > max_chars:
-            # Truncate at a word boundary
             text = text[:max_chars].rsplit(" ", 1)[0] + "…"
         return text
     except (TranscriptsDisabled, NoTranscriptFound):
@@ -108,50 +109,3 @@ def _get_transcript(video_id: str, max_chars: int = 2000) -> Optional[str]:
     except Exception as e:
         log.debug(f"Transcript unavailable for {video_id}: {e}")
         return None
-
-
-def _get_video_durations(video_ids: list[str], api_key: str) -> dict[str, str]:
-    """Batch-fetch human-readable durations for multiple videos (max 50 per call)."""
-    if not video_ids:
-        return {}
-    durations = {}
-    # YouTube API accepts up to 50 IDs per request
-    for i in range(0, len(video_ids), 50):
-        batch = video_ids[i : i + 50]
-        try:
-            resp = requests.get(
-                f"{YOUTUBE_API_BASE}/videos",
-                params={
-                    "part": "contentDetails",
-                    "id": ",".join(batch),
-                    "key": api_key,
-                },
-                timeout=10,
-            )
-            resp.raise_for_status()
-            for item in resp.json().get("items", []):
-                vid = item["id"]
-                dur = item.get("contentDetails", {}).get("duration", "")
-                durations[vid] = _parse_iso_duration(dur)
-        except Exception as e:
-            log.warning(f"Batch duration fetch failed: {e}")
-    return durations
-
-
-def _parse_iso_duration(iso: str) -> str:
-    """Convert ISO 8601 duration (PT1H23M45S) to human-readable."""
-    import re
-    match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", iso)
-    if not match:
-        return ""
-    hours, minutes, seconds = match.groups()
-    parts = []
-    if hours:
-        parts.append(f"{hours}h")
-    if minutes:
-        parts.append(f"{minutes}m")
-    elif hours:
-        parts.append("0m")
-    if not parts and seconds:
-        parts.append(f"{seconds}s")
-    return " ".join(parts)

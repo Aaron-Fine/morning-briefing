@@ -31,8 +31,7 @@ location:
 # --- SOURCE CONFIGURATION ---
 
 youtube:
-  # Set YOUTUBE_API_KEY as env var
-  # Get one at: https://console.cloud.google.com/apis/credentials
+  # Uses YouTube's public channel RSS feeds — no API key required
   always_watch:
     - { id: "UC0YvoAYGgdOfySQSLcxtu1w", name: "Belle of the Ranch" }
     - { id: "UCsBjURrPoezykLs9EqgamOA", name: "Fireship" }

@@ -176,7 +176,7 @@ EMAIL_TEMPLATE = Template('''\
       <div>
         <span class="yt-ch">{{ v.channel }}</span>
         <span class="yt-title">{{ v.title }}</span>
-        <div class="yt-meta">{{ v.duration_label }} · <a href="{{ v.url }}" style="color:#888;text-decoration:none;">watch</a></div>
+        <div class="yt-meta">{% if v.duration_label %}{{ v.duration_label }} · {% endif %}<a href="{{ v.url }}" style="color:#888;text-decoration:none;">watch</a></div>
         {% if v.summary %}
         <div class="yt-sum">{{ v.summary }}</div>
         {% endif %}
