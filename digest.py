@@ -151,7 +151,7 @@ The JSON must match this exact structure:
       "tag": "war|ai|domestic|defense|space|tech|local|science|econ|cyber",
       "tag_label": "War|AI|US|Defense|Space|Tech|Local|Science|Econ|Cyber",
       "headline": "short headline",
-      "context": "1-3 sentences of context",
+      "context": "3-5 sentences of analytical context — this is where the value lives",
       "links": [{{"url": "...", "label": "Source: title"}}]
     }}
   ],
@@ -171,6 +171,11 @@ The JSON must match this exact structure:
 
 RULES:
 - At a Glance: {config['digest']['at_a_glance']['normal_items']} items on a normal day, up to {config['digest']['at_a_glance']['max_items']} on busy days, minimum {config['digest']['at_a_glance']['min_items']}
+- At a Glance context: This is where the digest earns its keep. Write 3-5 sentences per item that
+  synthesize across sources, note divergent framing when relevant, and connect to broader patterns.
+  Don't just restate the headline — explain WHY this matters, WHAT it connects to, and WHERE different
+  sources disagree. If a non-western source frames the same event differently from a western one,
+  note that in the context. This is analytical briefing, not a wire service summary.
 - Deep Dives: exactly {config['digest']['deep_dives']['count']}, with Further Reading links (1-2 per dive)
 - Skip celebrity gossip and internet drama unless linked to a topic discussed elsewhere
 - Tags: war (conflicts/geopolitics), ai (AI/LLMs/agentic), domestic (US politics/policy), defense (DoD/missile/military), space (launches/satellites/exploration), tech (self-hosting/EVs/consumer tech/open source), local (Cache Valley/Utah), science (research/applied science), econ (economics/trade/macro), cyber (cybersecurity)
@@ -582,7 +587,7 @@ def assemble_template_data(
 
     return {
         "date_display": today.strftime("%A, %B %-d, %Y"),
-        "generated_at": today.strftime("%-I:%M %p %Z"),
+        "generated_at": today.strftime("%-I:%M %p") + " " + config.get("location", {}).get("timezone", "America/Denver").split("/")[-1],
         "rss_source_names": rss_source_names,
         "yt_source_names": yt_source_names,
         "spiritual": spiritual,
