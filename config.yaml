@@ -95,7 +95,7 @@ come_follow_me:
 
 local_news:
   sources:
-    - { url: "https://www.cachevalleydaily.com/feed/", name: "Cache Valley Daily" }
+    - { url: "https://www.cachevalleydaily.com/search/?f=rss&t=article&l=25&s=start_time&sd=desc", name: "Cache Valley Daily" }
     - { url: "https://www.hjnews.com/search/?f=rss&t=article&c=news/local&l=25&s=start_time&sd=desc", name: "Herald Journal" }
 
 # --- DIGEST PREFERENCES ---

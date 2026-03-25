@@ -16,5 +16,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY . .
 
-# Default: run on schedule. Use --now for immediate execution.
-ENTRYPOINT ["python", "entrypoint.py"]
+# Default: run on schedule.
+# Override with: docker compose run morning-digest python digest.py --dry-run
+CMD ["python", "entrypoint.py"]
