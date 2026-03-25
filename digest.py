@@ -163,28 +163,27 @@ RULES:
 - Primary topics: {', '.join(config['topics']['primary'])}
 - Secondary topics: {', '.join(config['topics']['secondary'])}
 - Tertiary topics: {', '.join(config['topics']['tertiary'])}
-- Professional context: DoD / Dept of War, missile warning/defense, UARC/FFRDC, space technology
-- For YouTube, write a 2-3 sentence summary for each video explaining why it's worth watching
-- Local items: Cache Valley focus, max {config['digest']['local']['max_items']} items. Use the LOCAL NEWS section as your source for these — do not fabricate local stories.
-- Week ahead: {config['digest']['week_ahead']['count']} upcoming events worth knowing about
+- Professional context: DoD / Dept of War, missile warning/defense, UARC/FFRDC, space technology.
+  Defense and space stories with substantive new developments (new contracts, test results,
+  policy shifts, budget moves, launches) are strong deep dive candidates. Do not manufacture importance —
+  a slow news day in these areas is fine to reflect honestly.
+- For YouTube, write a 2-3 sentence summary for each video explaining what it covers and why it's worth watching. Videos include a "transcript" field with the opening portion of the auto-generated transcript when available — use it for accurate content summaries. Fall back to the description field if no transcript is present.
+- Local items: Cache Valley focus, max {config['digest']['local']['max_items']} items. Use the LOCAL NEWS section as your source for these — do not fabricate local stories. Omit the section entirely if no qualifying events are found.
+- Week ahead: up to {config['digest']['week_ahead']['count']} upcoming events with a source-backed date in the source data. Only include events explicitly mentioned in the articles — do not infer or invent. Omit the section entirely if no qualifying events are found.
 - Deep dive body uses <p> tags for paragraphs
 - All URLs in output must come from the source data below — never fabricate URLs
 - It is better to leave out a section entirely than to make up data for it. If a section has no relevant source data, omit it or return an empty array.
-- SOURCE HANDLING — AI-generated newsletters: Some RSS sources (tagged "ai-newsletter"
-  or "compress: true") are AI-generated content wrapped in heavy editorial padding.
-  For these sources, extract ONLY concrete claims, product announcements, data points,
-  and named examples. Strip all motivational framing ("this changes everything"),
-  rhetorical questions, reader-directed hype ("you need to understand this now"),
-  and structural scaffolding (TLDR/Executive Summary/nesting-doll layers).
-  Treat these sources as raw signal buried in noise — compress aggressively.
-  A 5,000-word Nate's Newsletter post should yield at most 2-3 bullet-worthy facts
-  for the At a Glance section, or contribute context to a Deep Dive sourced primarily
-  from harder journalism. Never let AI-newsletter prose style leak into the digest voice.
+- SOURCE HANDLING — items with "tag": "compress" in the source data are AI-generated
+  newsletters wrapped in heavy editorial padding. Extract ONLY concrete facts, product
+  names, data points, and named examples. Strip all framing, rhetorical questions, and
+  hype. A long compress-tagged piece yields at most 2-3 bullet-worthy facts, or
+  supporting context for a Deep Dive sourced primarily from harder journalism. Never
+  let its prose style leak into the digest voice.
 {"- Include weekend_reads: 3 long-form pieces worth setting aside time for this weekend. URLs must come from source data." if is_friday else "- This is not Friday, so omit weekend_reads from the JSON."}
 """
 
     local_news = source_data.get("local_news", [])
-    rss_display = rss[:60]
+    rss_display = rss[:80]
     rss_truncated = len(rss) - len(rss_display)
 
     user_content = f"""Here is today's source data. Synthesize this into the digest.

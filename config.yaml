@@ -16,7 +16,7 @@ delivery:
   subject_template: "Morning Digest — {date}"
 
 claude:
-  model: "claude-opus-4-20250514"
+  model: "claude-sonnet-4-6"
   max_tokens: 8000
   # Set ANTHROPIC_API_KEY as env var
 
@@ -72,20 +72,22 @@ rss:
   freshrss_user: ""
   freshrss_password: ""
   feeds:
-    - { url: "https://kagi.com/api/rss/world", name: "Kagi World News" }
-    - { url: "http://rss.cnn.com/rss/cnn_topstories.rss", name: "CNN" }
-    - { url: "https://feeds.npr.org/1001/rss.xml", name: "NPR" }
-    - { url: "https://api.axios.com/feed/", name: "Axios" }
-    - { url: "https://www.aljazeera.com/xml/rss/all.xml", name: "Al Jazeera" }
-    - { url: "https://www.theatlantic.com/feed/all/", name: "The Atlantic" }
+    # Broad news — capped low; most stories duplicated by Kagi
+    - { url: "https://kagi.com/api/rss/world", name: "Kagi World News", cap: 15 }
+    - { url: "http://rss.cnn.com/rss/cnn_topstories.rss", name: "CNN", cap: 5 }
+    - { url: "https://feeds.npr.org/1001/rss.xml", name: "NPR", cap: 5 }
+    - { url: "https://api.axios.com/feed/", name: "Axios", cap: 5 }
+    - { url: "https://www.aljazeera.com/xml/rss/all.xml", name: "Al Jazeera", cap: 7 }
+    - { url: "https://www.theatlantic.com/feed/all/", name: "The Atlantic", cap: 8 }
+    # Niche / high-signal — uncapped within the 36h window
     - { url: "https://feeds.breakingdefense.com/BreakingDefense", name: "Breaking Defense" }
     - { url: "https://www.airandspaceforces.com/feed/", name: "Air & Space Forces" }
     - { url: "https://spacenews.com/feed/", name: "SpaceNews" }
     - { url: "https://malcontentnews.substack.com/feed", name: "Malcontent News" }
     - url: "https://natesnewsletter.substack.com/feed"
       name: "Nate's AI Newsletter"
-      tag: "ai-newsletter"
-      compress: true
+      tag: "compress"
+      cap: 5
 
 come_follow_me:
   # Scrape weekly from churchofjesuschrist.org
@@ -128,7 +130,7 @@ digest:
     count: 3
   week_ahead:
     enabled: true
-    count: 4
+    count: 2
   markets:
     enabled: true
   spiritual:
