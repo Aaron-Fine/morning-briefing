@@ -35,18 +35,23 @@ def _fetch_direct(rss_config: dict) -> list[dict]:
                 feed_conf["url"],
                 request_headers={"User-Agent": "MorningDigest/1.0"},
             )
-            for entry in parsed.entries[:15]:  # cap per feed
+            cap = feed_conf.get("cap", 15)
+            tag = feed_conf.get("tag", "")
+            for entry in parsed.entries[:cap]:
                 published = _parse_feed_date(entry)
                 if published and published < cutoff:
                     continue
 
-                all_items.append({
+                item = {
                     "source": feed_conf["name"],
                     "title": entry.get("title", "").strip(),
                     "url": entry.get("link", ""),
                     "published": published.isoformat() if published else "",
                     "summary": _clean_summary(entry.get("summary", "")),
-                })
+                }
+                if tag:
+                    item["tag"] = tag
+                all_items.append(item)
         except Exception as e:
             log.warning(f"RSS fetch failed for {feed_conf['name']}: {e}")
 
