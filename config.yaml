@@ -56,12 +56,12 @@ weather:
   provider: "open-meteo"
 
 markets:
-  # Using Yahoo Finance or Alpha Vantage
-  # Set ALPHA_VANTAGE_KEY as env var if using that provider
+  # Using Finnhub — set FINNHUB_API_KEY as env var
   symbols:
     - { symbol: "^GSPC", label: "S&P 500" }
     - { symbol: "^DJI", label: "Dow" }
-    - { symbol: "BZ=F", label: "Brent" }
+    - { symbol: "XAR", label: "Defense" }
+    - { symbol: "XLE", label: "Energy" }
 
 rss:
   # FreshRSS API endpoint (update when you migrate)
