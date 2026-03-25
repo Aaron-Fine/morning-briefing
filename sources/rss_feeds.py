@@ -142,9 +142,20 @@ def _parse_feed_date(entry) -> Optional[datetime]:
 
 def _clean_summary(raw: str) -> str:
     """Strip HTML and truncate summary."""
-    from bs4 import BeautifulSoup
+    from html.parser import HTMLParser
 
-    text = BeautifulSoup(raw, "lxml").get_text(separator=" ", strip=True)
+    class _Stripper(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self._parts = []
+        def handle_data(self, d):
+            self._parts.append(d)
+        def get_text(self):
+            return " ".join(self._parts)
+
+    stripper = _Stripper()
+    stripper.feed(raw)
+    text = " ".join(stripper.get_text().split())  # collapse whitespace
     if len(text) > 400:
         text = text[:397] + "..."
     return text

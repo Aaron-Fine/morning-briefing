@@ -4,8 +4,8 @@
 import sys
 import time
 import logging
-import schedule
 import yaml
+from datetime import datetime
 from pathlib import Path
 from digest import run
 
@@ -36,11 +36,14 @@ def main():
     run_time = f"{hour}:{minute}"
 
     log.info(f"Scheduling daily digest at {run_time}")
-    schedule.every().day.at(run_time).do(run)
+    last_run_date = None
 
-    # Keep running
     while True:
-        schedule.run_pending()
+        now = datetime.now()
+        today = now.date()
+        if now.strftime("%H:%M") == run_time and last_run_date != today:
+            last_run_date = today
+            run()
         time.sleep(30)
 
 
