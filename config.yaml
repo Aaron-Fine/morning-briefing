@@ -15,10 +15,11 @@ delivery:
   from_name: "Morning Digest"
   subject_template: "Morning Digest — {date}"
 
-claude:
-  model: "claude-sonnet-4-6"
+llm:
+  model: "accounts/fireworks/models/kimi-k2p5"
   max_tokens: 8000
-  # Set ANTHROPIC_API_KEY as env var
+  temperature: 0.3
+  # Set FIREWORKS_API_KEY as env var
 
 location:
   city: "Logan"
@@ -31,24 +32,24 @@ location:
 # --- SOURCE CONFIGURATION ---
 
 youtube:
-  # Uses YouTube's public channel RSS feeds — no API key required
+  # Uses yt-dlp — no API key required
   always_watch:
-    - { id: "UC0YvoAYGgdOfySQSLcxtu1w", name: "Belle of the Ranch" }
-    - { id: "UCsBjURrPoezykLs9EqgamOA", name: "Fireship" }
-    - { id: "UCivA7_KLKWo43tFcCkFvydw", name: "Applied Science" }
-    - { id: "UC2C_jShtL725hvbm1arSV9w", name: "CGP Grey" }
-    - { id: "UCp68_FLety0O-n9QU6phsgw", name: "colinfurze" }
-    - { id: "UC8i-4EpLBXMzekETNXwcZjA", name: "Hyperspace Pirate" }
-    - { id: "UClOGLGPOqlAiLmOvXW5lKbw", name: "MandaloreGaming" }
-    - { id: "UC1O0jDlG51N3jGf6_9t-9mw", name: "Marco Reps" }
-    - { id: "UCckETVOT59aYw80B36aP9vw", name: "MatthiasWandel" }
-    - { id: "UCFtc3XdXgLFwhlDajMGK69w", name: "NightHawkInLight" }
-    - { id: "UCg45A-ph7Eu8jQgfrwDkHLg", name: "Plasma Channel" }
-    - { id: "UCD6VugMZKRhSyzWEWA9W2fg", name: "SsethTzeentach" }
-    - { id: "UCJYJgj7rzsn0vdR7fkgjuIA", name: "styropyro" }
-    - { id: "UCWCw2Sd7RlYJ2yuNVHDWNOA", name: "Stephanie Sterling" }
-    - { id: "UCV5vCi3jPJdURZwAOO_FNfQ", name: "The Thought Emporium" }
-    - { id: "UCFLwN7vRu8M057qJF8TsBaA", name: "UpIsNotJump" }
+    - { handle: "BelleRanch", name: "Belle of the Ranch" }
+    - { handle: "Fireship", name: "Fireship" }
+    - { handle: "AppliedScience", name: "Applied Science" }
+    - { handle: "CGPGrey", name: "CGP Grey" }
+    - { handle: "colinfurze", name: "colinfurze" }
+    - { handle: "HyperspacePirate", name: "Hyperspace Pirate" }
+    - { handle: "MandaloreGaming", name: "MandaloreGaming" }
+    - { handle: "reps", name: "Marco Reps" }
+    - { handle: "matthiaswandel", name: "MatthiasWandel" }
+    - { handle: "Nighthawkinlight", name: "NightHawkInLight" }
+    - { handle: "PlasmaChannel", name: "Plasma Channel" }
+    - { handle: "SsethTzeentach", name: "SsethTzeentach" }
+    - { handle: "styropyro", name: "styropyro" }
+    - { handle: "JimSterling", name: "Stephanie Sterling" }
+    - { handle: "thethoughtemporium", name: "The Thought Emporium" }
+    - { handle: "UpIsNotJump", name: "UpIsNotJump" }
   lookback_hours: 48
 
 weather:
@@ -57,9 +58,10 @@ weather:
 
 markets:
   # Using Finnhub — set FINNHUB_API_KEY as env var
+  # Using ETFs (SPY/DIA) instead of index symbols — Finnhub free tier doesn't support ^GSPC/^DJI
   symbols:
-    - { symbol: "^GSPC", label: "S&P 500" }
-    - { symbol: "^DJI", label: "Dow" }
+    - { symbol: "SPY", label: "S&P 500" }
+    - { symbol: "DIA", label: "Dow" }
     - { symbol: "XAR", label: "Defense" }
     - { symbol: "XLE", label: "Energy" }
 
@@ -129,7 +131,7 @@ digest:
     count: 3
   week_ahead:
     enabled: true
-    count: 2
+    count: 5
   markets:
     enabled: true
   spiritual:

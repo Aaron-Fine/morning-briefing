@@ -30,7 +30,7 @@ EMAIL_TEMPLATE = Template('''\
   .spiritual-ref { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #888; margin-bottom: 8px; }
   .spiritual-text { font-family: Georgia, serif; font-size: 16px; line-height: 1.65; font-style: italic; color: #1a1a1a; }
   .spiritual-cite { font-size: 13px; color: #555; margin-top: 6px; font-style: normal; }
-  .spiritual-ctx { font-size: 12px; color: #888; margin-top: 8px; }
+  .spiritual-ctx { font-size: 13px; color: #666; margin-top: 8px; }
 
   .bar { padding: 12px 32px; background: #f2f0ec; border-bottom: 1px solid #e5e2dd; font-size: 13px; color: #555; }
   .bar-mono { font-family: 'Courier New', monospace; font-weight: 500; color: #1a1a1a; }
@@ -46,7 +46,8 @@ EMAIL_TEMPLATE = Template('''\
 
   .scan-item { padding: 10px 0; border-bottom: 1px solid #e5e2dd; }
   .scan-item:last-child { border-bottom: none; }
-  .tag { font-family: 'Courier New', monospace; font-size: 9px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; display: inline-block; margin-right: 6px; }
+  .scan-header { display: flex; align-items: flex-start; flex-wrap: nowrap; gap: 8px; margin-bottom: 3px; }
+  .tag { font-family: 'Courier New', monospace; font-size: 9px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; display: inline-block; flex-shrink: 0; margin-top: 2px; }
   .tag-war { color: #78281f; background: #f9ebea; }
   .tag-ai { color: #6c3483; background: #ebdef0; }
   .tag-domestic { color: #7d6608; background: #fef9e7; }
@@ -55,10 +56,10 @@ EMAIL_TEMPLATE = Template('''\
   .tag-tech { color: #4a235a; background: #f4ecf7; }
   .tag-local { color: #1e8449; background: #d5f5e3; }
   .tag-science { color: #7e5109; background: #fef5e7; }
-  .scan-hl { font-size: 14px; font-weight: 500; line-height: 1.4; }
-  .scan-ctx { font-size: 13px; color: #555; margin-top: 2px; line-height: 1.45; }
-  .scan-link { font-size: 11px; color: #888; margin-top: 3px; }
-  .scan-link a { color: #888; text-decoration: none; border-bottom: 1px dotted #888; }
+  .scan-hl { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; line-height: 1.4; }
+  .scan-ctx { font-size: 13px; color: #555; line-height: 1.45; }
+  .scan-link { font-size: 11px; color: #666; margin-top: 4px; }
+  .scan-link a { color: #666; text-decoration: none; border-bottom: 1px dotted #aaa; }
 
   .yt-item { padding: 10px 0; border-bottom: 1px solid #e5e2dd; }
   .yt-item:last-child { border-bottom: none; }
@@ -70,13 +71,13 @@ EMAIL_TEMPLATE = Template('''\
 
   .local-item { padding: 6px 0; font-size: 13px; color: #555; line-height: 1.5; }
   .local-item strong { color: #1a1a1a; font-weight: 500; }
-  .cal-item { padding: 5px 0; font-size: 13px; color: #555; }
-  .cal-date { font-family: 'Courier New', monospace; font-size: 11px; font-weight: 500; color: #1a1a1a; }
+  .cal-item { padding: 6px 0; font-size: 13px; color: #555; display: flex; align-items: baseline; gap: 10px; }
+  .cal-date { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; color: #fff; background: #1a1a1a; padding: 2px 7px; border-radius: 3px; flex-shrink: 0; }
 
-  .card { background: #fff; border: 1px solid #e5e2dd; border-radius: 6px; padding: 20px 24px; margin-bottom: 16px; }
+  .card { background: #fff; border: 1px solid #e5e2dd; border-top: 3px solid #c05028; border-radius: 0 0 6px 6px; padding: 20px 24px; margin-bottom: 16px; }
   .card:last-child { margin-bottom: 0; }
   .card-hl { font-family: Georgia, serif; font-size: 19px; font-weight: 700; line-height: 1.3; margin-bottom: 10px; letter-spacing: -0.3px; }
-  .card-body { font-size: 14px; color: #555; line-height: 1.65; }
+  .card-body { font-size: 14px; color: #444; line-height: 1.65; }
   .card-body p { margin: 0 0 10px 0; }
   .card-body p:last-child { margin-bottom: 0; }
   .wim { background: #f5ebe6; border-left: 3px solid #c05028; padding: 10px 14px; margin-top: 12px; border-radius: 0 4px 4px 0; }
@@ -152,8 +153,10 @@ EMAIL_TEMPLATE = Template('''\
     <div class="sec-label">At a Glance</div>
     {% for item in at_a_glance %}
     <div class="scan-item">
-      <span class="tag tag-{{ item.tag }}">{{ item.tag_label }}</span>
-      <div class="scan-hl">{{ item.headline }}</div>
+      <div class="scan-header">
+        <span class="tag tag-{{ item.tag }}">{{ item.tag_label }}</span>
+        <span class="scan-hl">{{ item.headline }}</span>
+      </div>
       <div class="scan-ctx">{{ item.context }}</div>
       {% if item.links %}
       <div class="scan-link">
@@ -252,10 +255,9 @@ EMAIL_TEMPLATE = Template('''\
 
   <!-- FOOTER -->
   <div class="footer">
-    Generated at {{ generated_at }} · Powered by Claude API<br>
+    Generated at {{ generated_at }} · Powered by Kimi K2.5 · Fireworks AI<br>
     Sources: {{ rss_source_names }}<br>
-    YouTube: {{ youtube_channel_count }} Always Watch channels via YouTube Data API<br>
-    Come Follow Me: churchofjesuschrist.org · Markets: Yahoo Finance<br>
+    YouTube: {{ youtube_channel_count }} channels via RSS · Come Follow Me: churchofjesuschrist.org · Markets: Finnhub<br>
   </div>
 
 </div>

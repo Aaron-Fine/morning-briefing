@@ -6,7 +6,7 @@ services:
     environment:
       - TZ=America/Denver
       # Required — set these in your .env file or Unraid Docker template
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - FIREWORKS_API_KEY=${FIREWORKS_API_KEY}
       - FINNHUB_API_KEY=${FINNHUB_API_KEY}
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASSWORD=${SMTP_PASSWORD}

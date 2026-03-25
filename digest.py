@@ -12,7 +12,7 @@ import time
 from datetime import datetime, date
 from pathlib import Path
 
-import anthropic
+import openai
 import yaml
 
 from sources.youtube import fetch_recent_videos
@@ -81,7 +81,7 @@ def collect_sources(config: dict) -> dict:
     local_sources = config.get("local_news", {}).get("sources", [])
     if local_sources:
         log.info("  → Local news")
-        local_rss_config = {"feeds": local_sources, "provider": "direct"}
+        local_rss_config = {"rss": {"feeds": local_sources, "provider": "direct"}}
         data["local_news"] = fetch_rss(local_rss_config)
     else:
         data["local_news"] = []
@@ -232,17 +232,22 @@ Remember: output ONLY valid JSON, no markdown fencing, no commentary outside the
     return system_prompt, user_content
 
 
-def call_claude(system_prompt: str, user_content: str, config: dict, max_retries: int = 2) -> dict:
-    """Send prompt to Claude and parse the JSON response.
+def call_llm(system_prompt: str, user_content: str, config: dict, max_retries: int = 2) -> dict:
+    """Send prompt to the LLM and parse the JSON response.
 
-    Retries on transient errors (overloaded, network issues) with exponential backoff.
+    Retries on transient errors with exponential backoff.
     """
-    client = anthropic.Anthropic()  # uses ANTHROPIC_API_KEY env var
+    import os
+    client = openai.OpenAI(
+        api_key=os.environ["FIREWORKS_API_KEY"],
+        base_url="https://api.fireworks.ai/inference/v1",
+    )
 
-    model = config.get("claude", {}).get("model", "claude-opus-4-20250514")
-    max_tokens = config.get("claude", {}).get("max_tokens", 8000)
+    llm_config = config.get("llm", {})
+    model = llm_config.get("model", "accounts/fireworks/models/kimi-k2p5")
+    max_tokens = llm_config.get("max_tokens", 8000)
+    temperature = llm_config.get("temperature", 0.3)
 
-    last_error = None
     for attempt in range(max_retries + 1):
         try:
             if attempt > 0:
@@ -250,37 +255,40 @@ def call_claude(system_prompt: str, user_content: str, config: dict, max_retries
                 log.info(f"Retrying in {wait}s (attempt {attempt + 1}/{max_retries + 1})...")
                 time.sleep(wait)
 
-            log.info(f"Calling Claude ({model})...")
-            response = client.messages.create(
+            log.info(f"Calling LLM ({model})...")
+            chunks = []
+            with client.chat.completions.create(
                 model=model,
                 max_tokens=max_tokens,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_content}],
-            )
+                temperature=temperature,
+                response_format={"type": "json_object"},
+                stream=True,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content},
+                ],
+            ) as stream:
+                for chunk in stream:
+                    if not chunk.choices:
+                        continue
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        chunks.append(delta)
+            raw = "".join(chunks).strip()
             break
-        except (anthropic.APIStatusError, anthropic.APIConnectionError) as e:
-            last_error = e
-            log.warning(f"Claude API error: {e}")
+        except openai.APIStatusError as e:
+            log.warning(f"LLM API error: {e}")
+            if attempt == max_retries or e.status_code < 500:
+                raise
+        except openai.APIConnectionError as e:
+            log.warning(f"LLM connection error: {e}")
             if attempt == max_retries:
                 raise
-            # Only retry on overloaded (529) or server errors (5xx) or connection issues
-            if isinstance(e, anthropic.APIStatusError) and e.status_code < 500:
-                raise
-            continue
-
-    raw = response.content[0].text.strip()
-
-    # Strip markdown fencing if present
-    if raw.startswith("```"):
-        raw = raw.split("\n", 1)[1]  # remove first line
-        if raw.endswith("```"):
-            raw = raw[:-3]
-        raw = raw.strip()
 
     try:
         return json.loads(raw)
     except json.JSONDecodeError as e:
-        log.error(f"Failed to parse Claude response as JSON: {e}")
+        log.error(f"Failed to parse LLM response as JSON: {e}")
         log.error(f"Raw response (first 500 chars): {raw[:500]}")
         raise
 
@@ -372,7 +380,7 @@ def run(dry_run: bool = False, sources_only: bool = False):
 
     # 2. Build prompt and call Claude
     system_prompt, user_content = build_claude_prompt(source_data, config)
-    claude_output = call_claude(system_prompt, user_content, config)
+    claude_output = call_llm(system_prompt, user_content, config)
 
     # 3. Assemble template data
     template_data = assemble_template_data(claude_output, source_data, config)
