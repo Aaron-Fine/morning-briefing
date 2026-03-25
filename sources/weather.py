@@ -7,6 +7,7 @@ import requests
 log = logging.getLogger(__name__)
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+OPEN_METEO_AQI_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 
 
 def fetch_weather(config: dict) -> dict:
@@ -51,7 +52,7 @@ def fetch_weather(config: dict) -> dict:
                 "condition": _weather_code_to_text(daily["weather_code"][i]),
             })
 
-        return {
+        result = {
             "current_temp_f": round(current.get("temperature_2m", 0)),
             "condition": _weather_code_to_text(current.get("weather_code", 0)),
             "wind_mph": round(current.get("wind_speed_10m", 0)),
@@ -62,6 +63,12 @@ def fetch_weather(config: dict) -> dict:
             "state": loc.get("state", "UT"),
         }
 
+        # Fetch air quality data
+        aqi = _fetch_air_quality(lat, lon)
+        result.update(aqi)
+
+        return result
+
     except Exception as e:
         log.error(f"Weather fetch failed: {e}")
         return {
@@ -70,7 +77,59 @@ def fetch_weather(config: dict) -> dict:
             "forecast": [],
             "city": loc.get("city", "Logan"),
             "state": loc.get("state", "UT"),
+            "aqi": None,
+            "aqi_label": "unavailable",
+            "pm2_5": None,
+            "pm10": None,
         }
+
+
+def _fetch_air_quality(lat: float, lon: float) -> dict:
+    """Fetch current air quality from Open-Meteo (free, no key needed).
+
+    Returns dict: {aqi, aqi_label, pm2_5, pm10}
+    Important for Cache Valley which has severe winter inversions.
+    """
+    try:
+        resp = requests.get(
+            OPEN_METEO_AQI_URL,
+            params={
+                "latitude": lat,
+                "longitude": lon,
+                "current": "us_aqi,pm2_5,pm10",
+            },
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        current = data.get("current", {})
+
+        aqi = current.get("us_aqi")
+        return {
+            "aqi": aqi,
+            "aqi_label": _aqi_to_label(aqi) if aqi is not None else "unavailable",
+            "pm2_5": current.get("pm2_5"),
+            "pm10": current.get("pm10"),
+        }
+    except Exception as e:
+        log.warning(f"Air quality fetch failed: {e}")
+        return {"aqi": None, "aqi_label": "unavailable", "pm2_5": None, "pm10": None}
+
+
+def _aqi_to_label(aqi: int) -> str:
+    """Convert US AQI value to category label."""
+    if aqi <= 50:
+        return "Good"
+    elif aqi <= 100:
+        return "Moderate"
+    elif aqi <= 150:
+        return "Unhealthy for Sensitive Groups"
+    elif aqi <= 200:
+        return "Unhealthy"
+    elif aqi <= 300:
+        return "Very Unhealthy"
+    else:
+        return "Hazardous"
 
 
 def _weather_code_to_text(code: int) -> str:

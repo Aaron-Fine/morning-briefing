@@ -1,6 +1,7 @@
-"""Fetch recent uploads from YouTube channels via yt-dlp.
+"""Fetch transcripts from YouTube analysis channels via yt-dlp.
 
 No API key required. yt-dlp handles YouTube's anti-scraping transparently.
+Transcripts are fetched in full for pre-compression before synthesis.
 """
 
 import logging
@@ -33,14 +34,17 @@ YDL_OPTS = {
 }
 
 
-def fetch_recent_videos(config: dict) -> list[dict]:
-    """Return recent videos from Always Watch channels.
+def fetch_analysis_transcripts(config: dict) -> list[dict]:
+    """Return recent videos with full transcripts from analysis channels.
 
-    Returns list of dicts: {channel, title, video_id, url, published, description}
-    Includes transcript field when auto-captions are available.
+    These channels are treated as news/analysis sources — their transcripts
+    are pre-compressed and fed into the main synthesis pipeline.
+
+    Returns list of dicts: {channel, title, video_id, url, published, transcript}
+    Videos without available transcripts are silently skipped.
     """
     yt_config = config.get("youtube", {})
-    channels = yt_config.get("always_watch", [])
+    channels = yt_config.get("analysis_channels", [])
     lookback = yt_config.get("lookback_hours", 48)
     cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback)
 
@@ -66,19 +70,22 @@ def fetch_recent_videos(config: dict) -> list[dict]:
                     continue
 
                 video_id = entry.get("id", "")
-                transcript = _get_transcript(video_id) if video_id else None
+                if not video_id:
+                    continue
 
-                video = {
+                transcript = _get_transcript(video_id)
+                if not transcript:
+                    log.info(f"  No transcript for {ch['name']}: {entry.get('title', '?')} — skipping")
+                    continue
+
+                videos.append({
                     "channel": ch["name"],
                     "title": entry.get("title", "").strip(),
                     "video_id": video_id,
                     "url": f"https://www.youtube.com/watch?v={video_id}",
                     "published": published.isoformat(),
-                    "description": (entry.get("description") or "")[:800],
-                }
-                if transcript:
-                    video["transcript"] = transcript
-                videos.append(video)
+                    "transcript": transcript,
+                })
 
         except Exception as e:
             log.warning(f"yt-dlp failed for {ch['name']} (@{handle}): {e}")
@@ -104,14 +111,11 @@ def _parse_date(upload_date: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def _get_transcript(video_id: str, max_chars: int = 2000) -> Optional[str]:
-    """Fetch auto-generated or manual transcript, truncated to max_chars."""
+def _get_transcript(video_id: str) -> Optional[str]:
+    """Fetch full auto-generated or manual transcript."""
     try:
         segments = YouTubeTranscriptApi.get_transcript(video_id)
-        text = " ".join(s["text"] for s in segments)
-        if len(text) > max_chars:
-            text = text[:max_chars].rsplit(" ", 1)[0] + "…"
-        return text
+        return " ".join(s["text"] for s in segments)
     except (TranscriptsDisabled, NoTranscriptFound):
         return None
     except Exception as e:

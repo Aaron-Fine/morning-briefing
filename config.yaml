@@ -17,9 +17,19 @@ delivery:
 
 llm:
   model: "accounts/fireworks/models/kimi-k2p5"
-  max_tokens: 8000
+  max_tokens: 12000
   temperature: 0.3
   # Set FIREWORKS_API_KEY as env var
+  # Transcript pre-compression (same model for now; swap to cheaper model later)
+  compression:
+    model: "accounts/fireworks/models/kimi-k2p5"
+    max_tokens: 1500
+    temperature: 0.2
+  # Seam detection (runs on already-synthesized output)
+  seam_detection:
+    model: "accounts/fireworks/models/kimi-k2p5"
+    max_tokens: 3000
+    temperature: 0.3
 
 location:
   city: "Logan"
@@ -33,23 +43,12 @@ location:
 
 youtube:
   # Uses yt-dlp — no API key required
-  always_watch:
-    - { handle: "BelleRanch", name: "Belle of the Ranch" }
-    - { handle: "Fireship", name: "Fireship" }
-    - { handle: "AppliedScience", name: "Applied Science" }
-    - { handle: "CGPGrey", name: "CGP Grey" }
-    - { handle: "colinfurze", name: "colinfurze" }
-    - { handle: "HyperspacePirate", name: "Hyperspace Pirate" }
-    - { handle: "MandaloreGaming", name: "MandaloreGaming" }
-    - { handle: "reps", name: "Marco Reps" }
-    - { handle: "matthiaswandel", name: "MatthiasWandel" }
-    - { handle: "Nighthawkinlight", name: "NightHawkInLight" }
-    - { handle: "PlasmaChannel", name: "Plasma Channel" }
-    - { handle: "SsethTzeentach", name: "SsethTzeentach" }
-    - { handle: "styropyro", name: "styropyro" }
-    - { handle: "JimSterling", name: "Stephanie Sterling" }
-    - { handle: "thethoughtemporium", name: "The Thought Emporium" }
-    - { handle: "UpIsNotJump", name: "UpIsNotJump" }
+  # Analysis channels: transcripts are pulled, compressed, and fed into the synthesis pipeline
+  analysis_channels:
+    - { handle: "roadswithbeau", name: "Beau of the Fifth Column" }
+    - { handle: "t3dotgg", name: "Theo - t3.gg" }
+    - { handle: "PerunAU", name: "Perun" }
+    - { handle: "FoldingIdeas", name: "Folding Ideas" }
   lookback_hours: 48
 
 weather:
@@ -73,22 +72,57 @@ rss:
   freshrss_user: ""
   freshrss_password: ""
   feeds:
-    # Broad news — capped low; most stories duplicated by Kagi
-    - { url: "https://kagi.com/api/rss/world", name: "Kagi World News", cap: 15 }
-    - { url: "http://rss.cnn.com/rss/cnn_topstories.rss", name: "CNN", cap: 5 }
-    - { url: "https://feeds.npr.org/1001/rss.xml", name: "NPR", cap: 5 }
-    - { url: "https://api.axios.com/feed/", name: "Axios", cap: 5 }
-    - { url: "https://www.aljazeera.com/xml/rss/all.xml", name: "Al Jazeera", cap: 7 }
-    - { url: "https://www.theatlantic.com/feed/all/", name: "The Atlantic", cap: 8 }
-    # Niche / high-signal — uncapped within the 36h window
-    - { url: "https://feeds.breakingdefense.com/BreakingDefense", name: "Breaking Defense" }
-    - { url: "https://www.airandspaceforces.com/feed/", name: "Air & Space Forces" }
-    - { url: "https://spacenews.com/feed/", name: "SpaceNews" }
-    - { url: "https://malcontentnews.substack.com/feed", name: "Malcontent News" }
-    - url: "https://natesnewsletter.substack.com/feed"
-      name: "Nate's AI Newsletter"
-      tag: "compress"
-      cap: 5
+    # --- NON-WESTERN ENGLISH-LANGUAGE OUTLETS ---
+    # "What's missing" layer — flag when framing diverges from wire coverage
+    - { url: "https://www.aljazeera.com/xml/rss/all.xml", name: "Al Jazeera", cap: 7, category: "non-western" }
+    - { url: "https://scmp.com/rss/91/feed", name: "South China Morning Post", cap: 10, category: "non-western" }
+    - { url: "https://asia.nikkei.com/rss/feed/nar", name: "Nikkei Asia", cap: 8, category: "non-western" }
+    - { url: "https://www.thehindu.com/feeder/default.rss", name: "The Hindu", cap: 5, category: "non-western" }
+    - { url: "https://www.dawn.com/feeds/home", name: "Dawn", cap: 5, category: "non-western" }
+    - { url: "https://asiatimes.com/feed", name: "Asia Times", cap: 5, category: "non-western" }
+
+    # --- WESTERN ANALYSIS ---
+    # "What it means" layer — interpretation and framing
+    - { url: "https://www.theatlantic.com/feed/all/", name: "The Atlantic", cap: 8, category: "western-analysis" }
+
+    # --- DEFENSE / MILITARY ---
+    - { url: "https://feeds.breakingdefense.com/BreakingDefense", name: "Breaking Defense", category: "defense-mil" }
+    - { url: "https://www.airandspaceforces.com/feed/", name: "Air & Space Forces", category: "defense-mil" }
+    - { url: "https://spacenews.com/feed/", name: "SpaceNews", category: "defense-mil" }
+    - { url: "https://warontherocks.com/feed/", name: "War on the Rocks", cap: 5, category: "defense-mil" }
+    - { url: "https://defenseacquisition.substack.com/feed", name: "Defense Tech and Acquisition", cap: 5, category: "defense-mil" }
+
+    # --- GEOPOLITICS / WORLD NEWS (Substack independent) ---
+    - { url: "https://malcontentnews.substack.com/feed", name: "Malcontent News", category: "substack-independent" }
+    - { url: "https://adamtooze.substack.com/feed", name: "Adam Tooze — Chartbook", cap: 3, category: "substack-independent" }
+    - { url: "https://chinatalk.substack.com/feed", name: "China Talk", cap: 3, category: "substack-independent" }
+    - { url: "https://sinification.substack.com/feed", name: "Sinification", cap: 3, category: "substack-independent" }
+    - { url: "https://proximities.substack.com/feed", name: "Proximities", cap: 5, category: "substack-independent" }
+    - { url: "https://danieldrezner.substack.com/feed", name: "Daniel Drezner", cap: 3, category: "substack-independent" }
+    - { url: "https://claireberlinski.substack.com/feed", name: "The Cosmopolitan Globalist", cap: 3, category: "substack-independent" }
+    - { url: "https://menatrack.substack.com/feed", name: "MenaTrack", cap: 5, category: "substack-independent" }
+
+    # --- AI / TECH ---
+    - { url: "https://oneusefulthing.substack.com/feed", name: "One Useful Thing (Ethan Mollick)", cap: 3, category: "ai-tech" }
+    - { url: "https://importai.substack.com/feed", name: "Import AI (Jack Clark)", cap: 3, category: "ai-tech" }
+    - { url: "https://simonwillison.net/atom/everything/", name: "Simon Willison", cap: 8, category: "ai-tech" }
+
+    # --- ECONOMICS / TRADE ---
+    - { url: "https://theovershoot.co/feed", name: "The Overshoot (Matt Klein)", cap: 3, category: "econ-trade" }
+    - { url: "https://bradsetser.substack.com/feed", name: "Brad Setser", cap: 3, category: "econ-trade" }
+
+    # --- GLOBAL SOUTH ---
+    - { url: "https://www.ipsnews.net/news/headlines/feed/", name: "Inter Press Service", cap: 5, category: "global-south" }
+    - { url: "https://chinaglobalsouth.com/feed/", name: "China Global South Project", cap: 3, category: "global-south" }
+
+    # --- PERSPECTIVE DIVERSITY ---
+    # "Stress test" layer — only surface when contradicting consensus
+    - { url: "https://diff.substack.com/feed", name: "The Diff (Byrne Hobart)", cap: 3, category: "perspective-diversity" }
+    - { url: "https://slowboring.substack.com/feed", name: "Slow Boring (Matt Yglesias)", cap: 3, category: "perspective-diversity" }
+
+    # --- CYBERSECURITY ---
+    - { url: "https://ventureinsecurity.net/feed", name: "Venture in Security", cap: 3, category: "cyber" }
+    - { url: "https://risky.biz/feeds/risky-business-news/", name: "Risky Business", cap: 3, category: "cyber" }
 
 come_follow_me:
   # Scrape weekly from churchofjesuschrist.org

@@ -51,6 +51,9 @@ def _fetch_direct(rss_config: dict) -> list[dict]:
                 }
                 if tag:
                     item["tag"] = tag
+                category = feed_conf.get("category", "")
+                if category:
+                    item["category"] = category
                 all_items.append(item)
         except Exception as e:
             log.warning(f"RSS fetch failed for {feed_conf['name']}: {e}")

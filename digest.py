@@ -7,15 +7,17 @@ and editorial judgment, renders the HTML email, and sends it.
 
 import json
 import logging
+import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, date
 from pathlib import Path
 
 import openai
 import yaml
 
-from sources.youtube import fetch_recent_videos
+from sources.youtube import fetch_analysis_transcripts
 from sources.weather import fetch_weather
 from sources.markets import fetch_markets
 from sources.launches import fetch_upcoming_launches
@@ -65,13 +67,13 @@ def collect_sources(config: dict) -> dict:
         log.info("  → Come Follow Me")
         data["come_follow_me"] = get_current_lesson(config)
 
-    # YouTube
-    log.info("  → YouTube")
+    # YouTube analysis transcripts
+    log.info("  → YouTube analysis channels")
     try:
-        data["youtube"] = fetch_recent_videos(config)
+        data["analysis_transcripts"] = fetch_analysis_transcripts(config)
     except Exception as e:
-        log.warning(f"  YouTube failed: {e}")
-        data["youtube"] = []
+        log.warning(f"  YouTube analysis failed: {e}")
+        data["analysis_transcripts"] = []
 
     # RSS feeds
     log.info("  → RSS feeds")
@@ -88,16 +90,15 @@ def collect_sources(config: dict) -> dict:
 
     # Source counts
     data["source_counts"] = {
-        "youtube_videos": len(data.get("youtube", [])),
+        "analysis_transcripts": len(data.get("analysis_transcripts", [])),
         "rss_items": len(data.get("rss", [])),
         "local_news_items": len(data.get("local_news", [])),
-        "youtube_channels": len(config.get("youtube", {}).get("always_watch", [])),
     }
 
     log.info(
         f"  Collected: {data['source_counts']['rss_items']} RSS items, "
         f"{data['source_counts']['local_news_items']} local news items, "
-        f"{data['source_counts']['youtube_videos']} YouTube videos"
+        f"{data['source_counts']['analysis_transcripts']} analysis transcripts"
     )
     return data
 
@@ -232,21 +233,46 @@ Remember: output ONLY valid JSON, no markdown fencing, no commentary outside the
     return system_prompt, user_content
 
 
-def call_llm(system_prompt: str, user_content: str, config: dict, max_retries: int = 2) -> dict:
-    """Send prompt to the LLM and parse the JSON response.
+def call_llm(
+    system_prompt: str,
+    user_content: str,
+    config: dict,
+    max_retries: int = 2,
+    llm_override: dict | None = None,
+    json_mode: bool = True,
+) -> dict | str:
+    """Send prompt to the LLM and return the parsed response.
+
+    Args:
+        llm_override: dict with model/max_tokens/temperature overrides.
+        json_mode: if True, request JSON output and parse it. If False, return raw text.
 
     Retries on transient errors with exponential backoff.
     """
-    import os
     client = openai.OpenAI(
         api_key=os.environ["FIREWORKS_API_KEY"],
         base_url="https://api.fireworks.ai/inference/v1",
     )
 
     llm_config = config.get("llm", {})
+    if llm_override:
+        llm_config = {**llm_config, **llm_override}
     model = llm_config.get("model", "accounts/fireworks/models/kimi-k2p5")
-    max_tokens = llm_config.get("max_tokens", 8000)
+    max_tokens = llm_config.get("max_tokens", 12000)
     temperature = llm_config.get("temperature", 0.3)
+
+    create_kwargs = dict(
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        stream=True,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ],
+    )
+    if json_mode:
+        create_kwargs["response_format"] = {"type": "json_object"}
 
     for attempt in range(max_retries + 1):
         try:
@@ -257,17 +283,7 @@ def call_llm(system_prompt: str, user_content: str, config: dict, max_retries: i
 
             log.info(f"Calling LLM ({model})...")
             chunks = []
-            with client.chat.completions.create(
-                model=model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                response_format={"type": "json_object"},
-                stream=True,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ],
-            ) as stream:
+            with client.chat.completions.create(**create_kwargs) as stream:
                 for chunk in stream:
                     if not chunk.choices:
                         continue
@@ -285,12 +301,88 @@ def call_llm(system_prompt: str, user_content: str, config: dict, max_retries: i
             if attempt == max_retries:
                 raise
 
+    if not json_mode:
+        return raw
+
     try:
         return json.loads(raw)
     except json.JSONDecodeError as e:
         log.error(f"Failed to parse LLM response as JSON: {e}")
         log.error(f"Raw response (first 500 chars): {raw[:500]}")
         raise
+
+
+def compress_transcripts(transcripts: list[dict], config: dict) -> list[dict]:
+    """Stage 1: Pre-compress YouTube analysis transcripts via LLM.
+
+    Runs one API call per video in parallel. Returns the same list with
+    'transcript' replaced by 'compressed_transcript'.
+    """
+    if not transcripts:
+        return transcripts
+
+    compression_config = config.get("llm", {}).get("compression", {})
+
+    system_prompt = (
+        "You are a transcript compressor. Given a YouTube video transcript, "
+        "produce a dense summary that preserves:\n"
+        "1. All concrete claims and factual assertions\n"
+        "2. The speaker's analytical framework and conclusions\n"
+        "3. Any named sources, data points, or specific examples\n"
+        "4. The speaker's specific interpretive framing — how they characterize events "
+        "matters as much as what events they cover\n\n"
+        "Strip: filler, repetition, sponsor/ad reads, calls to action, tangents, "
+        "conversational padding, verbal tics.\n\n"
+        "Target: 400-600 words output regardless of input length. "
+        "Output plain text, no JSON, no markdown headers."
+    )
+
+    def _compress_one(video: dict) -> dict:
+        transcript = video.get("transcript", "")
+        if not transcript:
+            return video
+
+        user_content = (
+            f"Channel: {video['channel']}\n"
+            f"Video: {video['title']}\n"
+            f"Transcript ({len(transcript)} chars):\n\n"
+            f"{transcript}"
+        )
+
+        try:
+            compressed = call_llm(
+                system_prompt,
+                user_content,
+                config,
+                max_retries=1,
+                llm_override=compression_config,
+                json_mode=False,
+            )
+            log.info(
+                f"  Compressed {video['channel']}: {video['title']} "
+                f"({len(transcript)} → {len(compressed)} chars)"
+            )
+        except Exception as e:
+            log.warning(f"  Compression failed for {video['title']}: {e}")
+            # Fallback: first ~600 words of raw transcript
+            words = transcript.split()[:600]
+            compressed = " ".join(words)
+
+        result = {k: v for k, v in video.items() if k != "transcript"}
+        result["compressed_transcript"] = compressed
+        result["category"] = "youtube-analysis"
+        return result
+
+    log.info(f"Compressing {len(transcripts)} transcript(s)...")
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(_compress_one, v): v for v in transcripts}
+        results = []
+        for future in as_completed(futures):
+            results.append(future.result())
+
+    # Restore original sort order (by published date, descending)
+    results.sort(key=lambda v: v.get("published", ""), reverse=True)
+    return results
 
 
 def assemble_template_data(
