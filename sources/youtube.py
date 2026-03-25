@@ -72,7 +72,7 @@ def fetch_recent_videos(config: dict) -> list[dict]:
                     "channel": ch["name"],
                     "title": entry.get("title", "").strip(),
                     "video_id": video_id,
-                    "url": entry.get("url") or f"https://www.youtube.com/watch?v={video_id}",
+                    "url": f"https://www.youtube.com/watch?v={video_id}",
                     "published": published.isoformat(),
                     "description": (entry.get("description") or "")[:800],
                 }
