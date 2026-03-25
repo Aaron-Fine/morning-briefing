@@ -1,0 +1,6 @@
+.env
+__pycache__/
+*.pyc
+last_digest.html
+output/
+.DS_Store

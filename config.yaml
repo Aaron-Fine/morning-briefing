@@ -1,0 +1,134 @@
+# Morning Digest Configuration
+# All API keys should be set as environment variables, not in this file.
+
+schedule:
+  cron: "0 6 * * *"  # 6:00 AM daily
+  timezone: "America/Denver"
+
+delivery:
+  method: smtp
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587
+  # Set SMTP_USER and SMTP_PASSWORD as env vars
+  # For Gmail, use an App Password: https://myaccount.google.com/apppasswords
+  to_address: ""  # your gmail address
+  from_name: "Morning Digest"
+  subject_template: "Morning Digest — {date}"
+
+claude:
+  model: "claude-sonnet-4-20250514"
+  max_tokens: 8000
+  # Set ANTHROPIC_API_KEY as env var
+
+location:
+  city: "Logan"
+  state: "UT"
+  region: "Cache Valley"
+  latitude: 41.737
+  longitude: -111.834
+  timezone: "America/Denver"
+
+# --- SOURCE CONFIGURATION ---
+
+youtube:
+  # Set YOUTUBE_API_KEY as env var
+  # Get one at: https://console.cloud.google.com/apis/credentials
+  always_watch:
+    - { id: "UC0YvoAYGgdOfySQSLcxtu1w", name: "Belle of the Ranch" }
+    - { id: "UCsBjURrPoezykLs9EqgamOA", name: "Fireship" }
+    - { id: "UCivA7_KLKWo43tFcCkFvydw", name: "Applied Science" }
+    - { id: "UC2C_jShtL725hvbm1arSV9w", name: "CGP Grey" }
+    - { id: "UCp68_FLety0O-n9QU6phsgw", name: "colinfurze" }
+    - { id: "UC8i-4EpLBXMzekETNXwcZjA", name: "Hyperspace Pirate" }
+    - { id: "UClOGLGPOqlAiLmOvXW5lKbw", name: "MandaloreGaming" }
+    - { id: "UC1O0jDlG51N3jGf6_9t-9mw", name: "Marco Reps" }
+    - { id: "UCckETVOT59aYw80B36aP9vw", name: "MatthiasWandel" }
+    - { id: "UCFtc3XdXgLFwhlDajMGK69w", name: "NightHawkInLight" }
+    - { id: "UCg45A-ph7Eu8jQgfrwDkHLg", name: "Plasma Channel" }
+    - { id: "UCD6VugMZKRhSyzWEWA9W2fg", name: "SsethTzeentach" }
+    - { id: "UCJYJgj7rzsn0vdR7fkgjuIA", name: "styropyro" }
+    - { id: "UCWCw2Sd7RlYJ2yuNVHDWNOA", name: "Stephanie Sterling" }
+    - { id: "UCV5vCi3jPJdURZwAOO_FNfQ", name: "The Thought Emporium" }
+    - { id: "UCFLwN7vRu8M057qJF8TsBaA", name: "UpIsNotJump" }
+  lookback_hours: 48
+
+weather:
+  # Using Open-Meteo (free, no API key needed)
+  provider: "open-meteo"
+
+markets:
+  # Using Yahoo Finance or Alpha Vantage
+  # Set ALPHA_VANTAGE_KEY as env var if using that provider
+  symbols:
+    - { symbol: "^GSPC", label: "S&P 500" }
+    - { symbol: "^DJI", label: "Dow" }
+    - { symbol: "BZ=F", label: "Brent" }
+
+rss:
+  # FreshRSS API endpoint (update when you migrate)
+  # For now, can use direct RSS feeds
+  provider: "direct"  # or "freshrss"
+  freshrss_url: ""  # e.g. http://freshrss.local/api/greader.php
+  freshrss_user: ""
+  freshrss_password: ""
+  feeds:
+    - { url: "https://kagi.com/api/rss/world", name: "Kagi World News" }
+    - { url: "https://feeds.breakingdefense.com/BreakingDefense", name: "Breaking Defense" }
+    - { url: "https://www.airandspaceforces.com/feed/", name: "Air & Space Forces" }
+    - { url: "https://spacenews.com/feed/", name: "SpaceNews" }
+    - { url: "https://malcontentnews.substack.com/feed", name: "Malcontent News" }
+
+come_follow_me:
+  # Scrape weekly from churchofjesuschrist.org
+  base_url: "https://www.churchofjesuschrist.org/study/manual/come-follow-me-for-home-and-church-old-testament-2026"
+  year: 2026
+
+local_news:
+  sources:
+    - { url: "https://www.cachevalleydaily.com/feed/", name: "Cache Valley Daily" }
+    - { url: "https://www.hjnews.com/search/?f=rss&t=article&c=news/local&l=25&s=start_time&sd=desc", name: "Herald Journal" }
+
+# --- DIGEST PREFERENCES ---
+
+topics:
+  primary:
+    - "World news / geopolitics / active conflicts"
+    - "AI / LLMs / agentic technology"
+  secondary:
+    - "Defense / DoD / missile warning / missile defense"
+    - "UARC / FFRDC news"
+    - "Space technology and launch"
+  tertiary:
+    - "Self-hosting / privacy / open source"
+    - "EVs / right-to-repair / consumer tech"
+    - "Local news / Utah news"
+
+digest:
+  at_a_glance:
+    min_items: 4
+    normal_items: 8
+    max_items: 12
+  deep_dives:
+    count: 2
+    include_further_reading: true
+  youtube:
+    always_watch_all: true  # list every upload from Always Watch
+  weekend_reads:
+    enabled: true
+    day: "friday"
+    count: 3
+  week_ahead:
+    enabled: true
+    count: 4
+  markets:
+    enabled: true
+  spiritual:
+    enabled: true
+    source: "come_follow_me"
+  local:
+    enabled: true
+    max_items: 4
+
+# Minimum viable digest on a quiet day:
+# Even one good deep dive justifies sending the email.
+quiet_day_policy: "always_send"
