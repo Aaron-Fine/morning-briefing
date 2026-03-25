@@ -18,6 +18,7 @@ import yaml
 from sources.youtube import fetch_recent_videos
 from sources.weather import fetch_weather
 from sources.markets import fetch_markets
+from sources.economic_calendar import fetch_economic_calendar
 from sources.rss_feeds import fetch_rss
 from sources.come_follow_me import get_current_lesson
 from templates.email_template import render_email
@@ -51,6 +52,10 @@ def collect_sources(config: dict) -> dict:
     if config.get("digest", {}).get("markets", {}).get("enabled", True):
         log.info("  → Markets")
         data["markets"] = fetch_markets(config)
+
+    # Economic calendar
+    log.info("  → Economic calendar")
+    data["economic_calendar"] = fetch_economic_calendar(config)
 
     # Come Follow Me
     if config.get("digest", {}).get("spiritual", {}).get("enabled", True):
@@ -105,6 +110,7 @@ def build_claude_prompt(source_data: dict, config: dict) -> str:
     cfm = source_data.get("come_follow_me", {})
     weather = source_data.get("weather", {})
     markets = source_data.get("markets", [])
+    economic_calendar = source_data.get("economic_calendar", [])
     youtube = source_data.get("youtube", [])
     rss = source_data.get("rss", [])
 
@@ -169,7 +175,7 @@ RULES:
   a slow news day in these areas is fine to reflect honestly.
 - For YouTube, write a 2-3 sentence summary for each video explaining what it covers and why it's worth watching. Videos include a "transcript" field with the opening portion of the auto-generated transcript when available — use it for accurate content summaries. Fall back to the description field if no transcript is present.
 - Local items: Cache Valley focus, max {config['digest']['local']['max_items']} items. Use the LOCAL NEWS section as your source for these — do not fabricate local stories. Omit the section entirely if no qualifying events are found.
-- Week ahead: up to {config['digest']['week_ahead']['count']} upcoming events with a source-backed date in the source data. Only include events explicitly mentioned in the articles — do not infer or invent. Omit the section entirely if no qualifying events are found.
+- Week ahead: up to {config['digest']['week_ahead']['count']} upcoming events. Draw primarily from the ECONOMIC CALENDAR section (Fed decisions, CPI, jobs reports). Supplement with events explicitly dated in news articles. Do not infer or invent events. Omit the section entirely if nothing qualifies.
 - Deep dive body uses <p> tags for paragraphs
 - All URLs in output must come from the source data below — never fabricate URLs
 - It is better to leave out a section entirely than to make up data for it. If a section has no relevant source data, omit it or return an empty array.
@@ -201,10 +207,13 @@ Date Range: {cfm.get('date_range', '')}
 === MARKETS ===
 {json.dumps(markets, indent=2)}
 
+=== ECONOMIC CALENDAR (next 7 days, US high/medium-impact events) ===
+{json.dumps(economic_calendar, indent=2) if economic_calendar else "No upcoming events found."}
+
 === YOUTUBE (new uploads from Always Watch channels) ===
 {json.dumps(youtube, indent=2) if youtube else "No new uploads in the past 48 hours."}
 
-=== RSS / NEWS ({len(rss)} items{f', showing first 60 — {rss_truncated} older items omitted' if rss_truncated > 0 else ''}) ===
+=== RSS / NEWS ({len(rss)} items{f', showing first 80 — {rss_truncated} older items omitted' if rss_truncated > 0 else ''}) ===
 {json.dumps(rss_display, indent=2)}
 
 === LOCAL NEWS ({len(local_news)} items) ===
