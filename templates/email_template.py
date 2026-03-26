@@ -1,16 +1,13 @@
 """HTML email template for the Morning Digest.
 
-Uses Jinja2 for rendering. The template is designed for Gmail rendering compatibility:
-- Inline styles (Gmail strips <style> tags in some contexts)
-- Table-based layout for email clients
+Uses Jinja2 for rendering. The template is designed for Gmail/Proton Mail compatibility:
+- CSS custom properties for theming (supported in modern email clients)
+- @media (prefers-color-scheme: dark) for automatic dark mode in Proton Mail / Apple Mail
+- JS-injected toggle for the browser dry-run HTML; stripped by email clients so no dead button
 - System fonts with web-safe fallbacks
 """
 
 from jinja2 import Template
-
-# Note: Gmail is one of the better email clients for CSS support,
-# but we still inline critical styles for maximum compatibility.
-# The <style> block in <head> works in Gmail's web client.
 
 EMAIL_TEMPLATE = Template('''\
 <!DOCTYPE html>
@@ -18,95 +15,300 @@ EMAIL_TEMPLATE = Template('''\
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Flash prevention: read localStorage before first paint so browser never flashes wrong theme -->
+<script>
+(function(){try{var t=localStorage.getItem('md-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+
 <style>
-  body { margin: 0; padding: 0; background: #e8e6e2; font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1a1a1a; line-height: 1.6; }
+  /* ── Light palette (default) ─────────────────────────────── */
+  :root {
+    --bg-page:    #e8e6e2;
+    --bg-wrap:    #faf9f7;
+    --bg-tinted:  #f7f5f0;
+    --bg-bar:     #f2f0ec;
+    --bg-card:    #ffffff;
+    --bg-wim:     #f5ebe6;
+    --bg-chrome:  #1a1a1a;
+
+    --border:     #e5e2dd;
+
+    --text:           #1a1a1a;
+    --text-body:      #444444;
+    --text-secondary: #555555;
+    --text-muted:     #666666;
+    --text-faint:     #888888;
+
+    --text-chrome:      #ffffff;
+    --text-chrome-dim:  #999999;
+    --text-chrome-muted:#aaaaaa;
+    --text-chrome-link: #cccccc;
+
+    --accent:      #c05028;
+    --accent-seam: #7b241c;
+
+    --link:        #1b4f72;
+    --link-subtle: #666666;
+    --link-border: #aaaaaa;
+
+    --up:   #1e8449;
+    --down: #c0392b;
+
+    --tag-war-text: #78281f;  --tag-war-bg: #f9ebea;
+    --tag-ai-text:  #6c3483;  --tag-ai-bg:  #ebdef0;
+    --tag-domestic-text: #7d6608; --tag-domestic-bg: #fef9e7;
+    --tag-defense-text:  #1b4f72; --tag-defense-bg:  #d4e6f1;
+    --tag-space-text:    #1a5276; --tag-space-bg:    #d6eaf8;
+    --tag-tech-text:     #4a235a; --tag-tech-bg:     #f4ecf7;
+    --tag-local-text:    #1e8449; --tag-local-bg:    #d5f5e3;
+    --tag-science-text:  #7e5109; --tag-science-bg:  #fef5e7;
+    --tag-econ-text:     #1a5276; --tag-econ-bg:     #d4efdf;
+    --tag-cyber-text:    #633974; --tag-cyber-bg:    #f5eef8;
+  }
+
+  /* ── Dark palette — system preference (Proton Mail / Apple Mail) ── */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg-page:    #141210;
+      --bg-wrap:    #1c1a17;
+      --bg-tinted:  #222018;
+      --bg-bar:     #222018;
+      --bg-card:    #242220;
+      --bg-wim:     #2a1f18;
+      --bg-chrome:  #0e0d0b;
+
+      --border:     #2e2b27;
+
+      --text:           #e8e5e1;
+      --text-body:      #c8c5c0;
+      --text-secondary: #b0ada8;
+      --text-muted:     #888582;
+      --text-faint:     #5e5c59;
+
+      --text-chrome:       #e8e5e1;
+      --text-chrome-dim:   #5e5c59;
+      --text-chrome-muted: #888582;
+      --text-chrome-link:  #b0ada8;
+
+      --accent:      #d4643a;
+      --accent-seam: #d4643a;
+
+      --link:        #7ab4e8;
+      --link-subtle: #888582;
+      --link-border: #3e3c39;
+
+      --up:   #2ebd69;
+      --down: #e05252;
+
+      --tag-war-text: #f4a5a5;  --tag-war-bg: #3d1410;
+      --tag-ai-text:  #d4a8f0;  --tag-ai-bg:  #2d1440;
+      --tag-domestic-text: #e8d060; --tag-domestic-bg: #2a2206;
+      --tag-defense-text:  #7ab4e8; --tag-defense-bg:  #0f2a3d;
+      --tag-space-text:    #7ab4e8; --tag-space-bg:    #0f2a3d;
+      --tag-tech-text:     #c89ae0; --tag-tech-bg:     #221030;
+      --tag-local-text:    #5dd88a; --tag-local-bg:    #0d2e1a;
+      --tag-science-text:  #e8b860; --tag-science-bg:  #281a06;
+      --tag-econ-text:     #7ab4e8; --tag-econ-bg:     #0f2a3d;
+      --tag-cyber-text:    #c89ae0; --tag-cyber-bg:    #221030;
+    }
+  }
+
+  /* ── Dark palette — explicit JS override (browser only) ──── */
+  [data-theme="dark"] {
+    --bg-page:    #141210;
+    --bg-wrap:    #1c1a17;
+    --bg-tinted:  #222018;
+    --bg-bar:     #222018;
+    --bg-card:    #242220;
+    --bg-wim:     #2a1f18;
+    --bg-chrome:  #0e0d0b;
+
+    --border:     #2e2b27;
+
+    --text:           #e8e5e1;
+    --text-body:      #c8c5c0;
+    --text-secondary: #b0ada8;
+    --text-muted:     #888582;
+    --text-faint:     #5e5c59;
+
+    --text-chrome:       #e8e5e1;
+    --text-chrome-dim:   #5e5c59;
+    --text-chrome-muted: #888582;
+    --text-chrome-link:  #b0ada8;
+
+    --accent:      #d4643a;
+    --accent-seam: #d4643a;
+
+    --link:        #7ab4e8;
+    --link-subtle: #888582;
+    --link-border: #3e3c39;
+
+    --up:   #2ebd69;
+    --down: #e05252;
+
+    --tag-war-text: #f4a5a5;  --tag-war-bg: #3d1410;
+    --tag-ai-text:  #d4a8f0;  --tag-ai-bg:  #2d1440;
+    --tag-domestic-text: #e8d060; --tag-domestic-bg: #2a2206;
+    --tag-defense-text:  #7ab4e8; --tag-defense-bg:  #0f2a3d;
+    --tag-space-text:    #7ab4e8; --tag-space-bg:    #0f2a3d;
+    --tag-tech-text:     #c89ae0; --tag-tech-bg:     #221030;
+    --tag-local-text:    #5dd88a; --tag-local-bg:    #0d2e1a;
+    --tag-science-text:  #e8b860; --tag-science-bg:  #281a06;
+    --tag-econ-text:     #7ab4e8; --tag-econ-bg:     #0f2a3d;
+    --tag-cyber-text:    #c89ae0; --tag-cyber-bg:    #221030;
+  }
+
+  /* ── Light override — lets a dark-system user switch back ── */
+  [data-theme="light"] {
+    --bg-page:    #e8e6e2;
+    --bg-wrap:    #faf9f7;
+    --bg-tinted:  #f7f5f0;
+    --bg-bar:     #f2f0ec;
+    --bg-card:    #ffffff;
+    --bg-wim:     #f5ebe6;
+    --bg-chrome:  #1a1a1a;
+
+    --border:     #e5e2dd;
+
+    --text:           #1a1a1a;
+    --text-body:      #444444;
+    --text-secondary: #555555;
+    --text-muted:     #666666;
+    --text-faint:     #888888;
+
+    --text-chrome:       #ffffff;
+    --text-chrome-dim:   #999999;
+    --text-chrome-muted: #aaaaaa;
+    --text-chrome-link:  #cccccc;
+
+    --accent:      #c05028;
+    --accent-seam: #7b241c;
+
+    --link:        #1b4f72;
+    --link-subtle: #666666;
+    --link-border: #aaaaaa;
+
+    --up:   #1e8449;
+    --down: #c0392b;
+
+    --tag-war-text: #78281f;  --tag-war-bg: #f9ebea;
+    --tag-ai-text:  #6c3483;  --tag-ai-bg:  #ebdef0;
+    --tag-domestic-text: #7d6608; --tag-domestic-bg: #fef9e7;
+    --tag-defense-text:  #1b4f72; --tag-defense-bg:  #d4e6f1;
+    --tag-space-text:    #1a5276; --tag-space-bg:    #d6eaf8;
+    --tag-tech-text:     #4a235a; --tag-tech-bg:     #f4ecf7;
+    --tag-local-text:    #1e8449; --tag-local-bg:    #d5f5e3;
+    --tag-science-text:  #7e5109; --tag-science-bg:  #fef5e7;
+    --tag-econ-text:     #1a5276; --tag-econ-bg:     #d4efdf;
+    --tag-cyber-text:    #633974; --tag-cyber-bg:    #f5eef8;
+  }
+
+  /* ── Layout ──────────────────────────────────────────────── */
+  body { margin: 0; padding: 0; background: var(--bg-page); font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: var(--text); line-height: 1.6; }
   h1, h2, h3 { margin: 0; padding: 0; font-size: inherit; font-weight: inherit; line-height: inherit; }
-  .wrapper { max-width: 680px; margin: 0 auto; background: #faf9f7; }
-  .header { background: #1a1a1a; color: #fff; padding: 28px 32px 24px; }
-  .header-date { font-family: 'Courier New', monospace; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: #999; margin-bottom: 6px; }
+  .wrapper { max-width: 680px; margin: 0 auto; background: var(--bg-wrap); }
+
+  /* Theme toggle bar — injected by JS, invisible in email clients */
+  .theme-bar { max-width: 680px; margin: 0 auto; padding: 8px 12px; text-align: right; background: var(--bg-page); }
+  .theme-btn { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; background: transparent; border: 1px solid var(--border); color: var(--text-muted); padding: 4px 10px; border-radius: 3px; cursor: pointer; }
+  .theme-btn:hover { color: var(--text); border-color: var(--text-muted); }
+
+  /* ── Header ──────────────────────────────────────────────── */
+  .header { background: var(--bg-chrome); color: var(--text-chrome); padding: 28px 32px 24px; }
+  .header-date { font-family: 'Courier New', monospace; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-chrome-dim); margin-bottom: 6px; }
   .header-title { font-family: Georgia, 'Times New Roman', serif; font-size: 28px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.2; }
-  .header-sub { font-size: 13px; color: #aaa; margin-top: 4px; }
+  .header-sub { font-size: 13px; color: var(--text-chrome-muted); margin-top: 4px; }
 
-  .spiritual { padding: 20px 32px; background: #f7f5f0; border-bottom: 1px solid #e5e2dd; }
-  .spiritual-ref { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #666; margin-bottom: 8px; }
-  .spiritual-text { font-family: Georgia, serif; font-size: 16px; line-height: 1.65; font-style: italic; color: #1a1a1a; }
-  .spiritual-cite { font-size: 14px; color: #555; margin-top: 6px; font-style: normal; }
-  .spiritual-ctx { font-size: 14px; color: #666; margin-top: 8px; }
+  /* ── Spiritual ───────────────────────────────────────────── */
+  .spiritual { padding: 20px 32px; background: var(--bg-tinted); border-bottom: 1px solid var(--border); }
+  .spiritual-ref { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+  .spiritual-text { font-family: Georgia, serif; font-size: 16px; line-height: 1.65; font-style: italic; color: var(--text); }
+  .spiritual-cite { font-size: 14px; color: var(--text-secondary); margin-top: 6px; font-style: normal; }
+  .spiritual-ctx { font-size: 14px; color: var(--text-muted); margin-top: 8px; }
 
-  .bar { padding: 12px 32px; background: #f2f0ec; border-bottom: 1px solid #e5e2dd; font-size: 14px; color: #555; }
-  .bar-mono { font-family: 'Courier New', monospace; font-weight: 500; color: #1a1a1a; }
-  .bar-detail { font-size: 13px; color: #666; }
+  /* ── Info bars (weather, markets) ───────────────────────── */
+  .bar { padding: 12px 32px; background: var(--bg-bar); border-bottom: 1px solid var(--border); font-size: 14px; color: var(--text-secondary); }
+  .bar-mono { font-family: 'Courier New', monospace; font-weight: 500; color: var(--text); }
+  .bar-detail { font-size: 13px; color: var(--text-muted); }
   .markets { font-family: 'Courier New', monospace; font-size: 13px; display: flex; gap: 18px; flex-wrap: wrap; }
-  .mkt-context { font-size: 13px; color: #555; margin-top: 8px; line-height: 1.5; font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-  .mkt-label { color: #666; }
-  .mkt-val { color: #1a1a1a; font-weight: 500; }
-  .up { color: #1e8449; }
-  .down { color: #c0392b; }
+  .mkt-context { font-size: 13px; color: var(--text-secondary); margin-top: 8px; line-height: 1.5; font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+  .mkt-label { color: var(--text-muted); }
+  .mkt-val { color: var(--text); font-weight: 500; }
+  .up { color: var(--up); }
+  .down { color: var(--down); }
 
-  .section { padding: 24px 32px; border-bottom: 1px solid #e5e2dd; }
-  .sec-label { font-family: 'Courier New', monospace; font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: #c05028; margin-bottom: 16px; border-bottom: 1px solid #e5e2dd; padding-bottom: 8px; }
+  /* ── Sections ────────────────────────────────────────────── */
+  .section { padding: 24px 32px; border-bottom: 1px solid var(--border); }
+  .sec-label { font-family: 'Courier New', monospace; font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
 
-  .scan-item { padding: 10px 0; border-bottom: 1px solid #e5e2dd; }
+  /* ── At a Glance ─────────────────────────────────────────── */
+  .scan-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
   .scan-item:last-child { border-bottom: none; }
   .scan-header { display: flex; align-items: flex-start; flex-wrap: nowrap; gap: 8px; margin-bottom: 3px; }
   .tag { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; display: inline-block; flex-shrink: 0; margin-top: 2px; }
-  .tag-war { color: #78281f; background: #f9ebea; }
-  .tag-ai { color: #6c3483; background: #ebdef0; }
-  .tag-domestic { color: #7d6608; background: #fef9e7; }
-  .tag-defense { color: #1b4f72; background: #d4e6f1; }
-  .tag-space { color: #1a5276; background: #d6eaf8; }
-  .tag-tech { color: #4a235a; background: #f4ecf7; }
-  .tag-local { color: #1e8449; background: #d5f5e3; }
-  .tag-science { color: #7e5109; background: #fef5e7; }
-  .tag-econ { color: #1a5276; background: #d4efdf; }
-  .tag-cyber { color: #633974; background: #f5eef8; }
+  .tag-war      { color: var(--tag-war-text);      background: var(--tag-war-bg); }
+  .tag-ai       { color: var(--tag-ai-text);       background: var(--tag-ai-bg); }
+  .tag-domestic { color: var(--tag-domestic-text); background: var(--tag-domestic-bg); }
+  .tag-defense  { color: var(--tag-defense-text);  background: var(--tag-defense-bg); }
+  .tag-space    { color: var(--tag-space-text);    background: var(--tag-space-bg); }
+  .tag-tech     { color: var(--tag-tech-text);     background: var(--tag-tech-bg); }
+  .tag-local    { color: var(--tag-local-text);    background: var(--tag-local-bg); }
+  .tag-science  { color: var(--tag-science-text);  background: var(--tag-science-bg); }
+  .tag-econ     { color: var(--tag-econ-text);     background: var(--tag-econ-bg); }
+  .tag-cyber    { color: var(--tag-cyber-text);    background: var(--tag-cyber-bg); }
   .scan-hl { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; line-height: 1.4; }
-  .scan-ctx { font-size: 14px; color: #555; line-height: 1.45; }
-  .scan-link { font-size: 12px; color: #666; margin-top: 4px; }
-  .scan-link a { color: #666; text-decoration: none; border-bottom: 1px dotted #aaa; }
+  .scan-ctx { font-size: 14px; color: var(--text-secondary); line-height: 1.45; }
+  .scan-link { font-size: 12px; color: var(--link-subtle); margin-top: 4px; }
+  .scan-link a { color: var(--link-subtle); text-decoration: none; border-bottom: 1px dotted var(--link-border); }
 
-  .local-item { padding: 6px 0; font-size: 14px; color: #555; line-height: 1.5; }
-  .local-item strong { color: #1a1a1a; font-weight: 500; }
-  .local-item a { color: #1b4f72; text-decoration: none; font-weight: 500; border-bottom: 1px dotted #aaa; }
-  .cal-item { padding: 6px 0; font-size: 14px; color: #555; display: flex; align-items: baseline; gap: 10px; }
-  .cal-date { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; color: #fff; background: #1a1a1a; padding: 2px 7px; border-radius: 3px; flex-shrink: 0; }
+  /* ── Local / Calendar ───────────────────────────────────── */
+  .local-item { padding: 6px 0; font-size: 14px; color: var(--text-secondary); line-height: 1.5; }
+  .local-item strong { color: var(--text); font-weight: 500; }
+  .local-item a { color: var(--link); text-decoration: none; font-weight: 500; border-bottom: 1px dotted var(--link-border); }
+  .cal-item { padding: 6px 0; font-size: 14px; color: var(--text-secondary); display: flex; align-items: baseline; gap: 10px; }
+  .cal-date { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-chrome); background: var(--bg-chrome); padding: 2px 7px; border-radius: 3px; flex-shrink: 0; }
 
-  .card { background: #fff; border: 1px solid #e5e2dd; border-top: 3px solid #c05028; border-radius: 0 0 6px 6px; padding: 20px 24px; margin-bottom: 16px; }
+  /* ── Deep Dive cards ─────────────────────────────────────── */
+  .card { background: var(--bg-card); border: 1px solid var(--border); border-top: 3px solid var(--accent); border-radius: 0 0 6px 6px; padding: 20px 24px; margin-bottom: 16px; }
   .card:last-child { margin-bottom: 0; }
   .card-hl { font-family: Georgia, serif; font-size: 19px; font-weight: 700; line-height: 1.3; margin-bottom: 10px; letter-spacing: -0.3px; }
-  .card-body { font-size: 15px; color: #444; line-height: 1.65; }
+  .card-body { font-size: 15px; color: var(--text-body); line-height: 1.65; }
   .card-body p { margin: 0 0 10px 0; }
   .card-body p:last-child { margin-bottom: 0; }
-  .wim { background: #f5ebe6; border-left: 3px solid #c05028; padding: 10px 14px; margin-top: 12px; border-radius: 0 4px 4px 0; }
-  .wim-label { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #c05028; margin-bottom: 4px; }
-  .wim p { font-size: 14px; color: #1a1a1a; line-height: 1.55; margin: 0; }
-  .fr { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e5e2dd; }
-  .fr-label { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #666; margin-bottom: 6px; }
-  .fr a { display: block; font-size: 14px; color: #1b4f72; text-decoration: none; line-height: 1.5; margin-bottom: 2px; }
-  .fr .src { color: #666; font-size: 12px; }
+  .wim { background: var(--bg-wim); border-left: 3px solid var(--accent); padding: 10px 14px; margin-top: 12px; border-radius: 0 4px 4px 0; }
+  .wim-label { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+  .wim p { font-size: 14px; color: var(--text); line-height: 1.55; margin: 0; }
+  .fr { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .fr-label { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+  .fr a { display: block; font-size: 14px; color: var(--link); text-decoration: none; line-height: 1.5; margin-bottom: 2px; }
+  .fr .src { color: var(--text-muted); font-size: 12px; }
 
-  .seam-sub { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #7b241c; margin-bottom: 10px; }
-  .seam-item { padding: 10px 0; border-bottom: 1px solid #e5e2dd; }
+  /* ── Perspective Seams ───────────────────────────────────── */
+  .seam-sub { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--accent-seam); margin-bottom: 10px; }
+  .seam-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
   .seam-item:last-child { border-bottom: none; }
   .seam-topic { font-size: 15px; font-weight: 600; line-height: 1.4; margin-bottom: 3px; }
-  .seam-desc { font-size: 14px; color: #555; line-height: 1.45; }
-  .seam-sources { font-size: 12px; color: #888; margin-top: 4px; font-style: italic; }
+  .seam-desc { font-size: 14px; color: var(--text-secondary); line-height: 1.45; }
+  .seam-sources { font-size: 12px; color: var(--text-faint); margin-top: 4px; font-style: italic; }
 
-  .weekend-item { padding: 8px 0; border-bottom: 1px solid #e5e2dd; }
+  /* ── Weekend reads ───────────────────────────────────────── */
+  .weekend-item { padding: 8px 0; border-bottom: 1px solid var(--border); }
   .weekend-item:last-child { border-bottom: none; }
   .wk-title { font-size: 15px; font-weight: 500; }
-  .wk-title a { color: #1b4f72; text-decoration: none; }
-  .wk-meta { font-size: 13px; color: #666; margin-top: 2px; }
-  .wk-desc { font-size: 14px; color: #555; margin-top: 3px; line-height: 1.45; }
+  .wk-title a { color: var(--link); text-decoration: none; }
+  .wk-meta { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+  .wk-desc { font-size: 14px; color: var(--text-secondary); margin-top: 3px; line-height: 1.45; }
 
-  .footer { padding: 20px 32px; background: #1a1a1a; color: #aaa; font-size: 11px; line-height: 1.6; text-align: center; }
-  .footer a { color: #ccc; text-decoration: none; }
+  /* ── Footer ─────────────────────────────────────────────── */
+  .footer { padding: 20px 32px; background: var(--bg-chrome); color: var(--text-chrome-muted); font-size: 11px; line-height: 1.6; text-align: center; }
+  .footer a { color: var(--text-chrome-link); text-decoration: none; }
 </style>
 </head>
 <body>
-<div class="wrapper">
 
   <!-- HEADER -->
+  <div class="wrapper">
   <div class="header">
     <div class="header-date">{{ date_display }}</div>
     <h1 class="header-title">Morning Digest</h1>
@@ -292,7 +494,50 @@ EMAIL_TEMPLATE = Template('''\
     Come Follow Me: churchofjesuschrist.org · Markets: Finnhub<br>
   </div>
 
-</div>
+  </div><!-- /.wrapper -->
+
+<!-- Browser-only toggle: injected by JS so it never appears as a dead button in email clients -->
+<script>
+(function() {
+  // Inject the toggle bar above the wrapper
+  var bar = document.createElement('div');
+  bar.className = 'theme-bar';
+  var btn = document.createElement('button');
+  btn.className = 'theme-btn';
+  btn.id = 'theme-toggle';
+  btn.setAttribute('aria-label', 'Toggle colour theme');
+  bar.appendChild(btn);
+  document.body.insertBefore(bar, document.body.firstChild);
+
+  var html = document.documentElement;
+
+  function systemTheme() {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function activeTheme() {
+    return html.getAttribute('data-theme') || systemTheme();
+  }
+
+  function updateBtn() {
+    btn.textContent = activeTheme() === 'dark' ? '\u2600 Light' : '\u263e Dark';
+  }
+
+  updateBtn();
+
+  btn.addEventListener('click', function() {
+    var next = activeTheme() === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    try { localStorage.setItem('md-theme', next); } catch(e) {}
+    updateBtn();
+  });
+
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
+    try { if (!localStorage.getItem('md-theme')) updateBtn(); } catch(e) { updateBtn(); }
+  });
+})();
+</script>
+
 </body>
 </html>
 ''')
