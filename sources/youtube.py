@@ -11,7 +11,6 @@ from typing import Optional
 
 import yt_dlp
 from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
 
 log = logging.getLogger(__name__)
 
@@ -114,10 +113,9 @@ def _parse_date(upload_date: Optional[str]) -> Optional[datetime]:
 def _get_transcript(video_id: str) -> Optional[str]:
     """Fetch full auto-generated or manual transcript."""
     try:
-        segments = YouTubeTranscriptApi.get_transcript(video_id)
-        return " ".join(s["text"] for s in segments)
-    except (TranscriptsDisabled, NoTranscriptFound):
-        return None
+        api = YouTubeTranscriptApi()
+        transcript = api.fetch(video_id)
+        return " ".join(snippet.text for snippet in transcript.snippets)
     except Exception as e:
         log.debug(f"Transcript unavailable for {video_id}: {e}")
         return None

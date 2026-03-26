@@ -10,7 +10,6 @@ import logging
 import os
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, date
 from pathlib import Path
 
@@ -112,13 +111,13 @@ def _group_rss_by_category(rss: list[dict]) -> dict[str, list[dict]]:
     return groups
 
 
-def build_synthesis_prompt(source_data: dict, config: dict) -> tuple[str, str]:
+def build_synthesis_prompt(source_data: dict, config: dict, force_friday: bool = False) -> tuple[str, str]:
     """Build the system + user prompt for the main synthesis pass (Stage 2).
 
     Sources are grouped by category for tiered editorial treatment.
     """
     today = datetime.now()
-    is_friday = today.weekday() == 4
+    is_friday = force_friday or today.weekday() == 4
     date_display = today.strftime("%A, %B %-d, %Y")
 
     cfm = source_data.get("come_follow_me", {})
@@ -313,12 +312,15 @@ def call_llm(
     max_retries: int = 2,
     llm_override: dict | None = None,
     json_mode: bool = True,
+    stream: bool = True,
 ) -> dict | str:
     """Send prompt to the LLM and return the parsed response.
 
     Args:
         llm_override: dict with model/max_tokens/temperature overrides.
         json_mode: if True, request JSON output and parse it. If False, return raw text.
+        stream: if True, use streaming (better for long responses). If False, use
+                a single request (more reliable for shorter responses like compression).
 
     Retries on transient errors with exponential backoff.
     """
@@ -338,7 +340,6 @@ def call_llm(
         model=model,
         max_tokens=max_tokens,
         temperature=temperature,
-        stream=True,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content},
@@ -355,15 +356,23 @@ def call_llm(
                 time.sleep(wait)
 
             log.info(f"Calling LLM ({model})...")
-            chunks = []
-            with client.chat.completions.create(**create_kwargs) as stream:
-                for chunk in stream:
-                    if not chunk.choices:
-                        continue
-                    delta = chunk.choices[0].delta.content
-                    if delta:
-                        chunks.append(delta)
-            raw = "".join(chunks).strip()
+
+            if stream:
+                create_kwargs["stream"] = True
+                chunks = []
+                with client.chat.completions.create(**create_kwargs) as resp:
+                    for chunk in resp:
+                        if not chunk.choices:
+                            continue
+                        delta = chunk.choices[0].delta.content
+                        if delta:
+                            chunks.append(delta)
+                raw = "".join(chunks).strip()
+            else:
+                create_kwargs["stream"] = False
+                resp = client.chat.completions.create(**create_kwargs)
+                raw = (resp.choices[0].message.content or "").strip()
+
             break
         except openai.APIStatusError as e:
             log.warning(f"LLM API error: {e}")
@@ -422,6 +431,7 @@ def compress_transcripts(transcripts: list[dict], config: dict) -> list[dict]:
             f"{transcript}"
         )
 
+        compressed = ""
         try:
             compressed = call_llm(
                 system_prompt,
@@ -430,31 +440,47 @@ def compress_transcripts(transcripts: list[dict], config: dict) -> list[dict]:
                 max_retries=1,
                 llm_override=compression_config,
                 json_mode=False,
+                stream=False,
             )
+        except Exception as e:
+            log.warning(f"  Compression failed for {video['title']}: {e}")
+
+        # Retry once if empty (API sometimes returns empty under load)
+        if not compressed.strip():
+            log.info(f"  Empty response for {video['title']}, retrying...")
+            time.sleep(2)
+            try:
+                compressed = call_llm(
+                    system_prompt,
+                    user_content,
+                    config,
+                    max_retries=1,
+                    llm_override=compression_config,
+                    json_mode=False,
+                )
+            except Exception as e:
+                log.warning(f"  Compression retry failed for {video['title']}: {e}")
+
+        # Final fallback: first ~600 words of raw transcript
+        if not compressed.strip():
+            log.warning(f"  Using raw fallback for {video['title']}")
+            words = transcript.split()[:600]
+            compressed = " ".join(words)
+        else:
             log.info(
                 f"  Compressed {video['channel']}: {video['title']} "
                 f"({len(transcript)} → {len(compressed)} chars)"
             )
-        except Exception as e:
-            log.warning(f"  Compression failed for {video['title']}: {e}")
-            # Fallback: first ~600 words of raw transcript
-            words = transcript.split()[:600]
-            compressed = " ".join(words)
 
         result = {k: v for k, v in video.items() if k != "transcript"}
         result["compressed_transcript"] = compressed
         result["category"] = "youtube-analysis"
         return result
 
-    log.info(f"Compressing {len(transcripts)} transcript(s)...")
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        futures = {pool.submit(_compress_one, v): v for v in transcripts}
-        results = []
-        for future in as_completed(futures):
-            results.append(future.result())
-
-    # Restore original sort order (by published date, descending)
-    results.sort(key=lambda v: v.get("published", ""), reverse=True)
+    log.info(f"Compressing {len(transcripts)} transcript(s) serially...")
+    results = []
+    for video in transcripts:
+        results.append(_compress_one(video))
     return results
 
 
@@ -603,15 +629,29 @@ def assemble_template_data(
     }
 
 
-def run(dry_run: bool = False, sources_only: bool = False):
+def run(
+    dry_run: bool = False,
+    sources_only: bool = False,
+    force_friday: bool = False,
+    lookback_hours: int | None = None,
+):
     """Main entry point.
 
     dry_run: collect sources, call Claude, render HTML, save to output/ — skip email.
     sources_only: collect sources and dump to output/sources.json — skip Claude and email.
+    force_friday: force Friday mode (weekend reads) regardless of actual day.
+    lookback_hours: override YouTube lookback_hours config.
     """
     log.info("=== Morning Digest starting ===")
 
     config = load_config()
+
+    # Apply CLI overrides to config
+    if lookback_hours is not None:
+        config.setdefault("youtube", {})["lookback_hours"] = lookback_hours
+        log.info(f"  Override: lookback_hours={lookback_hours}")
+    if force_friday:
+        log.info("  Override: forcing Friday mode")
     output_dir = Path(__file__).parent / "output"
     output_dir.mkdir(exist_ok=True)
 
@@ -632,7 +672,7 @@ def run(dry_run: bool = False, sources_only: bool = False):
 
     # 3. Stage 2: Main synthesis with tiered source treatment
     log.info("Stage 2: Main synthesis...")
-    system_prompt, user_content = build_synthesis_prompt(source_data, config)
+    system_prompt, user_content = build_synthesis_prompt(source_data, config, force_friday=force_friday)
     claude_output = call_llm(system_prompt, user_content, config)
 
     # 4. Stage 3: Seam detection
@@ -670,5 +710,14 @@ if __name__ == "__main__":
                         help="Run full pipeline but save HTML to output/ instead of sending email")
     parser.add_argument("--sources-only", action="store_true",
                         help="Collect sources and dump to output/sources.json, skip Claude and email")
+    parser.add_argument("--force-friday", action="store_true",
+                        help="Force Friday mode (weekend reads, etc.) regardless of actual day")
+    parser.add_argument("--lookback-hours", type=int, default=None,
+                        help="Override YouTube lookback_hours (e.g. 120 to catch older videos)")
     args = parser.parse_args()
-    run(dry_run=args.dry_run, sources_only=args.sources_only)
+    run(
+        dry_run=args.dry_run,
+        sources_only=args.sources_only,
+        force_friday=args.force_friday,
+        lookback_hours=args.lookback_hours,
+    )
