@@ -30,13 +30,14 @@ EMAIL_TEMPLATE = Template('''\
   .spiritual { padding: 20px 32px; background: #f7f5f0; border-bottom: 1px solid #e5e2dd; }
   .spiritual-ref { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #666; margin-bottom: 8px; }
   .spiritual-text { font-family: Georgia, serif; font-size: 16px; line-height: 1.65; font-style: italic; color: #1a1a1a; }
-  .spiritual-cite { font-size: 13px; color: #555; margin-top: 6px; font-style: normal; }
-  .spiritual-ctx { font-size: 13px; color: #666; margin-top: 8px; }
+  .spiritual-cite { font-size: 14px; color: #555; margin-top: 6px; font-style: normal; }
+  .spiritual-ctx { font-size: 14px; color: #666; margin-top: 8px; }
 
-  .bar { padding: 12px 32px; background: #f2f0ec; border-bottom: 1px solid #e5e2dd; font-size: 13px; color: #555; }
+  .bar { padding: 12px 32px; background: #f2f0ec; border-bottom: 1px solid #e5e2dd; font-size: 14px; color: #555; }
   .bar-mono { font-family: 'Courier New', monospace; font-weight: 500; color: #1a1a1a; }
-  .bar-detail { font-size: 12px; color: #666; }
-  .markets { font-family: 'Courier New', monospace; font-size: 12px; display: flex; gap: 18px; flex-wrap: wrap; }
+  .bar-detail { font-size: 13px; color: #666; }
+  .markets { font-family: 'Courier New', monospace; font-size: 13px; display: flex; gap: 18px; flex-wrap: wrap; }
+  .mkt-context { font-size: 13px; color: #555; margin-top: 8px; line-height: 1.5; font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
   .mkt-label { color: #666; }
   .mkt-val { color: #1a1a1a; font-weight: 500; }
   .up { color: #1e8449; }
@@ -59,43 +60,44 @@ EMAIL_TEMPLATE = Template('''\
   .tag-science { color: #7e5109; background: #fef5e7; }
   .tag-econ { color: #1a5276; background: #d4efdf; }
   .tag-cyber { color: #633974; background: #f5eef8; }
-  .scan-hl { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; line-height: 1.4; }
-  .scan-ctx { font-size: 13px; color: #555; line-height: 1.45; }
-  .scan-link { font-size: 11px; color: #666; margin-top: 4px; }
+  .scan-hl { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; line-height: 1.4; }
+  .scan-ctx { font-size: 14px; color: #555; line-height: 1.45; }
+  .scan-link { font-size: 12px; color: #666; margin-top: 4px; }
   .scan-link a { color: #666; text-decoration: none; border-bottom: 1px dotted #aaa; }
 
-  .local-item { padding: 6px 0; font-size: 13px; color: #555; line-height: 1.5; }
+  .local-item { padding: 6px 0; font-size: 14px; color: #555; line-height: 1.5; }
   .local-item strong { color: #1a1a1a; font-weight: 500; }
-  .cal-item { padding: 6px 0; font-size: 13px; color: #555; display: flex; align-items: baseline; gap: 10px; }
+  .local-item a { color: #1b4f72; text-decoration: none; font-weight: 500; border-bottom: 1px dotted #aaa; }
+  .cal-item { padding: 6px 0; font-size: 14px; color: #555; display: flex; align-items: baseline; gap: 10px; }
   .cal-date { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; color: #fff; background: #1a1a1a; padding: 2px 7px; border-radius: 3px; flex-shrink: 0; }
 
   .card { background: #fff; border: 1px solid #e5e2dd; border-top: 3px solid #c05028; border-radius: 0 0 6px 6px; padding: 20px 24px; margin-bottom: 16px; }
   .card:last-child { margin-bottom: 0; }
   .card-hl { font-family: Georgia, serif; font-size: 19px; font-weight: 700; line-height: 1.3; margin-bottom: 10px; letter-spacing: -0.3px; }
-  .card-body { font-size: 14px; color: #444; line-height: 1.65; }
+  .card-body { font-size: 15px; color: #444; line-height: 1.65; }
   .card-body p { margin: 0 0 10px 0; }
   .card-body p:last-child { margin-bottom: 0; }
   .wim { background: #f5ebe6; border-left: 3px solid #c05028; padding: 10px 14px; margin-top: 12px; border-radius: 0 4px 4px 0; }
   .wim-label { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #c05028; margin-bottom: 4px; }
-  .wim p { font-size: 13px; color: #1a1a1a; line-height: 1.55; margin: 0; }
+  .wim p { font-size: 14px; color: #1a1a1a; line-height: 1.55; margin: 0; }
   .fr { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e5e2dd; }
   .fr-label { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #666; margin-bottom: 6px; }
-  .fr a { display: block; font-size: 13px; color: #1b4f72; text-decoration: none; line-height: 1.5; margin-bottom: 2px; }
-  .fr .src { color: #666; font-size: 11px; }
+  .fr a { display: block; font-size: 14px; color: #1b4f72; text-decoration: none; line-height: 1.5; margin-bottom: 2px; }
+  .fr .src { color: #666; font-size: 12px; }
 
   .seam-sub { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: #7b241c; margin-bottom: 10px; }
   .seam-item { padding: 10px 0; border-bottom: 1px solid #e5e2dd; }
   .seam-item:last-child { border-bottom: none; }
-  .seam-topic { font-size: 14px; font-weight: 600; line-height: 1.4; margin-bottom: 3px; }
-  .seam-desc { font-size: 13px; color: #555; line-height: 1.45; }
+  .seam-topic { font-size: 15px; font-weight: 600; line-height: 1.4; margin-bottom: 3px; }
+  .seam-desc { font-size: 14px; color: #555; line-height: 1.45; }
   .seam-sources { font-size: 12px; color: #888; margin-top: 4px; font-style: italic; }
 
   .weekend-item { padding: 8px 0; border-bottom: 1px solid #e5e2dd; }
   .weekend-item:last-child { border-bottom: none; }
-  .wk-title { font-size: 14px; font-weight: 500; }
+  .wk-title { font-size: 15px; font-weight: 500; }
   .wk-title a { color: #1b4f72; text-decoration: none; }
-  .wk-meta { font-size: 12px; color: #666; margin-top: 2px; }
-  .wk-desc { font-size: 13px; color: #555; margin-top: 3px; line-height: 1.45; }
+  .wk-meta { font-size: 13px; color: #666; margin-top: 2px; }
+  .wk-desc { font-size: 14px; color: #555; margin-top: 3px; line-height: 1.45; }
 
   .footer { padding: 20px 32px; background: #1a1a1a; color: #aaa; font-size: 11px; line-height: 1.6; text-align: center; }
   .footer a { color: #ccc; text-decoration: none; }
@@ -146,6 +148,9 @@ EMAIL_TEMPLATE = Template('''\
       </span>
       {% endfor %}
     </div>
+    {% if market_context %}
+    <div class="mkt-context">{{ market_context }}</div>
+    {% endif %}
   </div>
   {% endif %}
 
@@ -237,7 +242,14 @@ EMAIL_TEMPLATE = Template('''\
   <div class="section">
     <h2 class="sec-label">Cache Valley</h2>
     {% for item in local_items %}
-    <div class="local-item">{{ item }}</div>
+    <div class="local-item">
+      {% if item is mapping %}
+        {% if item.url %}<a href="{{ item.url }}">{{ item.headline }}</a>{% else %}<strong>{{ item.headline }}</strong>{% endif %}
+        {% if item.context %} — {{ item.context }}{% endif %}
+      {% else %}
+        {{ item }}
+      {% endif %}
+    </div>
     {% endfor %}
   </div>
   {% endif %}

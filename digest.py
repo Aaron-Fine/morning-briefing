@@ -162,8 +162,14 @@ The JSON must match this exact structure:
       "further_reading": [{{"url": "...", "title": "...", "source": "outlet name"}}]
     }}
   ],
-  "local_items": ["<strong>Bold headline</strong> — context sentence."],
-  "week_ahead": [{{"date": "Mon", "event": "description"}}],
+  "local_items": [
+    {{"headline": "USU wins conference title", "url": "https://www.cachevalleydaily.com/sports/article_abc.html", "context": "Utah State men's basketball claimed the Mountain West title Saturday."}}
+  ],
+  "week_ahead": [
+    {{"date": "Wed Mar 26", "event": "SpaceX Falcon 9 Starlink launch from Vandenberg"}},
+    {{"date": "Sat Apr 4", "event": "LDS General Conference — Saturday sessions"}}
+  ],
+  "market_context": "Defense ETF XAR rose 1.2% as Congress advanced the DoD supplemental spending bill covered above.",
   "spiritual_reflection": "2-3 sentences connecting this week's scripture study lesson to today's world. Thoughtful, not preachy.",
 {weekend_reads_schema}
 }}
@@ -185,8 +191,9 @@ RULES:
   Defense and space stories with substantive new developments (new contracts, test results,
   policy shifts, budget moves, launches) are strong deep dive candidates. Do not manufacture importance —
   a slow news day in these areas is fine to reflect honestly.
-- Local items: Cache Valley focus, max {config['digest']['local']['max_items']} items. Use the LOCAL NEWS section as your source for these — do not fabricate local stories. Omit the section entirely if no qualifying events are found.
-- Week ahead: up to {config['digest']['week_ahead']['count']} upcoming events. Draw from UPCOMING LAUNCHES and CHURCH CALENDAR sections. Supplement with events explicitly dated in news articles. Prioritize the most consequential or personally relevant events. Do not infer or invent. Omit the section entirely if nothing qualifies.
+- Local items: Cache Valley focus, max {config['digest']['local']['max_items']} items. Use the LOCAL NEWS section as your source — do not fabricate. Each item is an object with "headline", "url" (copy the exact URL from the source article), and "context" (1-2 sentence summary). Omit entirely if nothing qualifies.
+- Week ahead: up to {config['digest']['week_ahead']['count']} upcoming events. Draw from the UPCOMING LAUNCHES & EVENTS section — copy the date string verbatim as it appears there (e.g. "Wed Mar 26", "Sat Apr 4"). Never abbreviate to just a weekday name without the month and day. Prioritize consequential or personally relevant events. Do not infer or invent.
+- Market context: If any market move (≥ 0.5% up or down) connects meaningfully to a story covered in today's digest, include "market_context" with 1-2 sentences explaining the connection. Otherwise omit this field.
 - Deep dive body uses <p> tags for paragraphs
 - All URLs in output must come from the source data below — never fabricate URLs
 - It is better to leave out a section entirely than to make up data for it. If a section has no relevant source data, omit it or return an empty array.
@@ -226,6 +233,23 @@ COMPRESSION RULES:
 """
 
     local_news = source_data.get("local_news", [])
+
+    # Pre-format calendar events with explicit date strings so the model copies them verbatim
+    def _fmt_calendar_events(events: list) -> str:
+        if not events:
+            return "None."
+        lines = []
+        for ev in events:
+            iso = ev.get("date", "")
+            try:
+                d = datetime.strptime(iso, "%Y-%m-%d")
+                date_label = d.strftime("%a %b %-d")  # e.g. "Sat Apr 4"
+            except Exception:
+                date_label = iso
+            lines.append(f'{date_label}: {ev.get("event", "")}')
+            if ev.get("description"):
+                lines.append(f'  {ev["description"]}')
+        return "\n".join(lines)
 
     # Group RSS items by category for structured presentation
     rss_groups = _group_rss_by_category(rss)
@@ -284,11 +308,8 @@ Date Range: {cfm.get('date_range', '')}
 === MARKETS ===
 {json.dumps(markets, indent=2)}
 
-=== UPCOMING LAUNCHES (next 10 days) ===
-{json.dumps(launches, indent=2) if launches else "No launches scheduled in this window."}
-
-=== CHURCH CALENDAR (next 10 days) ===
-{json.dumps(church_events, indent=2) if church_events else "No General Conference sessions in this window."}
+=== UPCOMING LAUNCHES & EVENTS (next 10 days — copy these date strings verbatim into week_ahead output) ===
+{_fmt_calendar_events(launches + church_events)}
 
 === RSS / NEWS ({total_rss} items, grouped by source category) ===
 {rss_block}
@@ -623,6 +644,7 @@ def assemble_template_data(
         "contested_narratives": seam_data.get("contested_narratives", []),
         "coverage_gaps": seam_data.get("coverage_gaps", []),
         "local_items": claude_output.get("local_items", []),
+        "market_context": claude_output.get("market_context", ""),
         "week_ahead": claude_output.get("week_ahead", []),
         "weekend_reads": claude_output.get("weekend_reads", []),
         "deep_dives": claude_output.get("deep_dives", []),
