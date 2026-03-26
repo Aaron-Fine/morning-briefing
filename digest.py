@@ -7,6 +7,7 @@ and editorial judgment, renders the HTML email, and sends it.
 
 import json
 import logging
+import logging.handlers
 import os
 import sys
 import time
@@ -31,6 +32,21 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 log = logging.getLogger("digest")
+
+_OUTPUT_DIR = Path(__file__).parent / "output"
+
+
+def _setup_log_file() -> None:
+    """Add a rotating file handler that writes to output/digest.log."""
+    _OUTPUT_DIR.mkdir(exist_ok=True)
+    handler = logging.handlers.TimedRotatingFileHandler(
+        _OUTPUT_DIR / "digest.log",
+        when="midnight",
+        backupCount=30,
+        encoding="utf-8",
+    )
+    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+    logging.getLogger().addHandler(handler)
 
 CONFIG_PATH = Path(__file__).parent / "config.yaml"
 
@@ -642,6 +658,54 @@ def assemble_template_data(
     }
 
 
+def _prune_digest_archive(output_dir: Path, keep_days: int = 30) -> None:
+    """Delete dated digest HTML files older than keep_days."""
+    cutoff = datetime.now().timestamp() - keep_days * 86400
+    for f in output_dir.glob("????-??-??.html"):
+        if f.stat().st_mtime < cutoff:
+            f.unlink()
+            log.debug(f"Pruned old digest: {f.name}")
+
+
+def _send_failure_notification(config: dict, digest_path: Path) -> None:
+    """Send a plain-text alert email when the main digest delivery fails."""
+    import smtplib
+    from email.mime.text import MIMEText
+
+    delivery = config.get("delivery", {})
+    smtp_host = delivery.get("smtp_host", "smtp.gmail.com")
+    smtp_port = delivery.get("smtp_port", 587)
+    smtp_user = os.environ.get("SMTP_USER", "")
+    smtp_pass = os.environ.get("SMTP_PASSWORD", "")
+    to_addr = delivery.get("to_address", "")
+
+    if not smtp_user or not smtp_pass or not to_addr:
+        log.error("Cannot send failure notification — SMTP credentials or to_address missing")
+        return
+
+    body = (
+        f"Morning Digest failed to send on {datetime.now().strftime('%A, %B %-d, %Y')}.\n\n"
+        f"The digest was generated successfully and saved to:\n  {digest_path}\n\n"
+        "Check the container logs for details:\n"
+        "  docker compose logs morning-digest\n"
+    )
+    msg = MIMEText(body, "plain")
+    msg["Subject"] = f"[Morning Digest] Delivery failed — {datetime.now().strftime('%Y-%m-%d')}"
+    msg["From"] = f"Morning Digest <{smtp_user}>"
+    msg["To"] = to_addr
+
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(smtp_user, [to_addr], msg.as_string())
+        log.info("Failure notification sent")
+    except Exception as e:
+        log.error(f"Failed to send failure notification: {e}")
+
+
 def run(
     dry_run: bool = False,
     sources_only: bool = False,
@@ -655,6 +719,7 @@ def run(
     force_friday: force Friday mode (weekend reads) regardless of actual day.
     lookback_hours: override YouTube lookback_hours config.
     """
+    _setup_log_file()
     log.info("=== Morning Digest starting ===")
 
     config = load_config()
@@ -665,7 +730,7 @@ def run(
         log.info(f"  Override: lookback_hours={lookback_hours}")
     if force_friday:
         log.info("  Override: forcing Friday mode")
-    output_dir = Path(__file__).parent / "output"
+    output_dir = _OUTPUT_DIR
     output_dir.mkdir(exist_ok=True)
 
     # 1. Collect raw data from all sources
@@ -686,7 +751,13 @@ def run(
     # 3. Stage 2: Main synthesis with tiered source treatment
     log.info("Stage 2: Main synthesis...")
     system_prompt, user_content = build_synthesis_prompt(source_data, config, force_friday=force_friday)
-    claude_output = call_llm(system_prompt, user_content, config)
+    try:
+        claude_output = call_llm(system_prompt, user_content, config)
+    except Exception as e:
+        log.error(f"Stage 2 synthesis failed: {e}")
+        if not dry_run:
+            _send_failure_notification(config, output_dir / f"{datetime.now().strftime('%Y-%m-%d')}.html")
+        sys.exit(1)
 
     # 4. Stage 3: Seam detection
     seam_data = detect_seams(claude_output, source_data, config)
@@ -697,11 +768,17 @@ def run(
     # 4. Render HTML
     html = render_email(template_data)
 
+    # Save last_digest.html (always, for dry-run browsing)
+    (output_dir / "last_digest.html").write_text(html)
+
     if dry_run:
-        out = output_dir / "last_digest.html"
-        out.write_text(html)
-        log.info(f"=== Dry run complete — digest saved to {out} ===")
+        log.info(f"=== Dry run complete — digest saved to {output_dir / 'last_digest.html'} ===")
         return
+
+    # Save dated archive and prune files older than 30 days
+    dated = output_dir / f"{datetime.now().strftime('%Y-%m-%d')}.html"
+    dated.write_text(html)
+    _prune_digest_archive(output_dir, keep_days=30)
 
     # 5. Send email
     success = send_digest(html, config)
@@ -710,9 +787,7 @@ def run(
         log.info("=== Digest sent successfully ===")
     else:
         log.error("=== Digest send FAILED ===")
-        fallback = output_dir / "last_digest.html"
-        fallback.write_text(html)
-        log.info(f"Saved fallback to {fallback}")
+        _send_failure_notification(config, dated)
         sys.exit(1)
 
 

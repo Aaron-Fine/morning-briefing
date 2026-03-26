@@ -332,8 +332,8 @@ EMAIL_TEMPLATE = Template('''\
   <div class="bar">
     <span>{{ weather.city }}, {{ weather.state }} — {{ weather.condition }}</span>
     <span class="bar-mono" style="float:right;">{{ weather.current_temp_f }}°F</span>
-    {% if weather.forecast|length > 2 %}
-    <br><span class="bar-detail">Tomorrow {{ weather.forecast[1].high_f }}°F {{ weather.forecast[1].condition }}. {{ weather.forecast[2].day_name }} {{ weather.forecast[2].high_f }}°F {{ weather.forecast[2].condition }}.</span>
+    {% if weather.forecast|length > 1 %}
+    <br><span class="bar-detail">{% for day in weather.forecast[1:] %}{{ day.day_name }} {{ day.high_f }}°/{{ day.low_f }}° {{ day.condition }}{% if day.precip_chance >= 30 %} ({{ day.precip_chance }}%){% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</span>
     {% endif %}
   </div>
   {% endif %}

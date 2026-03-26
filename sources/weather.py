@@ -29,7 +29,7 @@ def fetch_weather(config: dict) -> dict:
                 "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code",
                 "temperature_unit": "fahrenheit",
                 "wind_speed_unit": "mph",
-                "forecast_days": 5,
+                "forecast_days": 7,
                 "timezone": loc.get("timezone", "America/Denver"),
             },
             timeout=10,
@@ -41,7 +41,7 @@ def fetch_weather(config: dict) -> dict:
         daily = data.get("daily", {})
 
         forecast_days = []
-        for i in range(min(5, len(daily.get("time", [])))):
+        for i in range(min(7, len(daily.get("time", [])))):
             day_date = datetime.strptime(daily["time"][i], "%Y-%m-%d")
             forecast_days.append({
                 "date": daily["time"][i],
