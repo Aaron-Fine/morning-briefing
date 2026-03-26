@@ -20,7 +20,7 @@ def send_digest(html: str, config: dict) -> bool:
     smtp_port = delivery.get("smtp_port", 587)
     smtp_user = os.environ.get("SMTP_USER", "")
     smtp_pass = os.environ.get("SMTP_PASSWORD", "")
-    to_addr = delivery.get("to_address", smtp_user)
+    to_addr = delivery.get("to_address", "")
     from_name = delivery.get("from_name", "Morning Digest")
 
     if not smtp_user or not smtp_pass:
@@ -28,7 +28,8 @@ def send_digest(html: str, config: dict) -> bool:
         return False
 
     if not to_addr:
-        to_addr = smtp_user
+        log.error("delivery.to_address not set in config.yaml")
+        return False
 
     subject_template = delivery.get("subject_template", "Morning Digest — {date}")
     subject = subject_template.format(date=datetime.now().strftime("%A, %B %-d, %Y"))
@@ -44,7 +45,7 @@ def send_digest(html: str, config: dict) -> bool:
     msg.attach(MIMEText(html, "html"))
 
     try:
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
             server.ehlo()
             server.starttls()
             server.ehlo()

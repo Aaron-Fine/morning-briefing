@@ -59,10 +59,8 @@ def collect_sources(config: dict) -> dict:
     log.info("  → Space launches")
     data["launches"] = fetch_upcoming_launches()
 
-    # Upcoming church events
+    # Upcoming church events + holidays
     data["church_events"] = get_upcoming_church_events()
-
-    # Upcoming holidays
     data["holidays"] = get_upcoming_holidays(days=10)
 
     # Come Follow Me
@@ -460,29 +458,13 @@ def compress_transcripts(transcripts: list[dict], config: dict) -> list[dict]:
                 system_prompt,
                 user_content,
                 config,
-                max_retries=1,
+                max_retries=2,
                 llm_override=compression_config,
                 json_mode=False,
                 stream=False,
             )
         except Exception as e:
             log.warning(f"  Compression failed for {video['title']}: {e}")
-
-        # Retry once if empty (API sometimes returns empty under load)
-        if not compressed.strip():
-            log.info(f"  Empty response for {video['title']}, retrying...")
-            time.sleep(2)
-            try:
-                compressed = call_llm(
-                    system_prompt,
-                    user_content,
-                    config,
-                    max_retries=1,
-                    llm_override=compression_config,
-                    json_mode=False,
-                )
-            except Exception as e:
-                log.warning(f"  Compression retry failed for {video['title']}: {e}")
 
         # Final fallback: first ~600 words of raw transcript
         if not compressed.strip():

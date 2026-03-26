@@ -2,9 +2,11 @@
 
 import logging
 from datetime import datetime, timedelta, timezone
+from html.parser import HTMLParser
 from typing import Optional
 import feedparser
 import requests
+from dateutil import parser as dateparser
 
 log = logging.getLogger(__name__)
 
@@ -124,8 +126,6 @@ def _fetch_from_freshrss(rss_config: dict) -> list[dict]:
 
 def _parse_feed_date(entry) -> Optional[datetime]:
     """Extract and parse date from a feed entry."""
-    from dateutil import parser as dateparser
-
     for field in ("published_parsed", "updated_parsed"):
         val = entry.get(field)
         if val:
@@ -145,8 +145,6 @@ def _parse_feed_date(entry) -> Optional[datetime]:
 
 def _clean_summary(raw: str) -> str:
     """Strip HTML and truncate summary."""
-    from html.parser import HTMLParser
-
     class _Stripper(HTMLParser):
         def __init__(self):
             super().__init__()
