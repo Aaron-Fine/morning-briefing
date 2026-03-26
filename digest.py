@@ -22,6 +22,7 @@ from sources.markets import fetch_markets
 from sources.launches import fetch_upcoming_launches
 from sources.rss_feeds import fetch_rss
 from sources.come_follow_me import get_current_lesson, get_upcoming_church_events
+from sources.holidays import get_upcoming_holidays
 from templates.email_template import render_email
 from sender import send_digest
 
@@ -60,6 +61,9 @@ def collect_sources(config: dict) -> dict:
 
     # Upcoming church events
     data["church_events"] = get_upcoming_church_events()
+
+    # Upcoming holidays
+    data["holidays"] = get_upcoming_holidays(days=10)
 
     # Come Follow Me
     if config.get("digest", {}).get("spiritual", {}).get("enabled", True):
@@ -125,6 +129,7 @@ def build_synthesis_prompt(source_data: dict, config: dict, force_friday: bool =
     markets = source_data.get("markets", [])
     launches = source_data.get("launches", [])
     church_events = source_data.get("church_events", [])
+    holidays = source_data.get("holidays", [])
     rss = source_data.get("rss", [])
     analysis_transcripts = source_data.get("analysis_transcripts", [])
 
@@ -306,7 +311,7 @@ Date Range: {cfm.get('date_range', '')}
 {json.dumps(markets, indent=2)}
 
 === UPCOMING LAUNCHES & EVENTS (next 10 days — copy these date strings verbatim into week_ahead output) ===
-{_fmt_calendar_events(launches + church_events)}
+{_fmt_calendar_events(launches + church_events + holidays)}
 
 === RSS / NEWS ({total_rss} items, grouped by source category) ===
 {rss_block}
