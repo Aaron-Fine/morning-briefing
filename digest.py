@@ -187,10 +187,7 @@ RULES:
 - Primary topics: {', '.join(config['topics']['primary'])}
 - Secondary topics: {', '.join(config['topics']['secondary'])}
 - Tertiary topics: {', '.join(config['topics']['tertiary'])}
-- Professional context: DoD / Dept of War, missile warning/defense, UARC/FFRDC, space technology.
-  Defense and space stories with substantive new developments (new contracts, test results,
-  policy shifts, budget moves, launches) are strong deep dive candidates. Do not manufacture importance —
-  a slow news day in these areas is fine to reflect honestly.
+- Professional context: DoD / Dept of War, missile warning/defense, UARC/FFRDC, space technology, software engineering, systems engineering.
 - Local items: Cache Valley focus, max {config['digest']['local']['max_items']} items. Use the LOCAL NEWS section as your source — do not fabricate. Each item is an object with "headline", "url" (copy the exact URL from the source article), and "context" (1-2 sentence summary). Omit entirely if nothing qualifies.
 - Week ahead: up to {config['digest']['week_ahead']['count']} upcoming events. Draw from the UPCOMING LAUNCHES & EVENTS section — copy the date string verbatim as it appears there (e.g. "Wed Mar 26", "Sat Apr 4"). Never abbreviate to just a weekday name without the month and day. Prioritize consequential or personally relevant events. Do not infer or invent.
 - Market context: If any market move (≥ 0.5% up or down) connects meaningfully to a story covered in today's digest, include "market_context" with 1-2 sentences explaining the connection. Otherwise omit this field.
@@ -209,7 +206,7 @@ SOURCE TREATMENT BY CATEGORY (each source has a "category" field):
   Treat as the "what it means" interpretation layer. These provide context and framing but should not
   drive story selection alone without corroboration from harder journalism.
 - "defense-mil": Defense and military specialist feeds. Use for domain depth on defense, space, and
-  military topics. Strong deep dive candidates when they report substantive developments.
+  military topics. These are more relevant when they report substantive developments.
 - "ai-tech": AI and technology sources. Treat as specialist analysis on AI topics.
 - "econ-trade": Economics and trade mechanics. Surface when relevant to geopolitics or policy.
 - "global-south": Africa, Latin America, developing world coverage. Only surface when they cover stories
@@ -225,7 +222,7 @@ COMPRESSION RULES:
 - Multiple sources covering the same event: merge into one At a Glance item with multiple source links.
   Prefer the most specific or best-sourced version as the backbone.
 - Items with "tag": "compress": AI-generated newsletters. Extract ONLY concrete facts, product names,
-  data points. Strip all framing, rhetorical questions, and hype. Max 2-3 bullet-worthy facts.
+  data points. Strip all framing, rhetorical questions, and hype. Target 3 to 7 bullet-worthy facts.
 - Substack posts that are primarily link roundups (vs. original analysis): compress aggressively,
   extract only novel facts not available from harder sources.
 - Non-Western overlap with other coverage on the same story: compress, BUT preserve any divergent
@@ -436,7 +433,7 @@ def compress_transcripts(transcripts: list[dict], config: dict) -> list[dict]:
         "matters as much as what events they cover\n\n"
         "Strip: filler, repetition, sponsor/ad reads, calls to action, tangents, "
         "conversational padding, verbal tics.\n\n"
-        "Target: 400-600 words output regardless of input length. "
+        "Target: 400-800 words output regardless of input length. "
         "Output plain text, no JSON, no markdown headers."
     )
 
@@ -541,7 +538,7 @@ OUTPUT FORMAT: JSON object:
   "contested_narratives": [
     {
       "topic": "short topic label",
-      "description": "1-2 sentences describing the disagreement",
+      "description": "2-5 sentences describing the disagreement",
       "sources_a": "which sources/categories frame it one way",
       "sources_b": "which sources/categories frame it differently",
       "links": [{"url": "https://...", "label": "Outlet Name"}]
@@ -550,7 +547,7 @@ OUTPUT FORMAT: JSON object:
   "coverage_gaps": [
     {
       "topic": "short topic label",
-      "description": "1-2 sentences describing what was covered and by whom",
+      "description": "2-5 sentences describing what was covered and by whom",
       "present_in": "source categories that covered it",
       "absent_from": "source categories that did not",
       "links": [{"url": "https://...", "label": "Outlet Name"}]
@@ -561,7 +558,7 @@ OUTPUT FORMAT: JSON object:
 LINK RULES:
 - For each seam item, include 1-2 links to specific articles from the AT A GLANCE or DEEP DIVES data that illustrate the divergence or gap.
 - Only use URLs that appear verbatim in the AT A GLANCE links or DEEP DIVES further_reading sections above — never fabricate URLs.
-- If no relevant URL is available, omit the links array entirely."""
+- If no relevant URL is available, omit the links array entirely but clearly state where the information came from."""
 
     # Build a category coverage map from raw RSS data
     rss = source_data.get("rss", [])
