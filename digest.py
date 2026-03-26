@@ -139,7 +139,7 @@ Your voice is that of an informed colleague — direct, analytical, occasionally
 Never blog-post. Think Philip DeFranco's story selection instincts crossed with Belle of the Ranch's
 "medium dive" depth on carefully selected topics.
 
-Today is {date_display}. Aaron lives in Providence, Utah (Cache Valley).
+Today is {date_display}. Aaron lives in Providence, Utah (Cache Valley), a suburb of Logan, Utah.
 
 OUTPUT FORMAT: You must respond with a single valid JSON object (no markdown fencing, no preamble).
 The JSON must match this exact structure:
@@ -543,7 +543,8 @@ OUTPUT FORMAT: JSON object:
       "topic": "short topic label",
       "description": "1-2 sentences describing the disagreement",
       "sources_a": "which sources/categories frame it one way",
-      "sources_b": "which sources/categories frame it differently"
+      "sources_b": "which sources/categories frame it differently",
+      "links": [{"url": "https://...", "label": "Outlet Name"}]
     }
   ],
   "coverage_gaps": [
@@ -551,10 +552,16 @@ OUTPUT FORMAT: JSON object:
       "topic": "short topic label",
       "description": "1-2 sentences describing what was covered and by whom",
       "present_in": "source categories that covered it",
-      "absent_from": "source categories that did not"
+      "absent_from": "source categories that did not",
+      "links": [{"url": "https://...", "label": "Outlet Name"}]
     }
   ]
-}"""
+}
+
+LINK RULES:
+- For each seam item, include 1-2 links to specific articles from the AT A GLANCE or DEEP DIVES data that illustrate the divergence or gap.
+- Only use URLs that appear verbatim in the AT A GLANCE links or DEEP DIVES further_reading sections above — never fabricate URLs.
+- If no relevant URL is available, omit the links array entirely."""
 
     # Build a category coverage map from raw RSS data
     rss = source_data.get("rss", [])

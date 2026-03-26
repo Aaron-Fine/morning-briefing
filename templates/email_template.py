@@ -190,6 +190,9 @@ EMAIL_TEMPLATE = Template('''\
         <div class="seam-topic">{{ cn.topic }}</div>
         <div class="seam-desc">{{ cn.description }}</div>
         <div class="seam-sources">{{ cn.sources_a }} vs. {{ cn.sources_b }}</div>
+        {% if cn.links %}
+        <div class="scan-link" style="margin-top:4px;">{% for link in cn.links %}<a href="{{ link.url }}">{{ link.label }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</div>
+        {% endif %}
       </div>
       {% endfor %}
     </div>
@@ -203,6 +206,9 @@ EMAIL_TEMPLATE = Template('''\
         <div class="seam-topic">{{ cg.topic }}</div>
         <div class="seam-desc">{{ cg.description }}</div>
         <div class="seam-sources">Present in {{ cg.present_in }} · Absent from {{ cg.absent_from }}</div>
+        {% if cg.links %}
+        <div class="scan-link" style="margin-top:4px;">{% for link in cg.links %}<a href="{{ link.url }}">{{ link.label }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</div>
+        {% endif %}
       </div>
       {% endfor %}
     </div>
