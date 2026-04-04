@@ -7,7 +7,7 @@ import logging
 import yaml
 from datetime import datetime
 from pathlib import Path
-from digest import run
+from pipeline import run_pipeline as run
 
 logging.basicConfig(
     level=logging.INFO,

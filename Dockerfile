@@ -16,6 +16,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY . .
 
-# Default: run on schedule.
-# Override with: docker compose run morning-digest python digest.py --dry-run
+# Default: run on schedule via entrypoint.py.
+# Override with: docker compose run morning-digest python pipeline.py --dry-run
+# Re-run a single stage: docker compose run morning-digest python pipeline.py --stage synthesize
 CMD ["python", "entrypoint.py"]

@@ -7,9 +7,14 @@ Uses Jinja2 for rendering. The template is designed for Gmail/Proton Mail compat
 - System fonts with web-safe fallbacks
 """
 
-from jinja2 import Template
+from jinja2 import Environment, BaseLoader
 
-EMAIL_TEMPLATE = Template('''\
+# Security Layer 4: autoescape=True ensures all {{ }} interpolations are HTML-escaped
+# by default. Fields that intentionally contain HTML (e.g. deep dive body) must be
+# wrapped with markupsafe.Markup() by the caller AFTER sanitization — see stages/assemble.py.
+_env = Environment(loader=BaseLoader(), autoescape=True)
+
+EMAIL_TEMPLATE = _env.from_string('''\
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -544,5 +549,10 @@ EMAIL_TEMPLATE = Template('''\
 
 
 def render_email(data: dict) -> str:
-    """Render the digest email from structured data."""
+    """Render the digest email from structured data.
+
+    Deep dive body fields must be wrapped with markupsafe.Markup() by the caller
+    before being passed here, so Jinja2 autoescape renders them as HTML rather than
+    escaping the tags as literal text.
+    """
     return EMAIL_TEMPLATE.render(**data)

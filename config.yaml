@@ -20,16 +20,42 @@ llm:
   max_tokens: 12000
   temperature: 0.4
   # Set FIREWORKS_API_KEY as env var
-  # Transcript pre-compression (same model for now; swap to cheaper model later)
-  compression:
-    model: "accounts/fireworks/models/kimi-k2p5"
-    max_tokens: 2000
-    temperature: 0.2
-  # Seam detection (runs on already-synthesized output)
-  seam_detection:
-    model: "accounts/fireworks/models/kimi-k2p5"
-    max_tokens: 5000
-    temperature: 0.3
+  # Set ANTHROPIC_API_KEY as env var (used by seam detection and final assembly in later phases)
+
+# Pipeline stage manifest — defines execution order and per-stage model config.
+# Stages with no model config are deterministic (no LLM call).
+# Each model config can override the global llm settings independently.
+pipeline:
+  stages:
+    - name: collect
+      # No model needed — pure data collection
+
+    - name: compress
+      model:
+        provider: fireworks
+        model: "accounts/fireworks/models/kimi-k2p5"
+        max_tokens: 2000
+        temperature: 0.2
+
+    - name: synthesize
+      model:
+        provider: fireworks
+        model: "accounts/fireworks/models/kimi-k2p5"
+        max_tokens: 12000
+        temperature: 0.4
+
+    - name: seams
+      model:
+        provider: fireworks
+        model: "accounts/fireworks/models/kimi-k2p5"
+        max_tokens: 5000
+        temperature: 0.3
+
+    - name: assemble
+      # No model needed — template rendering
+
+    - name: send
+      # No model needed — SMTP delivery
 
 location:
   city: "Logan"
