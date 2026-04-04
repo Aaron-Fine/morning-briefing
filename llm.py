@@ -91,6 +91,10 @@ def _call_fireworks(
     max_tokens = model_config.get("max_tokens", 12000)
     temperature = model_config.get("temperature", 0.4)
 
+    # Fireworks requires stream=True for max_tokens > 4096 on most models
+    if max_tokens > 4096:
+        stream = True
+
     create_kwargs = dict(
         model=model,
         max_tokens=max_tokens,

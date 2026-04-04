@@ -284,7 +284,7 @@ def _run_domain_pass(
             model_config,
             max_retries=2,
             json_mode=True,
-            stream=False,
+            stream=True,  # Fireworks requires stream=True for max_tokens > 4096
         )
     except Exception as e:
         log.error(f"  analyze_domain[{domain_key}]: LLM call failed: {e}")

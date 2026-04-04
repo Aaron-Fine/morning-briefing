@@ -113,7 +113,7 @@ Identify contested narratives and coverage gaps. Output ONLY valid JSON."""
             effective_config,
             max_retries=1,
             json_mode=True,
-            stream=False,
+            stream=True,  # Fireworks requires stream=True for max_tokens > 4096
         )
 
         # Collect known URLs from synthesis output for URL validation
