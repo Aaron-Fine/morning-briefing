@@ -37,12 +37,29 @@ pipeline:
         max_tokens: 2000
         temperature: 0.2
 
-    - name: synthesize
+    # --- Phase 1: Domain analysis replaces monolithic synthesize ---
+    - name: analyze_domain
       model:
         provider: fireworks
         model: "accounts/fireworks/models/kimi-k2p5"
-        max_tokens: 12000
+        max_tokens: 8000
+        temperature: 0.3
+
+    - name: prepare_calendar
+      # No model needed — deterministic
+
+    - name: prepare_weather
+      # No model needed — deterministic
+
+    - name: prepare_spiritual
+      model:
+        provider: fireworks
+        model: "accounts/fireworks/models/kimi-k2p5"
+        max_tokens: 500
         temperature: 0.4
+
+    - name: prepare_local
+      # No model needed — deterministic filter
 
     - name: seams
       model:
@@ -100,55 +117,55 @@ rss:
   feeds:
     # --- NON-WESTERN ENGLISH-LANGUAGE OUTLETS ---
     # "What's missing" layer — flag when framing diverges from wire coverage
-    - { url: "https://www.aljazeera.com/xml/rss/all.xml", name: "Al Jazeera", cap: 7, category: "non-western" }
-    - { url: "https://scmp.com/rss/91/feed", name: "South China Morning Post", cap: 10, category: "non-western" }
-    - { url: "https://asia.nikkei.com/rss/feed/nar", name: "Nikkei Asia", cap: 8, category: "non-western" }
-    - { url: "https://www.thehindu.com/feeder/default.rss", name: "The Hindu", cap: 5, category: "non-western" }
-    - { url: "https://www.dawn.com/feeds/home", name: "Dawn", cap: 5, category: "non-western" }
-    - { url: "https://asiatimes.com/feed", name: "Asia Times", cap: 5, category: "non-western" }
+    - { url: "https://www.aljazeera.com/xml/rss/all.xml", name: "Al Jazeera", cap: 7, category: "non-western", reliability: "primary-reporting" }
+    - { url: "https://scmp.com/rss/91/feed", name: "South China Morning Post", cap: 10, category: "non-western", reliability: "primary-reporting" }
+    - { url: "https://asia.nikkei.com/rss/feed/nar", name: "Nikkei Asia", cap: 8, category: "non-western", reliability: "primary-reporting" }
+    - { url: "https://www.thehindu.com/feeder/default.rss", name: "The Hindu", cap: 5, category: "non-western", reliability: "primary-reporting" }
+    - { url: "https://www.dawn.com/feeds/home", name: "Dawn", cap: 5, category: "non-western", reliability: "primary-reporting" }
+    - { url: "https://asiatimes.com/feed", name: "Asia Times", cap: 5, category: "non-western", reliability: "analysis-opinion" }
 
     # --- WESTERN ANALYSIS ---
     # "What it means" layer — interpretation and framing
-    - { url: "https://www.theatlantic.com/feed/all/", name: "The Atlantic", cap: 8, category: "western-analysis" }
+    - { url: "https://www.theatlantic.com/feed/all/", name: "The Atlantic", cap: 8, category: "western-analysis", reliability: "analysis-opinion" }
 
     # --- DEFENSE / MILITARY ---
-    - { url: "https://feeds.breakingdefense.com/BreakingDefense", name: "Breaking Defense", category: "defense-mil" }
-    - { url: "https://www.airandspaceforces.com/feed/", name: "Air & Space Forces", category: "defense-mil" }
-    - { url: "https://spacenews.com/feed/", name: "SpaceNews", category: "defense-mil" }
-    - { url: "https://warontherocks.com/feed/", name: "War on the Rocks", cap: 5, category: "defense-mil" }
-    - { url: "https://defenseacquisition.substack.com/feed", name: "Defense Tech and Acquisition", cap: 5, category: "defense-mil" }
+    - { url: "https://feeds.breakingdefense.com/BreakingDefense", name: "Breaking Defense", category: "defense-mil", reliability: "primary-reporting" }
+    - { url: "https://www.airandspaceforces.com/feed/", name: "Air & Space Forces", category: "defense-mil", reliability: "primary-reporting" }
+    - { url: "https://spacenews.com/feed/", name: "SpaceNews", category: "defense-mil", reliability: "primary-reporting" }
+    - { url: "https://warontherocks.com/feed/", name: "War on the Rocks", cap: 5, category: "defense-mil", reliability: "analysis-opinion" }
+    - { url: "https://defenseacquisition.substack.com/feed", name: "Defense Tech and Acquisition", cap: 5, category: "defense-mil", reliability: "analysis-opinion" }
 
     # --- GEOPOLITICS / WORLD NEWS (Substack independent) ---
-    - { url: "https://malcontentnews.substack.com/feed", name: "Malcontent News", category: "substack-independent" }
-    - { url: "https://adamtooze.substack.com/feed", name: "Adam Tooze — Chartbook", cap: 3, category: "substack-independent" }
-    - { url: "https://chinatalk.substack.com/feed", name: "China Talk", cap: 3, category: "substack-independent" }
-    - { url: "https://sinification.substack.com/feed", name: "Sinification", cap: 3, category: "substack-independent" }
-    - { url: "https://proximities.substack.com/feed", name: "Proximities", cap: 5, category: "substack-independent" }
-    - { url: "https://danieldrezner.substack.com/feed", name: "Daniel Drezner", cap: 3, category: "substack-independent" }
-    - { url: "https://claireberlinski.substack.com/feed", name: "The Cosmopolitan Globalist", cap: 3, category: "substack-independent" }
-    - { url: "https://menatrack.substack.com/feed", name: "MenaTrack", cap: 5, category: "substack-independent" }
+    - { url: "https://malcontentnews.substack.com/feed", name: "Malcontent News", category: "substack-independent", reliability: "primary-reporting" }
+    - { url: "https://adamtooze.substack.com/feed", name: "Adam Tooze — Chartbook", cap: 3, category: "substack-independent", reliability: "analysis-opinion" }
+    - { url: "https://chinatalk.substack.com/feed", name: "China Talk", cap: 3, category: "substack-independent", reliability: "analysis-opinion" }
+    - { url: "https://sinification.substack.com/feed", name: "Sinification", cap: 3, category: "substack-independent", reliability: "analysis-opinion" }
+    - { url: "https://proximities.substack.com/feed", name: "Proximities", cap: 5, category: "substack-independent", reliability: "analysis-opinion" }
+    - { url: "https://danieldrezner.substack.com/feed", name: "Daniel Drezner", cap: 3, category: "substack-independent", reliability: "analysis-opinion" }
+    - { url: "https://claireberlinski.substack.com/feed", name: "The Cosmopolitan Globalist", cap: 3, category: "substack-independent", reliability: "analysis-opinion" }
+    - { url: "https://menatrack.substack.com/feed", name: "MenaTrack", cap: 5, category: "substack-independent", reliability: "analysis-opinion" }
 
     # --- AI / TECH ---
-    - { url: "https://oneusefulthing.substack.com/feed", name: "One Useful Thing (Ethan Mollick)", cap: 3, category: "ai-tech" }
-    - { url: "https://importai.substack.com/feed", name: "Import AI (Jack Clark)", cap: 3, category: "ai-tech" }
-    - { url: "https://simonwillison.net/atom/everything/", name: "Simon Willison", cap: 8, category: "ai-tech" }
+    - { url: "https://oneusefulthing.substack.com/feed", name: "One Useful Thing (Ethan Mollick)", cap: 3, category: "ai-tech", reliability: "analysis-opinion" }
+    - { url: "https://importai.substack.com/feed", name: "Import AI (Jack Clark)", cap: 3, category: "ai-tech", reliability: "analysis-opinion" }
+    - { url: "https://simonwillison.net/atom/everything/", name: "Simon Willison", cap: 8, category: "ai-tech", reliability: "analysis-opinion" }
 
     # --- ECONOMICS / TRADE ---
-    - { url: "https://theovershoot.co/feed", name: "The Overshoot (Matt Klein)", cap: 3, category: "econ-trade" }
-    - { url: "https://bradsetser.substack.com/feed", name: "Brad Setser", cap: 3, category: "econ-trade" }
+    - { url: "https://theovershoot.co/feed", name: "The Overshoot (Matt Klein)", cap: 3, category: "econ-trade", reliability: "analysis-opinion" }
+    - { url: "https://bradsetser.substack.com/feed", name: "Brad Setser", cap: 3, category: "econ-trade", reliability: "analysis-opinion" }
 
     # --- GLOBAL SOUTH ---
-    - { url: "https://www.ipsnews.net/news/headlines/feed/", name: "Inter Press Service", cap: 5, category: "global-south" }
-    - { url: "https://chinaglobalsouth.com/feed/", name: "China Global South Project", cap: 3, category: "global-south" }
+    - { url: "https://www.ipsnews.net/news/headlines/feed/", name: "Inter Press Service", cap: 5, category: "global-south", reliability: "primary-reporting" }
+    - { url: "https://chinaglobalsouth.com/feed/", name: "China Global South Project", cap: 3, category: "global-south", reliability: "analysis-opinion" }
 
     # --- PERSPECTIVE DIVERSITY ---
     # "Stress test" layer — only surface when contradicting consensus
-    - { url: "https://diff.substack.com/feed", name: "The Diff (Byrne Hobart)", cap: 3, category: "perspective-diversity" }
-    - { url: "https://slowboring.substack.com/feed", name: "Slow Boring (Matt Yglesias)", cap: 3, category: "perspective-diversity" }
+    - { url: "https://diff.substack.com/feed", name: "The Diff (Byrne Hobart)", cap: 3, category: "perspective-diversity", reliability: "analysis-opinion" }
+    - { url: "https://slowboring.substack.com/feed", name: "Slow Boring (Matt Yglesias)", cap: 3, category: "perspective-diversity", reliability: "analysis-opinion" }
 
     # --- CYBERSECURITY ---
-    - { url: "https://ventureinsecurity.net/feed", name: "Venture in Security", cap: 3, category: "cyber" }
-    - { url: "https://risky.biz/feeds/risky-business-news/", name: "Risky Business", cap: 3, category: "cyber" }
+    - { url: "https://ventureinsecurity.net/feed", name: "Venture in Security", cap: 3, category: "cyber", reliability: "analysis-opinion" }
+    - { url: "https://risky.biz/feeds/risky-business-news/", name: "Risky Business", cap: 3, category: "cyber", reliability: "analysis-opinion" }
 
 come_follow_me:
   # Scrape weekly from churchofjesuschrist.org

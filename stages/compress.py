@@ -24,9 +24,15 @@ _SYSTEM_PROMPT = (
     "matters as much as what events they cover\n\n"
     "Strip: filler, repetition, sponsor/ad reads, calls to action, tangents, "
     "conversational padding, verbal tics.\n\n"
-    "Target: 400-800 words output regardless of input length. "
+    "The target word count is specified in the request. Match it closely.\n"
     "Output plain text, no JSON, no markdown headers."
 )
+
+
+def _target_words(word_count: int) -> int:
+    """Proportional compression: 15-20% of input, min 300, max 1200."""
+    target = round(word_count * 0.175)  # midpoint of 15-20%
+    return max(300, min(1200, target))
 
 
 def _compress_one(video: dict, model_config: dict) -> dict:
@@ -35,11 +41,12 @@ def _compress_one(video: dict, model_config: dict) -> dict:
         return video
 
     word_count = len(transcript.split())
+    target = _target_words(word_count)
     user_content = (
         f"Channel: {video['channel']}\n"
         f"Video: {video['title']}\n"
-        f"Transcript ({word_count} words, {len(transcript)} chars):\n\n"
-        f"{transcript}"
+        f"Original transcript: {word_count} words. Target summary: ~{target} words.\n\n"
+        f"Transcript:\n\n{transcript}"
     )
 
     compressed = ""
@@ -57,7 +64,8 @@ def _compress_one(video: dict, model_config: dict) -> dict:
 
     if not compressed.strip():
         log.warning(f"  Using raw fallback for {video['title']}")
-        words = transcript.split()[:600]
+        fallback_words = _target_words(word_count)
+        words = transcript.split()[:fallback_words]
         compressed = " ".join(words)
     else:
         compressed_words = len(compressed.split())

@@ -5,9 +5,18 @@ Transcripts are fetched in full for pre-compression before synthesis.
 """
 
 import logging
+import signal
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+
+class _ChannelTimeout(Exception):
+    pass
+
+
+def _timeout_handler(signum, frame):
+    raise _ChannelTimeout("yt-dlp channel fetch timed out")
 
 import yt_dlp
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -30,6 +39,7 @@ YDL_OPTS = {
     "playlistend": 5,      # only fetch the 5 most recent uploads per channel
     "ignoreerrors": True,
     "logger": _SilentLogger(),
+    "socket_timeout": 30,  # 30s per-request timeout — prevents indefinite hangs
 }
 
 
@@ -57,8 +67,15 @@ def fetch_analysis_transcripts(config: dict) -> list[dict]:
 
         url = f"https://www.youtube.com/@{handle}/videos"
         try:
-            with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
-                info = ydl.extract_info(url, download=False)
+            # Per-channel hard timeout (90s) — yt-dlp can hang indefinitely
+            # when YouTube is rate-limiting. signal.alarm only works on Linux/macOS.
+            signal.signal(signal.SIGALRM, _timeout_handler)
+            signal.alarm(90)
+            try:
+                with yt_dlp.YoutubeDL(YDL_OPTS) as ydl:
+                    info = ydl.extract_info(url, download=False)
+            finally:
+                signal.alarm(0)  # cancel alarm
 
             entries = info.get("entries") or []
             for entry in entries:
@@ -86,6 +103,8 @@ def fetch_analysis_transcripts(config: dict) -> list[dict]:
                     "transcript": transcript,
                 })
 
+        except _ChannelTimeout:
+            log.warning(f"yt-dlp timed out for {ch['name']} (@{handle}) — skipping")
         except Exception as e:
             log.warning(f"yt-dlp failed for {ch['name']} (@{handle}): {e}")
 

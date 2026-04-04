@@ -38,7 +38,13 @@ _ARTIFACTS_BASE = _OUTPUT_DIR / "artifacts"
 
 # Stages that are allowed to fail without aborting the pipeline.
 # A failed non-critical stage produces an empty output and logs a warning.
-_NON_CRITICAL_STAGES = {"seams", "compress"}
+_NON_CRITICAL_STAGES = {
+    "seams",
+    "compress",
+    "prepare_weather",   # weather enhances but isn't required
+    "prepare_spiritual", # spiritual section is optional
+    "prepare_local",     # local news is optional
+}
 
 
 # ---------------------------------------------------------------------------
@@ -361,7 +367,12 @@ def _stage_artifact_key(stage_name: str) -> str:
     return {
         "collect": "raw_sources",
         "compress": "compressed_transcripts",
-        "synthesize": "synthesis_output",
+        "synthesize": "synthesis_output",       # Phase 0 (legacy)
+        "analyze_domain": "domain_analysis",    # Phase 1+
+        "prepare_calendar": "calendar",
+        "prepare_weather": "weather",
+        "prepare_spiritual": "spiritual",
+        "prepare_local": "local_items",
         "seams": "seam_data",
         "assemble": "digest_json",
         "send": "send_result",
@@ -373,6 +384,9 @@ def _empty_stage_output(stage_name: str) -> dict:
     return {
         "compress": {"compressed_transcripts": []},
         "seams": {"seam_data": {"contested_narratives": [], "coverage_gaps": []}},
+        "prepare_weather": {"weather": {}},
+        "prepare_spiritual": {"spiritual": {}},
+        "prepare_local": {"local_items": []},
     }.get(stage_name, {})
 
 

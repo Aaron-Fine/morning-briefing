@@ -1,6 +1,16 @@
 """Stage: assemble — Merge all stage outputs and render the HTML digest.
 
-Inputs:  synthesis_output (dict), seam_data (dict), raw_sources (dict)
+Supports two pipeline configurations:
+  Phase 0: synthesis_output present → use directly (backward compat)
+  Phase 1+: domain_analysis present → merge domain artifacts into template format
+
+Inputs (Phase 1+):
+  domain_analysis (dict), calendar (dict), weather (dict),
+  spiritual (dict), local_items (list), seam_data (dict), raw_sources (dict)
+
+Inputs (Phase 0 fallback):
+  synthesis_output (dict), seam_data (dict), raw_sources (dict)
+
 Outputs: html (str), template_data (dict), digest_json (dict)
 
 Security Layer 4 (Jinja2 autoescape) is enforced here: deep dive body HTML is
@@ -15,38 +25,160 @@ from templates.email_template import render_email
 
 log = logging.getLogger(__name__)
 
+# Tag → label mapping for display
+_TAG_LABELS = {
+    "war": "Conflict",
+    "domestic": "Politics",
+    "econ": "Economy",
+    "ai": "AI",
+    "tech": "Technology",
+    "defense": "Defense",
+    "space": "Space",
+    "cyber": "Cyber",
+}
 
-def run(inputs: dict, config: dict, model_config: dict | None = None, **kwargs) -> dict:
+
+def _domain_item_to_glance(item: dict) -> dict:
+    """Convert a domain analysis item to at_a_glance format."""
+    tag = item.get("tag", "")
+    body = item.get("facts", "")
+    analysis = item.get("analysis", "")
+    if analysis:
+        body = f"{body} {analysis}".strip()
+    return {
+        "tag": tag,
+        "tag_label": item.get("tag_label") or _TAG_LABELS.get(tag, tag.capitalize()),
+        "headline": item.get("headline", ""),
+        "body": body,
+        "links": item.get("links", []),
+        "source_depth": item.get("source_depth", ""),
+        "connection_hooks": item.get("connection_hooks", []),
+    }
+
+
+def _domain_item_to_deep_dive(item: dict) -> dict:
+    """Convert a deep_dive_candidate domain item to deep_dives format."""
+    facts = item.get("facts", "")
+    analysis = item.get("analysis", "")
+    rationale = item.get("deep_dive_rationale", "")
+
+    body_parts = []
+    if facts:
+        body_parts.append(f"<p>{facts}</p>")
+    if analysis:
+        body_parts.append(f"<p>{analysis}</p>")
+    if rationale:
+        body_parts.append(f"<p><em>Why this matters: {rationale}</em></p>")
+
+    return {
+        "headline": item.get("headline", ""),
+        "body": "\n".join(body_parts),
+        "further_reading": item.get("links", []),
+        "source_depth": item.get("source_depth", ""),
+    }
+
+
+def _build_from_domain_analysis(context: dict, config: dict) -> tuple[list, list, str]:
+    """Build at_a_glance, deep_dives, market_context from domain_analysis artifact."""
+    domain_analysis = context.get("domain_analysis", {})
+
+    all_items: list[dict] = []
+    deep_dive_candidates: list[dict] = []
+    market_context = ""
+
+    for domain_key, domain_result in domain_analysis.items():
+        if domain_key == "econ" and domain_result.get("market_context"):
+            market_context = domain_result["market_context"]
+        for item in domain_result.get("items", []):
+            if item.get("deep_dive_candidate"):
+                deep_dive_candidates.append(item)
+            else:
+                all_items.append(item)
+
+    # Sort all items: widely-reported first, then corroborated, then single-source
+    _depth_order = {"widely-reported": 0, "corroborated": 1, "single-source": 2, "": 3}
+    all_items.sort(key=lambda i: _depth_order.get(i.get("source_depth", ""), 3))
+
+    # Enforce at_a_glance count limits from config
+    digest_cfg = config.get("digest", {}).get("at_a_glance", {})
+    max_items = digest_cfg.get("max_items", 14)
+    normal_items = digest_cfg.get("normal_items", 10)
+    cap = min(max_items, max(normal_items, len(all_items)))
+
+    at_a_glance = [_domain_item_to_glance(i) for i in all_items[:cap]]
+
+    # Select up to 3 deep dives from candidates
+    max_dives = config.get("digest", {}).get("deep_dives", {}).get("count", 2)
+    selected_dives = deep_dive_candidates[:max_dives]
+    deep_dives = [_domain_item_to_deep_dive(i) for i in selected_dives]
+
+    return at_a_glance, deep_dives, market_context
+
+
+def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
     """Assemble template data, render HTML, and return html + template_data artifacts."""
-    synthesis_output = inputs.get("synthesis_output", {})
-    seam_data = inputs.get("seam_data", {})
-    raw_sources = inputs.get("raw_sources", {})
+    seam_data = context.get("seam_data", {})
+    raw_sources = context.get("raw_sources", {})
 
     today = datetime.now()
-    weather = raw_sources.get("weather", {})
-    markets = raw_sources.get("markets", [])
-    cfm = raw_sources.get("come_follow_me", {})
 
-    # Spiritual thought
-    spiritual = None
-    if cfm.get("scripture_text"):
-        spiritual = {
-            **cfm,
-            "reflection": synthesis_output.get("spiritual_reflection", ""),
-        }
+    # --- Select pipeline mode ---
+    if context.get("domain_analysis"):
+        # Phase 1+: build from domain artifacts
+        log.info("assemble: using domain_analysis artifacts (Phase 1+ mode)")
+        at_a_glance, deep_dives_raw, market_context = _build_from_domain_analysis(
+            context, config
+        )
+
+        # Spiritual: use dedicated artifact if available, else fall back to raw_sources
+        spiritual = context.get("spiritual")
+        if not spiritual:
+            cfm = raw_sources.get("come_follow_me", {})
+            spiritual = {**cfm, "reflection": cfm.get("scripture_text", "")} if cfm else None
+
+        # Weather: use dedicated artifact if available, else fall back to raw_sources
+        weather = context.get("weather") or raw_sources.get("weather", {})
+
+        # Calendar: use dedicated artifact if available
+        calendar = context.get("calendar", {})
+        week_ahead = calendar.get("events", [])
+
+        # Local items: use dedicated artifact if available
+        local_items = context.get("local_items") or raw_sources.get("local_news", [])
+
+    else:
+        # Phase 0 fallback: use synthesis_output
+        log.info("assemble: using synthesis_output (Phase 0 fallback)")
+        synthesis_output = context.get("synthesis_output", {})
+        at_a_glance = synthesis_output.get("at_a_glance", [])
+        deep_dives_raw = synthesis_output.get("deep_dives", [])
+        market_context = synthesis_output.get("market_context", "")
+        week_ahead = synthesis_output.get("week_ahead", [])
+        local_items = synthesis_output.get("local_items", [])
+
+        # Spiritual: combine CFM data with synthesis reflection
+        cfm = raw_sources.get("come_follow_me", {})
+        spiritual = None
+        if cfm.get("scripture_text"):
+            spiritual = {
+                **cfm,
+                "reflection": synthesis_output.get("spiritual_reflection", ""),
+            }
+
+        weather = raw_sources.get("weather", {})
+
+    markets = raw_sources.get("markets", [])
 
     # Build source name lists for footer
     rss_names = [f["name"] for f in config.get("rss", {}).get("feeds", [])]
     local_names = [s["name"] for s in config.get("local_news", {}).get("sources", [])]
     yt_names = [c["name"] for c in config.get("youtube", {}).get("analysis_channels", [])]
-    all_source_names = rss_names + local_names
-    rss_source_names = ", ".join(all_source_names) if all_source_names else "RSS feeds"
+    rss_source_names = ", ".join(rss_names + local_names) or "RSS feeds"
     yt_source_names = ", ".join(yt_names) if yt_names else ""
 
     # Security Layer 4: mark sanitized deep dive body HTML as safe for Jinja2
-    # (validate.py already stripped disallowed tags; Markup() tells Jinja2 not to escape it)
     deep_dives = []
-    for dive in synthesis_output.get("deep_dives", []):
+    for dive in deep_dives_raw:
         dive_copy = dict(dive)
         if dive_copy.get("body"):
             dive_copy["body"] = Markup(dive_copy["body"])
@@ -63,13 +195,13 @@ def run(inputs: dict, config: dict, model_config: dict | None = None, **kwargs) 
         "spiritual": spiritual,
         "weather": weather,
         "markets": markets,
-        "at_a_glance": synthesis_output.get("at_a_glance", []),
+        "at_a_glance": at_a_glance,
         "contested_narratives": seam_data.get("contested_narratives", []),
         "coverage_gaps": seam_data.get("coverage_gaps", []),
-        "local_items": synthesis_output.get("local_items", []),
-        "market_context": synthesis_output.get("market_context", ""),
-        "week_ahead": synthesis_output.get("week_ahead", []),
-        "weekend_reads": synthesis_output.get("weekend_reads", []),
+        "local_items": local_items,
+        "market_context": market_context,
+        "week_ahead": week_ahead,
+        "weekend_reads": context.get("synthesis_output", {}).get("weekend_reads", []),
         "deep_dives": deep_dives,
     }
 
@@ -77,11 +209,11 @@ def run(inputs: dict, config: dict, model_config: dict | None = None, **kwargs) 
 
     # digest_json mirrors template_data but with body as plain string (for artifact storage)
     digest_json = dict(template_data)
-    digest_json["deep_dives"] = synthesis_output.get("deep_dives", [])  # plain string, not Markup
+    digest_json["deep_dives"] = deep_dives_raw  # plain string, not Markup
 
     log.info(
         f"assemble: rendered digest — "
-        f"{len(template_data['at_a_glance'])} at-a-glance, "
+        f"{len(at_a_glance)} at-a-glance, "
         f"{len(deep_dives)} deep dives, "
         f"{len(seam_data.get('contested_narratives', []))} seams"
     )
