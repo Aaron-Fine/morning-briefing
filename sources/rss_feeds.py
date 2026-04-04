@@ -33,10 +33,19 @@ def _fetch_direct(rss_config: dict) -> list[dict]:
 
     for feed_conf in feeds:
         try:
-            parsed = feedparser.parse(
-                feed_conf["url"],
-                request_headers={"User-Agent": "MorningDigest/1.0"},
-            )
+            # Pre-fetch with requests (15s timeout) so we don't hang indefinitely.
+            # feedparser.parse() has no built-in timeout; passing content bypasses its fetch.
+            try:
+                resp = requests.get(
+                    feed_conf["url"],
+                    headers={"User-Agent": "MorningDigest/1.0"},
+                    timeout=15,
+                )
+                feed_content = resp.content
+            except requests.exceptions.RequestException as e:
+                log.warning(f"RSS pre-fetch failed for {feed_conf['name']}: {e}")
+                continue
+            parsed = feedparser.parse(feed_content)
             cap = feed_conf.get("cap", 15)
             tag = feed_conf.get("tag", "")
             for entry in parsed.entries[:cap]:
