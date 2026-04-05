@@ -129,12 +129,28 @@ def _parse_date(upload_date: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def _get_transcript(video_id: str) -> Optional[str]:
-    """Fetch full auto-generated or manual transcript."""
+def _get_transcript(video_id: str, timeout_secs: int = 30) -> Optional[str]:
+    """Fetch full auto-generated or manual transcript.
+
+    Uses SIGALRM to enforce a per-transcript timeout since the
+    YouTubeTranscriptApi has no built-in timeout parameter.
+    """
+    def _transcript_timeout_handler(signum, frame):
+        raise _ChannelTimeout(f"Transcript fetch timed out for {video_id}")
+
     try:
-        api = YouTubeTranscriptApi()
-        transcript = api.fetch(video_id)
-        return " ".join(snippet.text for snippet in transcript.snippets)
+        prev_handler = signal.signal(signal.SIGALRM, _transcript_timeout_handler)
+        signal.alarm(timeout_secs)
+        try:
+            api = YouTubeTranscriptApi()
+            transcript = api.fetch(video_id)
+            return " ".join(snippet.text for snippet in transcript.snippets)
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, prev_handler)
+    except _ChannelTimeout:
+        log.warning(f"Transcript fetch timed out for {video_id} (>{timeout_secs}s)")
+        return None
     except Exception as e:
         log.debug(f"Transcript unavailable for {video_id}: {e}")
         return None

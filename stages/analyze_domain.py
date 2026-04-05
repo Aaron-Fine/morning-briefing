@@ -55,14 +55,31 @@ _DOMAIN_CONFIGS = {
         "domain_instructions": (
             "SOURCE TREATMENT:\n"
             "- Primary-reporting sources (Al Jazeera, SCMP, Nikkei Asia, The Hindu, "
-            "Dawn, Malcontent News): factual foundation. Attribute claims with 'X reports'.\n"
+            "Dawn, Malcontent News): factual foundation. These are your bedrock — "
+            "attribute claims with 'X reports' and note when a claim appears in only "
+            "one primary source vs. multiple.\n"
             "- Analysis/opinion sources (Tooze, China Talk, Proximities, Drezner, etc.): "
-            "useful for interpretive frameworks — label as 'analysis' not 'reporting'.\n"
+            "useful for interpretive frameworks. Label as 'analysis' not 'reporting'. "
+            "Their value is the analytical lens, not the facts — distinguish what they "
+            "observed from what they concluded.\n"
             "- Perspective-diversity sources (Slow Boring, The Diff): include ONLY when "
-            "they contradict the mainstream framing. That contradiction is the signal.\n"
+            "they contradict the mainstream framing. That contradiction is the signal — "
+            "if they agree with everyone else, they add nothing.\n"
             "- Note explicitly when non-western and western sources frame the same event "
-            "differently. Do NOT resolve the disagreement — present both framings.\n"
-            "- YouTube channels (Beau, Perun): treat as expert analysis — label as such."
+            "differently. Do NOT resolve the disagreement — present both framings. This "
+            "divergence is often more important than either framing alone.\n"
+            "- YouTube channels (Beau, Perun): treat as expert analysis — label as such. "
+            "Beau's strength is domestic policy implications of foreign events. "
+            "Perun's strength is military-industrial context and logistics.\n\n"
+            "ANALYTICAL PRIORITIES:\n"
+            "- Track actor motivations, not just actions. 'Country X did Y' is reporting; "
+            "'Country X did Y because Z, which constrains their options to...' is analysis.\n"
+            "- Distinguish between stated positions and revealed preferences. What actors "
+            "do often contradicts what they say — that gap is analytically valuable.\n"
+            "- Flag second-order effects: a trade policy change that shifts a military "
+            "alliance, a domestic election that constrains foreign policy options.\n"
+            "- When multiple crises intersect (e.g., a regional conflict during an economic "
+            "downturn), note the interaction explicitly — the compound effect matters."
         ),
     },
     "defense_space": {
@@ -77,12 +94,30 @@ _DOMAIN_CONFIGS = {
         "domain_instructions": (
             "SOURCE TREATMENT:\n"
             "- Primary-reporting sources (Breaking Defense, Air & Space Forces, SpaceNews): "
-            "factual foundation. Attribute procurement figures and program status to source.\n"
+            "factual foundation. Attribute procurement figures, program milestones, and "
+            "contract awards to the specific source. Dollar figures and timelines are "
+            "facts — treat them as such.\n"
             "- Analysis/opinion sources (War on the Rocks, Defense Tech and Acquisition): "
-            "useful for strategic interpretation — label as analysis.\n"
-            "- Perun (YouTube): expert military analysis — attribute explicitly.\n"
+            "useful for strategic interpretation — label as analysis. Their value is "
+            "connecting procurement decisions to strategic posture.\n"
+            "- Perun (YouTube): expert military-industrial analysis with strong logistics "
+            "focus. Attribute explicitly. His production capacity and supply chain "
+            "arguments are particularly valuable.\n\n"
+            "ANALYTICAL PRIORITIES:\n"
             "- Flag stories relevant to Aaron's work context: UARC/FFRDC news, DoD "
-            "S&T programs, missile warning/defense, and Utah defense industry."
+            "S&T programs, missile warning/tracking/defense systems (especially HBTSS, "
+            "SDA proliferated LEO, OPIR), and Utah defense industry (Hill AFB, Northrop "
+            "Grumman/Ogden, L3Harris).\n"
+            "- Distinguish between capability announcements and demonstrated capability. "
+            "A successful test is not the same as operational deployment. Note where "
+            "a system sits on the acquisition lifecycle.\n"
+            "- For procurement stories: note the 'so what' — what capability gap does "
+            "this fill, what does it replace, and what does it signal about strategic "
+            "priorities.\n"
+            "- Space stories should distinguish commercial vs. military vs. civil space, "
+            "and note when commercial capabilities have military implications (dual-use).\n"
+            "- Connect defense spending decisions to the broader fiscal environment when "
+            "relevant — budget pressures shape force structure."
         ),
     },
     "ai_tech": {
@@ -97,14 +132,33 @@ _DOMAIN_CONFIGS = {
         "domain_instructions": (
             "SOURCE TREATMENT:\n"
             "- Simon Willison: treat as a primary technical reporting source — he links "
-            "to original research. Follow his framing on capability vs. hype.\n"
+            "to original research and his methodology for evaluating AI claims is "
+            "rigorous. Follow his framing on capability vs. hype.\n"
             "- Ethan Mollick (One Useful Thing), Jack Clark (Import AI): analysis-opinion. "
-            "Their interpretive frames are valuable but represent a point of view.\n"
-            "- Venture in Security, Risky Business: primary reporting on security incidents. "
-            "Attribution to original advisories where possible.\n"
-            "- Theo (YouTube): practitioner perspective on web/software dev — label as such.\n"
+            "Mollick's strength is practical implications for knowledge work. Clark's "
+            "strength is policy and capability trajectory. Both represent informed but "
+            "specific points of view.\n"
+            "- Venture in Security, Risky Business: primary reporting on security incidents "
+            "and vulnerabilities. Attribution to original advisories (CVEs, vendor "
+            "bulletins) where possible. Severity ratings are facts, not opinions.\n"
+            "- Theo (YouTube): practitioner perspective on web/software dev — valuable "
+            "for developer ecosystem reactions to announcements. Label as such.\n"
+            "- Folding Ideas: media criticism and platform dynamics analysis.\n\n"
+            "ANALYTICAL PRIORITIES:\n"
             "- Prioritize stories with durable implications over capability announcements "
-            "that may not hold up. Be specific about what was demonstrated vs. claimed."
+            "that may not hold up. A new model benchmark is ephemeral; a new training "
+            "paradigm or regulatory framework has staying power.\n"
+            "- Be precise about what was demonstrated vs. claimed. 'Company X announced' "
+            "is not the same as 'Company X demonstrated' is not the same as 'Company X "
+            "shipped'. Note the evidence level.\n"
+            "- For cybersecurity: who is affected, what is the attack vector, is there a "
+            "patch, and what is the real-world exploitation status (theoretical vs. "
+            "in-the-wild). Severity without context is noise.\n"
+            "- Connect AI capability developments to their practical implications: a "
+            "coding benchmark improvement matters because of what it enables, not "
+            "because of the number.\n"
+            "- Note when an AI story has defense/national security implications — this "
+            "creates a cross-domain connection hook."
         ),
     },
     "econ": {
@@ -119,14 +173,32 @@ _DOMAIN_CONFIGS = {
         "domain_instructions": (
             "SOURCE TREATMENT:\n"
             "- The Overshoot (Matt Klein): trade flow mechanics and balance-of-payments "
-            "analysis. Treat as expert analysis — label as such.\n"
+            "analysis. His data-first approach to trade imbalances is authoritative. "
+            "Treat as expert analysis — label as such.\n"
             "- Brad Setser: sovereign debt and capital flow specialist. His frameworks "
-            "on currency intervention and reserve management are authoritative within "
-            "that specific domain.\n"
-            "- Also analyze the market data (SPY/DIA/XAR/XLE price moves) in context of "
+            "on currency intervention, reserve management, and hidden lending are "
+            "authoritative within that specific domain. When Setser says capital flows "
+            "don't add up, that's a strong signal.\n"
+            "- General financial press: useful for event reporting but their causal "
+            "explanations for market moves are often post-hoc narratives. Attribute "
+            "the move as fact, treat the explanation with appropriate skepticism.\n\n"
+            "ANALYTICAL PRIORITIES:\n"
+            "- Analyze the market data (SPY/DIA/XAR/XLE price moves) in context of "
             "this domain's stories. Produce a 'market_context' field: 2-3 sentences "
             "connecting today's market moves to the economic stories in your analysis. "
-            "If no clear connection exists, say so rather than forcing one."
+            "If no clear connection exists, say so explicitly — 'no obvious catalyst' "
+            "is more honest than forcing a narrative.\n"
+            "- Distinguish between price moves and fundamental changes. A 2% equity "
+            "move on high volume during an earnings season is different from a 2% move "
+            "on a trade policy announcement.\n"
+            "- For trade/tariff stories: note who bears the cost, who benefits, and "
+            "what the second-order effects are (supply chain shifts, currency "
+            "adjustments, retaliatory measures).\n"
+            "- Connect monetary policy decisions to their real-economy transmission "
+            "mechanisms — rate changes matter because of what they do to housing, "
+            "corporate debt, and employment, not because of the number itself.\n"
+            "- Flag when economic data contradicts the prevailing narrative — that "
+            "divergence is often the most important signal."
         ),
     },
 }
@@ -140,14 +212,14 @@ OUTPUT: JSON object with:
 {
   "items": [
     {
-      "tag": "one of the domain tags",
-      "tag_label": "human-readable label",
-      "headline": "Short, specific, active-voice headline — no 'X says' constructions",
-      "facts": "2-3 sentences of sourced factual claims. Use attribution: 'Al Jazeera reports...', 'According to Breaking Defense...'",
-      "analysis": "2-3 sentences of your analytical interpretation. Start with 'My read:' or 'Analysis:' to distinguish from facts. Note where sources disagree.",
-      "source_depth": "single-source if one source, corroborated if 2-3, widely-reported if 4+",
-      "connection_hooks": [{"entity": "actor/org name", "region": "geographic region", "theme": "thematic thread", "policy": "policy domain"}],
-      "links": [{"url": "exact URL from source data", "label": "Source Name"}],
+      "tag": "one of the domain tags listed above",
+      "tag_label": "human-readable label for the tag",
+      "headline": "Short, specific, active-voice headline. Lead with the actor or event, not 'Report says' or 'Sources indicate'. Bad: 'Analysts warn of tensions'. Good: 'India cancels water treaty with Pakistan amid Kashmir escalation'.",
+      "facts": "2-4 sentences of sourced factual claims. Every claim must be attributed: 'Al Jazeera reports...', 'According to Breaking Defense...', 'SCMP and Nikkei Asia both report...'. When only one source covers a claim, say so. When sources give different figures or timelines, include both with attribution rather than picking one.",
+      "analysis": "2-4 sentences of your analytical interpretation. Open with 'My read:' to clearly separate from facts. Identify what this development changes — whose options narrow, whose expand, what becomes more or less likely. When sources disagree on interpretation, present the disagreement rather than resolving it. End with a specific indicator to watch: 'Watch for X, which would signal Y'.",
+      "source_depth": "single-source | corroborated | widely-reported — use 'single-source' when one outlet, 'corroborated' when 2-3 independent sources, 'widely-reported' when 4+ sources cover the story",
+      "connection_hooks": [{"entity": "specific actor, organization, or system name", "region": "geographic region or 'global'", "theme": "thematic thread (e.g., 'supply-chain-resilience', 'nuclear-deterrence', 'AI-governance')", "policy": "policy domain (e.g., 'trade', 'defense-procurement', 'tech-regulation')"}],
+      "links": [{"url": "exact URL copied from source data — never construct or modify URLs", "label": "Source Name"}],
       "deep_dive_candidate": false,
       "deep_dive_rationale": null
     }
@@ -156,23 +228,48 @@ OUTPUT: JSON object with:
 
 _ECON_OUTPUT_SCHEMA = _OUTPUT_SCHEMA.replace(
     '"deep_dive_rationale": null\n    }\n  ]\n}',
-    '"deep_dive_rationale": null\n    }\n  ],\n  "market_context": "2-3 sentences connecting today\'s market moves to the econ stories above"\n}',
+    '"deep_dive_rationale": null\n    }\n  ],\n  "market_context": "2-3 sentences connecting today\'s market moves to the econ stories above. State the connection or explicitly state there is no clear connection. Do not force a narrative."\n}',
 )
 
 _SHARED_RULES = """
 ANALYTICAL VOICE:
-- Write in first person when offering analysis. Use topic sentences.
-- Never hedge with "it remains to be seen." Attribute uncertainty to specific actors.
-- Structure: what happened → why it matters → what to watch for.
+- Write in first person when offering analysis ("My read:" not "It can be seen that").
+- Use topic sentences. Each paragraph should lead with its claim.
+- Never hedge with "it remains to be seen," "only time will tell," or "the situation is fluid."
+  Instead, attribute uncertainty to specific actors: "analysts disagree on whether..."
+  or name what would resolve the uncertainty: "this depends on whether X happens."
+- Structure each item: what happened → why it matters → what to watch for.
+- Favor concrete over abstract. "GDP fell 2%" beats "economic indicators declined."
+
+SOURCE DEPTH DISCIPLINE:
+- A story from one outlet is single-source — say so, regardless of how significant it seems.
+- Corroboration means independent reporting, not one outlet citing another.
+- When you merge multiple sources into one item, the merged item's source_depth should
+  reflect how many INDEPENDENT sources reported it, not how many links you include.
+
+CONNECTION HOOKS — these are critical for cross-domain synthesis:
+- Be specific with entities: "Raytheon" not "defense contractor", "TSMC" not "chipmaker".
+- Themes should be reusable labels that might match across domains. Use kebab-case:
+  "semiconductor-supply", "arctic-access", "AI-governance", "debt-sustainability".
+- Include hooks even when the cross-domain connection isn't obvious to you — the
+  assembler may see connections across domains that you can't see from within yours.
+
+DEEP DIVE CANDIDATES:
+- Flag deep_dive_candidate: true for stories that meet ANY of these criteria:
+  1. Major geopolitical implications that reshape actor options or alliances.
+  2. Significant cross-domain connections (a trade story with defense implications, etc.).
+  3. Substantial source disagreement where reasonable people read the same events differently.
+  4. A development that changes the baseline assumption about a long-running situation.
+- deep_dive_rationale: required if candidate is true. Write one sentence explaining what
+  makes this story worth deeper treatment — focus on what the reader would learn from
+  a deep dive that they wouldn't get from the at-a-glance item alone.
 
 RULES:
 - Multiple sources covering the same event: merge into ONE item with all relevant links.
-- All URLs must come verbatim from the source data below — never fabricate a URL.
-- deep_dive_candidate: true only for stories with major geopolitical implications,
-  significant cross-domain connections, or substantial source disagreement.
-- deep_dive_rationale: required if deep_dive_candidate is true; null otherwise.
-- Return fewer items if fewer stories qualify. Quality over quantity.
-- Output ONLY valid JSON. No markdown, no commentary outside the JSON."""
+- All URLs must come verbatim from the source data — never fabricate or modify a URL.
+- Return fewer items if fewer stories qualify. Three sharp items beat six padded ones.
+- If the source data is thin for a topic, say so in the analysis rather than stretching.
+- Output ONLY valid JSON. No markdown fences, no commentary outside the JSON object."""
 
 
 # ---------------------------------------------------------------------------

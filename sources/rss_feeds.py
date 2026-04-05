@@ -1,6 +1,7 @@
 """Fetch and aggregate RSS feeds — direct or via FreshRSS API."""
 
 import logging
+import signal
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from typing import Optional
@@ -25,13 +26,46 @@ def fetch_rss(config: dict) -> list[dict]:
         return _fetch_direct(rss_config)
 
 
+class _FeedParseTimeout(Exception):
+    pass
+
+
+def _parse_feed_with_timeout(content: bytes, feed_name: str, timeout_secs: int = 10):
+    """Parse feed content with a SIGALRM timeout guard.
+
+    feedparser.parse() has no built-in timeout and can hang on deeply nested
+    or malformed XML content.
+    """
+    def _handler(signum, frame):
+        raise _FeedParseTimeout(f"feedparser.parse() timed out for {feed_name}")
+
+    prev_handler = signal.signal(signal.SIGALRM, _handler)
+    signal.alarm(timeout_secs)
+    try:
+        return feedparser.parse(content)
+    except _FeedParseTimeout:
+        log.warning(f"Feed parse timed out for {feed_name} (>{timeout_secs}s)")
+        return feedparser.FeedParserDict(entries=[])
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, prev_handler)
+
+
 def _fetch_direct(rss_config: dict) -> list[dict]:
     """Fetch from individual RSS feed URLs."""
     feeds = rss_config.get("feeds", [])
     cutoff = datetime.now(timezone.utc) - timedelta(hours=36)
     all_items = []
+    consecutive_failures = 0
 
     for feed_conf in feeds:
+        # Circuit breaker: if 5+ feeds fail in a row, network is likely down
+        if consecutive_failures >= 5:
+            log.warning(
+                f"RSS: {consecutive_failures} consecutive fetch failures — "
+                f"network likely down, skipping remaining {len(feeds) - feeds.index(feed_conf)} feeds"
+            )
+            break
         try:
             # Pre-fetch with requests (15s timeout) so we don't hang indefinitely.
             # feedparser.parse() has no built-in timeout; passing content bypasses its fetch.
@@ -42,10 +76,12 @@ def _fetch_direct(rss_config: dict) -> list[dict]:
                     timeout=15,
                 )
                 feed_content = resp.content
+                consecutive_failures = 0
             except requests.exceptions.RequestException as e:
                 log.warning(f"RSS pre-fetch failed for {feed_conf['name']}: {e}")
+                consecutive_failures += 1
                 continue
-            parsed = feedparser.parse(feed_content)
+            parsed = _parse_feed_with_timeout(feed_content, feed_conf["name"])
             cap = feed_conf.get("cap", 15)
             tag = feed_conf.get("tag", "")
             for entry in parsed.entries[:cap]:
@@ -68,7 +104,12 @@ def _fetch_direct(rss_config: dict) -> list[dict]:
                 all_items.append(item)
         except Exception as e:
             log.warning(f"RSS fetch failed for {feed_conf['name']}: {e}")
+            consecutive_failures += 1
 
+    if all_items:
+        log.info(f"RSS: fetched {len(all_items)} items from {len(feeds)} feeds")
+    else:
+        log.warning("RSS: no items fetched from any feed")
     all_items.sort(key=lambda x: x.get("published", ""), reverse=True)
     return all_items
 

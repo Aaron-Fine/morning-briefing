@@ -63,9 +63,17 @@ pipeline:
 
     - name: seams
       model:
-        provider: fireworks
-        model: "accounts/fireworks/models/kimi-k2p5"
+        provider: anthropic
+        model: "claude-sonnet-4-6"
         max_tokens: 5000
+        temperature: 0.3
+
+    # --- Phase 3: Cross-domain synthesis ("editor-in-chief" pass) ---
+    - name: cross_domain
+      model:
+        provider: anthropic
+        model: "claude-sonnet-4-6"
+        max_tokens: 10000
         temperature: 0.3
 
     - name: assemble

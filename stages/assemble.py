@@ -1,10 +1,15 @@
 """Stage: assemble — Merge all stage outputs and render the HTML digest.
 
-Supports two pipeline configurations:
-  Phase 0: synthesis_output present → use directly (backward compat)
-  Phase 1+: domain_analysis present → merge domain artifacts into template format
+Supports three pipeline configurations:
+  Phase 3+: cross_domain_output present → use editor-in-chief output
+  Phase 1:  domain_analysis present → merge domain artifacts into template format
+  Phase 0:  synthesis_output present → use directly (backward compat)
 
-Inputs (Phase 1+):
+Inputs (Phase 3+):
+  cross_domain_output (dict), calendar (dict), weather (dict),
+  spiritual (dict), local_items (list), seam_data (dict), raw_sources (dict)
+
+Inputs (Phase 1):
   domain_analysis (dict), calendar (dict), weather (dict),
   spiritual (dict), local_items (list), seam_data (dict), raw_sources (dict)
 
@@ -36,6 +41,27 @@ _TAG_LABELS = {
     "space": "Space",
     "cyber": "Cyber",
 }
+
+
+def _cross_domain_item_to_glance(item: dict) -> dict:
+    """Convert a cross-domain synthesis item to at_a_glance format."""
+    tag = item.get("tag", "")
+    body = item.get("facts", "")
+    analysis = item.get("analysis", "")
+    if analysis:
+        body = f"{body} {analysis}".strip()
+    cross_note = item.get("cross_domain_note")
+    if cross_note:
+        body = f"{body} ({cross_note})".strip()
+    return {
+        "tag": tag,
+        "tag_label": item.get("tag_label") or _TAG_LABELS.get(tag, tag.capitalize()),
+        "headline": item.get("headline", ""),
+        "body": body,
+        "links": item.get("links", []),
+        "source_depth": item.get("source_depth", ""),
+        "connection_hooks": item.get("connection_hooks", []),
+    }
 
 
 def _domain_item_to_glance(item: dict) -> dict:
@@ -123,9 +149,17 @@ def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
     today = datetime.now()
 
     # --- Select pipeline mode ---
-    if context.get("domain_analysis"):
-        # Phase 1+: build from domain artifacts
-        log.info("assemble: using domain_analysis artifacts (Phase 1+ mode)")
+    if context.get("cross_domain_output"):
+        # Phase 3+: use editor-in-chief cross-domain synthesis output
+        log.info("assemble: using cross_domain_output (Phase 3 mode)")
+        xd = context["cross_domain_output"]
+        at_a_glance = [_cross_domain_item_to_glance(i) for i in xd.get("at_a_glance", [])]
+        deep_dives_raw = xd.get("deep_dives", [])
+        market_context = xd.get("market_context", "")
+
+    elif context.get("domain_analysis"):
+        # Phase 1: build from domain artifacts (no cross-domain synthesis)
+        log.info("assemble: using domain_analysis artifacts (Phase 1 mode)")
         at_a_glance, deep_dives_raw, market_context = _build_from_domain_analysis(
             context, config
         )
@@ -198,6 +232,7 @@ def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
         "at_a_glance": at_a_glance,
         "contested_narratives": seam_data.get("contested_narratives", []),
         "coverage_gaps": seam_data.get("coverage_gaps", []),
+        "key_assumptions": seam_data.get("key_assumptions", []),
         "local_items": local_items,
         "market_context": market_context,
         "week_ahead": week_ahead,

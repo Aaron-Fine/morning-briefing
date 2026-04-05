@@ -374,6 +374,7 @@ def _stage_artifact_key(stage_name: str) -> str:
         "prepare_spiritual": "spiritual",
         "prepare_local": "local_items",
         "seams": "seam_data",
+        "cross_domain": "cross_domain_output",  # Phase 3+
         "assemble": "digest_json",
         "send": "send_result",
     }.get(stage_name, stage_name)
@@ -383,7 +384,10 @@ def _empty_stage_output(stage_name: str) -> dict:
     """Return safe empty outputs for a failed non-critical stage."""
     return {
         "compress": {"compressed_transcripts": []},
-        "seams": {"seam_data": {"contested_narratives": [], "coverage_gaps": []}},
+        "seams": {"seam_data": {
+            "contested_narratives": [], "coverage_gaps": [],
+            "key_assumptions": [], "seam_count": 0, "quiet_day": True,
+        }},
         "prepare_weather": {"weather": {}},
         "prepare_spiritual": {"spiritual": {}},
         "prepare_local": {"local_items": []},

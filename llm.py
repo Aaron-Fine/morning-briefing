@@ -31,6 +31,7 @@ def _fireworks_client():
         _openai_client_cache["client"] = openai.OpenAI(
             api_key=os.environ["FIREWORKS_API_KEY"],
             base_url="https://api.fireworks.ai/inference/v1",
+            timeout=120.0,  # 2-minute total timeout per request
         )
     return _openai_client_cache["client"]
 
@@ -40,6 +41,7 @@ def _anthropic_client():
         import anthropic
         _anthropic_client_cache["client"] = anthropic.Anthropic(
             api_key=os.environ["ANTHROPIC_API_KEY"],
+            timeout=120.0,  # 2-minute total timeout per request
         )
     return _anthropic_client_cache["client"]
 
@@ -107,10 +109,11 @@ def _call_fireworks(
     if json_mode:
         create_kwargs["response_format"] = {"type": "json_object"}
 
+    retryable = (openai.APIStatusError, openai.APIConnectionError, openai.APITimeoutError)
     raw = _retry_loop(
         lambda: _fireworks_call(client, create_kwargs, stream),
         max_retries,
-        (openai.APIStatusError, openai.APIConnectionError),
+        retryable,
         model,
     )
     return _parse_response(raw, json_mode, model)
@@ -120,10 +123,16 @@ def _fireworks_call(client, create_kwargs: dict, stream: bool) -> str:
     if stream:
         kwargs = {**create_kwargs, "stream": True}
         chunks = []
+        empty_count = 0
         with client.chat.completions.create(**kwargs) as resp:
             for chunk in resp:
                 if not chunk.choices:
+                    empty_count += 1
+                    if empty_count > 200:
+                        log.warning("Fireworks stream: >200 empty chunks, breaking")
+                        break
                     continue
+                empty_count = 0
                 delta = chunk.choices[0].delta.content
                 if delta:
                     chunks.append(delta)
@@ -158,10 +167,11 @@ def _call_anthropic(
         )
         return resp.content[0].text.strip()
 
+    retryable = (anthropic.APIStatusError, anthropic.APIConnectionError, anthropic.APITimeoutError)
     raw = _retry_loop(
         _do_call,
         max_retries,
-        (anthropic.APIStatusError, anthropic.APIConnectionError),
+        retryable,
         model,
     )
     return _parse_response(raw, json_mode, model)

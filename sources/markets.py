@@ -2,6 +2,7 @@
 
 import os
 import logging
+import time
 import requests
 
 log = logging.getLogger(__name__)
@@ -32,8 +33,13 @@ def fetch_markets(config: dict) -> list[dict]:
         return []
 
     results = []
+    consecutive_failures = 0
     for s in symbols_config:
         symbol = s["symbol"]
+        # Back off if multiple symbols fail in a row (API may be down)
+        if consecutive_failures >= 3:
+            log.warning(f"Markets: {consecutive_failures} consecutive failures, skipping remaining symbols")
+            break
         try:
             resp = requests.get(
                 FINNHUB_QUOTE_URL,
@@ -61,7 +67,15 @@ def fetch_markets(config: dict) -> list[dict]:
                 "change_pct": round(change, 2),
                 "direction": "up" if change >= 0 else "down",
             })
+            consecutive_failures = 0
+        except requests.exceptions.Timeout:
+            log.warning(f"Quote fetch timed out for {symbol}")
+            consecutive_failures += 1
+        except requests.exceptions.ConnectionError:
+            log.warning(f"Quote fetch connection error for {symbol}")
+            consecutive_failures += 1
         except Exception as e:
             log.warning(f"Quote fetch failed for {symbol}: {e}")
+            consecutive_failures += 1
 
     return results
