@@ -89,10 +89,10 @@ EMAIL_TEMPLATE = _env.from_string('''\
       --text-body:      #c8c5c0;
       --text-secondary: #b0ada8;
       --text-muted:     #888582;
-      --text-faint:     #5e5c59;
+      --text-faint:     #888582;
 
       --text-chrome:       #e8e5e1;
-      --text-chrome-dim:   #5e5c59;
+      --text-chrome-dim:   #888582;
       --text-chrome-muted: #888582;
       --text-chrome-link:  #b0ada8;
 
@@ -264,7 +264,7 @@ EMAIL_TEMPLATE = _env.from_string('''\
   .tag-cyber    { color: var(--tag-cyber-text);    background: var(--tag-cyber-bg); }
   .scan-hl { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; line-height: 1.4; }
   .scan-ctx { font-size: 14px; color: var(--text-secondary); line-height: 1.45; }
-  .scan-link { font-size: 12px; color: var(--link-subtle); margin-top: 4px; }
+  .scan-link { font-size: 13px; color: var(--link-subtle); margin-top: 4px; }
   .scan-link a { color: var(--link-subtle); text-decoration: none; border-bottom: 1px dotted var(--link-border); }
 
   /* ── Local / Calendar ───────────────────────────────────── */
@@ -287,7 +287,7 @@ EMAIL_TEMPLATE = _env.from_string('''\
   .fr { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
   .fr-label { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
   .fr a { display: block; font-size: 14px; color: var(--link); text-decoration: none; line-height: 1.5; margin-bottom: 2px; }
-  .fr .src { color: var(--text-muted); font-size: 12px; }
+  .fr .src { color: var(--text-muted); font-size: 13px; }
 
   /* ── Perspective Seams ───────────────────────────────────── */
   .seam-sub { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--accent-seam); margin-bottom: 10px; }
@@ -295,7 +295,7 @@ EMAIL_TEMPLATE = _env.from_string('''\
   .seam-item:last-child { border-bottom: none; }
   .seam-topic { font-size: 15px; font-weight: 600; line-height: 1.4; margin-bottom: 3px; }
   .seam-desc { font-size: 14px; color: var(--text-secondary); line-height: 1.45; }
-  .seam-sources { font-size: 12px; color: var(--text-faint); margin-top: 4px; font-style: italic; }
+  .seam-sources { font-size: 13px; color: var(--text-faint); margin-top: 4px; font-style: italic; }
 
   /* ── Weekend reads ───────────────────────────────────────── */
   .weekend-item { padding: 8px 0; border-bottom: 1px solid var(--border); }
