@@ -119,7 +119,12 @@ RULES:
 - Output ONLY valid JSON. No markdown fences, no commentary outside the JSON."""
 
 
-def _build_input(domain_analysis: dict, seam_data: dict, raw_sources: dict) -> str:
+def _build_input(
+    domain_analysis: dict,
+    seam_data: dict,
+    raw_sources: dict,
+    previous_cross_domain: dict | None = None,
+) -> str:
     """Build the user content for the cross-domain synthesis prompt."""
     parts = []
 
@@ -144,6 +149,29 @@ def _build_input(domain_analysis: dict, seam_data: dict, raw_sources: dict) -> s
         for item in rss:
             if item.get("url"):
                 parts.append(f"  {item.get('source', '?')}: {item.get('url', '')}")
+
+    # Previous-day continuity
+    if previous_cross_domain:
+        prev_glance_headlines = [
+            i.get("headline", "") for i in previous_cross_domain.get("at_a_glance", [])
+            if i.get("headline")
+        ]
+        prev_dive_headlines = [
+            d.get("headline", "") for d in previous_cross_domain.get("deep_dives", [])
+            if d.get("headline")
+        ]
+        if prev_glance_headlines or prev_dive_headlines:
+            parts.append("\n=== CONTINUITY — Yesterday's digest included these stories ===")
+            if prev_glance_headlines:
+                parts.append("At a glance: " + " | ".join(prev_glance_headlines))
+            if prev_dive_headlines:
+                parts.append("Deep dives: " + " | ".join(prev_dive_headlines))
+            parts.append(
+                "If any of today's stories are developments in these ongoing narratives, note "
+                '"continuing from yesterday" or "new development" in your analysis field. '
+                "Do NOT repeat yesterday's analysis — just acknowledge the thread. "
+                "If none of today's stories connect to yesterday, ignore this section entirely."
+            )
 
     parts.append(
         "\n\nPerform cross-domain synthesis: discover connections, select deep dives, "
@@ -175,7 +203,10 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
         log.warning("cross_domain: no domain analysis items — returning passthrough")
         return {"cross_domain_output": _empty_output(domain_analysis)}
 
-    user_content = _build_input(domain_analysis, seam_data, raw_sources)
+    user_content = _build_input(
+        domain_analysis, seam_data, raw_sources,
+        context.get("previous_cross_domain"),
+    )
 
     try:
         log.info("Stage: cross_domain — running editor-in-chief synthesis...")

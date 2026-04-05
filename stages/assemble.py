@@ -157,6 +157,15 @@ def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
         deep_dives_raw = xd.get("deep_dives", [])
         market_context = xd.get("market_context", "")
 
+        spiritual = context.get("spiritual")
+        if not spiritual:
+            cfm = raw_sources.get("come_follow_me", {})
+            spiritual = {**cfm, "reflection": cfm.get("scripture_text", "")} if cfm else None
+        weather = context.get("weather") or raw_sources.get("weather", {})
+        calendar = context.get("calendar", {})
+        week_ahead = calendar.get("events", [])
+        local_items = context.get("local_items") or raw_sources.get("local_news", [])
+
     elif context.get("domain_analysis"):
         # Phase 1: build from domain artifacts (no cross-domain synthesis)
         log.info("assemble: using domain_analysis artifacts (Phase 1 mode)")

@@ -385,7 +385,7 @@ EMAIL_TEMPLATE = _env.from_string('''\
   {% endif %}
 
   <!-- PERSPECTIVE SEAMS -->
-  {% if contested_narratives or coverage_gaps %}
+  {% if contested_narratives or coverage_gaps or key_assumptions %}
   <div class="section">
     <h2 class="sec-label">Perspective Seams</h2>
 
@@ -397,6 +397,9 @@ EMAIL_TEMPLATE = _env.from_string('''\
         <div class="seam-topic">{{ cn.topic }}</div>
         <div class="seam-desc">{{ cn.description }}</div>
         <div class="seam-sources">{{ cn.sources_a }} vs. {{ cn.sources_b }}</div>
+        {% if cn.analytical_significance %}
+        <div class="seam-desc" style="margin-top:4px; font-style:italic;">{{ cn.analytical_significance }}</div>
+        {% endif %}
         {% if cn.links %}
         <div class="scan-link" style="margin-top:4px;">{% for link in cn.links %}<a href="{{ link.url }}">{{ link.label }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</div>
         {% endif %}
@@ -416,6 +419,20 @@ EMAIL_TEMPLATE = _env.from_string('''\
         {% if cg.links %}
         <div class="scan-link" style="margin-top:4px;">{% for link in cg.links %}<a href="{{ link.url }}">{{ link.label }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</div>
         {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if key_assumptions %}
+    <div style="margin-top: 16px;">
+      <div class="seam-sub">Key Assumptions Check</div>
+      {% for ka in key_assumptions %}
+      <div class="seam-item">
+        <div class="seam-topic">{{ ka.topic }}</div>
+        <div class="seam-desc">Assumes: {{ ka.assumption }}</div>
+        <div class="seam-desc" style="margin-top:4px;">Would invalidate: {{ ka.invalidator }}</div>
+        <div class="seam-sources">Confidence: {{ ka.confidence }}{% if ka.confidence_basis %} — {{ ka.confidence_basis }}{% endif %}</div>
       </div>
       {% endfor %}
     </div>

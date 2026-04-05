@@ -79,6 +79,12 @@ pipeline:
     - name: assemble
       # No model needed — template rendering
 
+    - name: anomaly
+      # No model needed — deterministic checks
+
+    - name: briefing_packet
+      # No model needed — deterministic assembly
+
     - name: send
       # No model needed — SMTP delivery
 

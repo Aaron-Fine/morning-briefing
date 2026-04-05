@@ -44,6 +44,8 @@ _NON_CRITICAL_STAGES = {
     "prepare_weather",   # weather enhances but isn't required
     "prepare_spiritual", # spiritual section is optional
     "prepare_local",     # local news is optional
+    "anomaly",           # post-assembly checks — non-blocking
+    "briefing_packet",   # chat context artifact — non-blocking
 }
 
 
@@ -280,6 +282,15 @@ def run_pipeline(
                         context[_stage_artifact_key(stage_name)] = artifact_data
                 continue  # don't execute this stage
 
+        # Before cross_domain, inject previous-day context for continuity
+        if stage_name == "cross_domain":
+            prev_dir = _find_most_recent_artifact_dir(before_date=run_date)
+            if prev_dir:
+                prev_xd = _load_artifact(prev_dir, "cross_domain_output")
+                if prev_xd:
+                    context["previous_cross_domain"] = prev_xd
+                    log.info(f"  Loaded previous cross_domain from {prev_dir.name}")
+
         # Execute the stage
         log.info(f"--- Stage: {stage_name} ---")
         t_start = time.monotonic()
@@ -376,6 +387,8 @@ def _stage_artifact_key(stage_name: str) -> str:
         "seams": "seam_data",
         "cross_domain": "cross_domain_output",  # Phase 3+
         "assemble": "digest_json",
+        "anomaly": "anomaly_report",
+        "briefing_packet": "briefing_packet",
         "send": "send_result",
     }.get(stage_name, stage_name)
 
@@ -391,6 +404,8 @@ def _empty_stage_output(stage_name: str) -> dict:
         "prepare_weather": {"weather": {}},
         "prepare_spiritual": {"spiritual": {}},
         "prepare_local": {"local_items": []},
+        "anomaly": {"anomaly_report": {"anomalies": [], "checks_run": 0, "anomaly_count": 0}},
+        "briefing_packet": {"briefing_packet": {}},
     }.get(stage_name, {})
 
 
