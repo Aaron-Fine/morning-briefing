@@ -80,9 +80,9 @@ def _compress_one(video: dict, model_config: dict) -> dict:
     return result
 
 
-def run(inputs: dict, config: dict, model_config: dict | None = None) -> dict:
+def run(context: dict, config: dict, model_config: dict | None = None) -> dict:
     """Compress all analysis transcripts and return compressed_transcripts artifact."""
-    raw_sources = inputs.get("raw_sources", {})
+    raw_sources = context.get("raw_sources", {})
     transcripts = raw_sources.get("analysis_transcripts", [])
 
     if not transcripts:

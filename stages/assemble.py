@@ -86,19 +86,18 @@ def _domain_item_to_deep_dive(item: dict) -> dict:
     """Convert a deep_dive_candidate domain item to deep_dives format."""
     facts = item.get("facts", "")
     analysis = item.get("analysis", "")
-    rationale = item.get("deep_dive_rationale", "")
 
     body_parts = []
     if facts:
         body_parts.append(f"<p>{facts}</p>")
     if analysis:
         body_parts.append(f"<p>{analysis}</p>")
-    if rationale:
-        body_parts.append(f"<p><em>Why this matters: {rationale}</em></p>")
 
     return {
         "headline": item.get("headline", ""),
+        "tag": item.get("tag", ""),  # preserved for anomaly detection
         "body": "\n".join(body_parts),
+        "why_it_matters": item.get("deep_dive_rationale", ""),  # rendered in callout box
         "further_reading": item.get("links", []),
         "source_depth": item.get("source_depth", ""),
     }
@@ -141,7 +140,7 @@ def _build_from_domain_analysis(context: dict, config: dict) -> tuple[list, list
     return at_a_glance, deep_dives, market_context
 
 
-def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
+def run(context: dict, config: dict, model_config: dict | None = None, **kwargs) -> dict:
     """Assemble template data, render HTML, and return html + template_data artifacts."""
     seam_data = context.get("seam_data", {})
     raw_sources = context.get("raw_sources", {})
@@ -156,6 +155,7 @@ def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
         at_a_glance = [_cross_domain_item_to_glance(i) for i in xd.get("at_a_glance", [])]
         deep_dives_raw = xd.get("deep_dives", [])
         market_context = xd.get("market_context", "")
+        weekend_reads = xd.get("weekend_reads", [])
 
         spiritual = context.get("spiritual")
         if not spiritual:
@@ -172,42 +172,26 @@ def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
         at_a_glance, deep_dives_raw, market_context = _build_from_domain_analysis(
             context, config
         )
+        weekend_reads = []
 
-        # Spiritual: use dedicated artifact if available, else fall back to raw_sources
         spiritual = context.get("spiritual")
         if not spiritual:
             cfm = raw_sources.get("come_follow_me", {})
             spiritual = {**cfm, "reflection": cfm.get("scripture_text", "")} if cfm else None
-
-        # Weather: use dedicated artifact if available, else fall back to raw_sources
         weather = context.get("weather") or raw_sources.get("weather", {})
-
-        # Calendar: use dedicated artifact if available
         calendar = context.get("calendar", {})
         week_ahead = calendar.get("events", [])
-
-        # Local items: use dedicated artifact if available
         local_items = context.get("local_items") or raw_sources.get("local_news", [])
 
     else:
-        # Phase 0 fallback: use synthesis_output
-        log.info("assemble: using synthesis_output (Phase 0 fallback)")
-        synthesis_output = context.get("synthesis_output", {})
-        at_a_glance = synthesis_output.get("at_a_glance", [])
-        deep_dives_raw = synthesis_output.get("deep_dives", [])
-        market_context = synthesis_output.get("market_context", "")
-        week_ahead = synthesis_output.get("week_ahead", [])
-        local_items = synthesis_output.get("local_items", [])
-
-        # Spiritual: combine CFM data with synthesis reflection
-        cfm = raw_sources.get("come_follow_me", {})
+        log.error("assemble: no pipeline output found in context — producing empty digest")
+        at_a_glance = []
+        deep_dives_raw = []
+        market_context = ""
+        weekend_reads = []
+        week_ahead = []
+        local_items = []
         spiritual = None
-        if cfm.get("scripture_text"):
-            spiritual = {
-                **cfm,
-                "reflection": synthesis_output.get("spiritual_reflection", ""),
-            }
-
         weather = raw_sources.get("weather", {})
 
     markets = raw_sources.get("markets", [])
@@ -245,15 +229,19 @@ def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
         "local_items": local_items,
         "market_context": market_context,
         "week_ahead": week_ahead,
-        "weekend_reads": context.get("synthesis_output", {}).get("weekend_reads", []),
+        "weekend_reads": weekend_reads,
         "deep_dives": deep_dives,
     }
 
     html = render_email(template_data)
 
-    # digest_json mirrors template_data but with body as plain string (for artifact storage)
+    # digest_json mirrors template_data but with:
+    # - deep dive body as plain string (not Markup) for artifact storage
+    # - cross_domain metadata preserved for briefing_packet and future use
     digest_json = dict(template_data)
-    digest_json["deep_dives"] = deep_dives_raw  # plain string, not Markup
+    digest_json["deep_dives"] = deep_dives_raw
+    xd = context.get("cross_domain_output", {})
+    digest_json["cross_domain_connections"] = xd.get("cross_domain_connections", [])
 
     log.info(
         f"assemble: rendered digest — "

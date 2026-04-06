@@ -22,6 +22,8 @@ Outputs: cross_domain_output (dict) containing at_a_glance, deep_dives,
 
 import json
 import logging
+from datetime import datetime
+from urllib.parse import urlparse
 
 from llm import call_llm
 
@@ -172,7 +174,16 @@ JSON object:
       "theme": "thematic thread"
     }
   ],
-  "market_context": "from econ domain analysis, preserved as-is"
+  "market_context": "from econ domain analysis, preserved as-is",
+  "weekend_reads": [   // FRIDAY ONLY — omit entirely on other days
+    {
+      "title": "article title",
+      "url": "exact URL from sources",
+      "source": "source name",
+      "description": "2-3 sentence summary of why this piece is worth setting aside time for",
+      "read_time": "estimated read time, e.g. '15 min read'"
+    }
+  ]
 }
 
 RULES:
@@ -238,6 +249,15 @@ def _build_input(
                 "If none of today's stories connect to yesterday, ignore this section entirely."
             )
 
+    # Friday: request weekend reads
+    if datetime.now().weekday() == 4:
+        parts.append(
+            "\n=== TODAY IS FRIDAY — ADD weekend_reads ===\n"
+            "Select 3 substantial long-form pieces from the source data worth reading over the "
+            "weekend. Prioritize depth, lasting relevance, and pieces that reward slow reading "
+            "over breaking news. Include the weekend_reads array in your JSON output."
+        )
+
     parts.append(
         "\n\nPerform cross-domain synthesis: discover connections, select deep dives, "
         "assemble the editorial product. Output ONLY valid JSON."
@@ -251,13 +271,7 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
     seam_data = context.get("seam_data", {})
     raw_sources = context.get("raw_sources", {})
 
-    # Default to best available model
-    effective_config = model_config or config.get("llm", {}).get("cross_domain", {
-        "provider": "anthropic",
-        "model": "claude-sonnet-4-6",
-        "max_tokens": 10000,
-        "temperature": 0.3,
-    })
+    effective_config = model_config or config.get("llm", {})
 
     # Check if we have domain analysis to work with
     has_items = any(
@@ -293,18 +307,17 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
         return {"cross_domain_output": _empty_output(domain_analysis)}
 
     # Ensure required fields
-    if "at_a_glance" not in result:
-        result["at_a_glance"] = []
-    if "deep_dives" not in result:
-        result["deep_dives"] = []
-    if "cross_domain_connections" not in result:
-        result["cross_domain_connections"] = []
+    result.setdefault("at_a_glance", [])
+    result.setdefault("deep_dives", [])
+    result.setdefault("cross_domain_connections", [])
+    result.setdefault("weekend_reads", [])
     if "market_context" not in result:
-        # Preserve from econ domain analysis
         econ = domain_analysis.get("econ", {})
         result["market_context"] = econ.get("market_context", "")
 
-    # URL validation: collect all known URLs
+    # Build the set of known source domains for URL validation.
+    # Domain-level matching (not exact URL) allows the LLM to reference real articles
+    # even when URL format differs slightly from what was ingested (UTM params, etc.).
     known_urls: set[str] = set()
     for item in raw_sources.get("rss", []):
         if item.get("url"):
@@ -315,24 +328,26 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
     for t in raw_sources.get("analysis_transcripts", []):
         if t.get("url"):
             known_urls.add(t["url"])
+    known_domains: set[str] = {
+        urlparse(u).netloc for u in known_urls if urlparse(u).netloc
+    }
+
+    def _url_allowed(url: str) -> bool:
+        return not url or urlparse(url).netloc in known_domains
 
     # Normalize tags to the standard vocabulary
     for item in result["at_a_glance"]:
         item["tag"] = _normalize_tag(item.get("tag", ""))
         item["tag_label"] = _TAG_LABELS.get(item["tag"], item.get("tag_label", ""))
 
-    # Validate URLs in at_a_glance and deep_dives
-    from validate import validate_urls
+    # Validate URLs in at_a_glance, deep_dives, and weekend_reads
     for item in result["at_a_glance"]:
-        item["links"] = [
-            lnk for lnk in item.get("links", [])
-            if not lnk.get("url") or lnk["url"] in known_urls
-        ]
+        item["links"] = [lnk for lnk in item.get("links", []) if _url_allowed(lnk.get("url", ""))]
     for dive in result["deep_dives"]:
-        dive["further_reading"] = [
-            lnk for lnk in dive.get("further_reading", [])
-            if not lnk.get("url") or lnk["url"] in known_urls
-        ]
+        dive["further_reading"] = [lnk for lnk in dive.get("further_reading", []) if _url_allowed(lnk.get("url", ""))]
+    for read in result["weekend_reads"]:
+        if not _url_allowed(read.get("url", "")):
+            read["url"] = ""
 
     n_glance = len(result["at_a_glance"])
     n_dives = len(result["deep_dives"])

@@ -22,9 +22,9 @@ Every morning at 6:00 AM MT, this container:
    - **analyze_domain** — Four specialist desks: geopolitics, defense/space, AI/tech, economics (Kimi K2.5)
    - **prepare_*** — Calendar, weather, spiritual, local news enrichment passes
    - **seams** — Contested narratives, coverage gaps, key assumptions detection (Claude Sonnet)
-   - **cross_domain** — Editor-in-chief synthesis: cross-domain connections, deep dive selection and writing (Claude Sonnet)
+   - **cross_domain** — Editor-in-chief synthesis: cross-domain connections, deep dive selection and writing, weekend reads on Fridays (Claude Sonnet)
    - **assemble** — Renders HTML digest from all stage outputs
-   - **anomaly** — Post-assembly behavioral checks (category skew, source absence, repeated phrases, length drift)
+   - **anomaly** — Post-assembly behavioral checks: category skew, source absence, unusual deep dives, length drift, repeated phrases
    - **briefing_packet** — Builds compressed JSON context for follow-up chat (writes `output/latest_briefing_packet.json`)
    - **send** — SMTP delivery
 
@@ -248,6 +248,8 @@ docker build -t morning-digest:latest .
 **`pipeline.stages`** — Ordered list of pipeline stages with optional per-stage model config. Each stage maps to `stages/<name>.py`.
 
 **`llm.model`** — Default AI model (Fireworks, used by compress + analyze_domain). Default: `accounts/fireworks/models/kimi-k2p5`
+
+**`digest.weekend_reads`** — Friday edition weekend reads (enabled by default). Long-form pieces are selected by the `cross_domain` stage automatically when today is Friday; no manual triggering required.
 
 **`topics.primary / secondary / tertiary`** — Topic priority tiers. Primary always gets coverage; tertiary only when something significant happens.
 

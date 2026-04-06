@@ -18,7 +18,7 @@ from sources.holidays import get_upcoming_holidays
 log = logging.getLogger(__name__)
 
 
-def run(inputs: dict, config: dict, model_config: dict | None = None) -> dict:
+def run(context: dict, config: dict, model_config: dict | None = None) -> dict:
     """Collect all sources and return raw_sources artifact."""
     log.info("Collecting from sources...")
     data: dict = {}

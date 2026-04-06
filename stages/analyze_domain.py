@@ -419,7 +419,7 @@ def _run_domain_pass(
 # Stage entry point
 # ---------------------------------------------------------------------------
 
-def run(context: dict, config: dict, model_config, **kwargs) -> dict:
+def run(context: dict, config: dict, model_config: dict | None = None, **kwargs) -> dict:
     """Run all four domain analysis passes and return domain_analysis artifact."""
     raw = context.get("raw_sources", {})
     rss_items = raw.get("rss", [])

@@ -12,7 +12,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-def run(context: dict, config: dict, model_config, **kwargs) -> dict:
+def run(context: dict, config: dict, model_config: dict | None = None, **kwargs) -> dict:
     raw = context.get("raw_sources", {})
     local_news = raw.get("local_news", [])
     max_items = config.get("digest", {}).get("local", {}).get("max_items", 4)

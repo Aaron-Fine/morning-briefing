@@ -12,6 +12,7 @@ Non-blocking — logs warnings, never fails the pipeline.
 
 import json
 import logging
+import re
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -21,6 +22,18 @@ _ARTIFACTS_BASE = _ROOT / "output" / "artifacts"
 
 _PRIMARY_TAGS = {"war", "ai", "defense"}
 _TERTIARY_TAGS = {"local", "science", "tech"}
+
+# Domain names produced by cross_domain that map to primary interests
+_PRIMARY_DOMAINS = {"geopolitics", "defense_space", "ai_tech"}
+
+# Keywords used to infer whether a deep dive headline covers a primary topic
+# when tag / domains_bridged are absent (Phase 1 fallback)
+_PRIMARY_HEADLINE_KEYWORDS = {
+    "war", "iran", "israel", "ukraine", "russia", "conflict", "combat",
+    "attack", "military", "missile", "defense", "pentagon", "nato", "hormuz",
+    "ai", "artificial intelligence", "llm", "openai", "anthropic",
+    "space", "satellite", "launch", "cislunar", "orbit",
+}
 
 
 def _check_category_skew(at_a_glance: list) -> list:
@@ -83,8 +96,26 @@ def _check_source_absence(raw_sources: dict, domain_analysis: dict) -> list:
     return anomalies
 
 
+def _dive_is_primary(dive: dict) -> bool:
+    """Return True if a deep dive covers a primary topic (war, defense, AI, space).
+
+    Checks in priority order:
+    1. domains_bridged list (Phase 3 cross_domain output)
+    2. tag field (Phase 1 domain_item_to_deep_dive output)
+    3. Keyword scan of headline (fallback)
+    """
+    domains = set(dive.get("domains_bridged") or [])
+    if domains & _PRIMARY_DOMAINS:
+        return True
+    tag = dive.get("tag", "") or ""
+    if tag in _PRIMARY_TAGS:
+        return True
+    hl = dive.get("headline", "").lower()
+    return any(kw in hl for kw in _PRIMARY_HEADLINE_KEYWORDS)
+
+
 def _check_unusual_deep_dives(deep_dives: list, domain_analysis: dict) -> list:
-    """Warn if deep dives cover tertiary tags while primary-tag candidates were available."""
+    """Warn if deep dives don't cover any primary topic while primary candidates existed."""
     anomalies = []
 
     # Collect primary-tag deep_dive_candidates from domain analysis
@@ -99,15 +130,13 @@ def _check_unusual_deep_dives(deep_dives: list, domain_analysis: dict) -> list:
     if not primary_candidates:
         return anomalies
 
-    # Check if any deep dive covers a tertiary tag
     for dive in deep_dives:
-        tag = dive.get("tag", "") or ""
-        if tag in _TERTIARY_TAGS:
+        if not _dive_is_primary(dive):
             anomalies.append({
                 "check": "unusual_deep_dive",
                 "severity": "warning",
                 "detail": (
-                    f"Deep dive covers tertiary tag '{tag}' ('{dive.get('headline', '?')}') "
+                    f"Deep dive '{dive.get('headline', '?')}' doesn't cover a primary topic "
                     f"while primary-tag candidates were available: {primary_candidates[:3]}"
                 ),
             })
@@ -176,17 +205,15 @@ def _check_repeated_phrases(cross_domain_output: dict, seam_data: dict) -> list:
 
     glance_texts = []
     for item in cross_domain_output.get("at_a_glance", []):
-        parts = [item.get("headline", ""), item.get("facts", ""), item.get("analysis", "")]
+        # at_a_glance items use "context" (combined facts+analysis) not "facts"/"analysis"
+        parts = [item.get("headline", ""), item.get("context", ""), item.get("cross_domain_note", "")]
         glance_texts.append(" ".join(p for p in parts if p))
     if glance_texts:
         sections["at_a_glance"] = " ".join(glance_texts)
 
     dive_texts = []
     for dive in cross_domain_output.get("deep_dives", []):
-        # Strip HTML tags crudely
-        body = dive.get("body", "")
-        import re
-        body = re.sub(r"<[^>]+>", " ", body)
+        body = re.sub(r"<[^>]+>", " ", dive.get("body", ""))
         dive_texts.append(f"{dive.get('headline', '')} {body}")
     if dive_texts:
         sections["deep_dives"] = " ".join(dive_texts)
@@ -201,7 +228,6 @@ def _check_repeated_phrases(cross_domain_output: dict, seam_data: dict) -> list:
         return anomalies
 
     # Build word-list per section
-    import re
     section_words: dict[str, list[str]] = {}
     for sec, text in sections.items():
         words = re.sub(r"[^\w\s]", "", text.lower()).split()

@@ -54,9 +54,9 @@ def _send_failure_notification(config: dict) -> None:
         log.error(f"Failed to send failure notification: {e}")
 
 
-def run(inputs: dict, config: dict, model_config: dict | None = None, **kwargs) -> dict:
+def run(context: dict, config: dict, model_config: dict | None = None, **kwargs) -> dict:
     """Send the digest email and return send_result artifact."""
-    html = inputs.get("html", "")
+    html = context.get("html", "")
 
     if not html:
         log.error("send: no HTML content to send")

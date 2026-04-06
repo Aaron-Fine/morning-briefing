@@ -211,7 +211,8 @@ def _retry_loop(fn, max_retries: int, retryable_errors: tuple, model: str) -> st
             status = getattr(e, "status_code", None)
             if status and 400 <= status < 500:
                 raise
-    raise RuntimeError("Retry loop exhausted without returning")  # unreachable
+    # Unreachable: loop always returns or raises. Safety sentinel for type checkers.
+    raise RuntimeError("Retry loop exhausted without returning")
 
 
 def _parse_response(raw: str, json_mode: bool, model: str) -> dict | str:
