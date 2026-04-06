@@ -53,10 +53,10 @@ pipeline:
 
     - name: prepare_spiritual
       model:
-        provider: fireworks
-        model: "accounts/fireworks/models/kimi-k2p5"
-        max_tokens: 500
-        temperature: 0.4
+        provider: anthropic
+        model: "claude-haiku-4-5-20251001"
+        max_tokens: 512
+        temperature: 0.5
 
     - name: prepare_local
       # No model needed — deterministic filter

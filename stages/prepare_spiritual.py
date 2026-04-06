@@ -54,7 +54,7 @@ def run(context: dict, config: dict, model_config, **kwargs) -> dict:
                 model_config,
                 max_retries=1,
                 json_mode=False,
-                stream=False,
+                stream=True,
             )
             log.info("prepare_spiritual: reflection generated")
         except Exception as e:

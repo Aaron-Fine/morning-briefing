@@ -122,21 +122,31 @@ def _call_fireworks(
 def _fireworks_call(client, create_kwargs: dict, stream: bool) -> str:
     if stream:
         kwargs = {**create_kwargs, "stream": True}
-        chunks = []
+        content_chunks: list[str] = []
+        reasoning_chunks: list[str] = []
         empty_count = 0
         with client.chat.completions.create(**kwargs) as resp:
             for chunk in resp:
                 if not chunk.choices:
                     empty_count += 1
-                    if empty_count > 200:
-                        log.warning("Fireworks stream: >200 empty chunks, breaking")
+                    if empty_count > 500:
+                        log.warning("Fireworks stream: >500 empty chunks, breaking")
                         break
                     continue
                 empty_count = 0
-                delta = chunk.choices[0].delta.content
-                if delta:
-                    chunks.append(delta)
-        return "".join(chunks).strip()
+                delta = chunk.choices[0].delta
+                if getattr(delta, "content", None):
+                    content_chunks.append(delta.content)
+                elif getattr(delta, "reasoning_content", None):
+                    # Kimi K2.5 extended thinking: collect as fallback
+                    reasoning_chunks.append(delta.reasoning_content)
+        text = "".join(content_chunks).strip()
+        if not text and reasoning_chunks:
+            # Model exhausted token budget on thinking — surface reasoning as the response.
+            # This should only happen when max_tokens is too low for the model to think + respond.
+            log.warning("Fireworks stream: no content chunks, using reasoning_content as fallback")
+            text = "".join(reasoning_chunks).strip()
+        return text
     else:
         kwargs = {**create_kwargs, "stream": False}
         resp = client.chat.completions.create(**kwargs)
