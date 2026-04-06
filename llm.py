@@ -73,7 +73,7 @@ def call_llm(
     provider = model_config.get("provider", "fireworks")
 
     if provider == "anthropic":
-        return _call_anthropic(system_prompt, user_content, model_config, max_retries, json_mode)
+        return _call_anthropic(system_prompt, user_content, model_config, max_retries, json_mode, stream)
     else:
         return _call_fireworks(system_prompt, user_content, model_config, max_retries, json_mode, stream)
 
@@ -149,6 +149,7 @@ def _call_anthropic(
     model_config: dict,
     max_retries: int,
     json_mode: bool,
+    stream: bool = True,
 ) -> dict | str:
     import anthropic
 
@@ -157,15 +158,21 @@ def _call_anthropic(
     max_tokens = model_config.get("max_tokens", 8192)
     temperature = model_config.get("temperature", 0.3)
 
+    create_kwargs = dict(
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_content}],
+    )
+
     def _do_call() -> str:
-        resp = client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_content}],
-        )
-        return resp.content[0].text.strip()
+        if stream:
+            with client.messages.stream(**create_kwargs) as s:
+                return s.get_final_text().strip()
+        else:
+            resp = client.messages.create(**create_kwargs)
+            return resp.content[0].text.strip()
 
     retryable = (anthropic.APIStatusError, anthropic.APIConnectionError, anthropic.APITimeoutError)
     raw = _retry_loop(

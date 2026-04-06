@@ -73,7 +73,7 @@ pipeline:
       model:
         provider: anthropic
         model: "claude-sonnet-4-6"
-        max_tokens: 10000
+        max_tokens: 16000
         temperature: 0.3
 
     - name: assemble
@@ -143,7 +143,7 @@ rss:
     - { url: "https://www.theatlantic.com/feed/all/", name: "The Atlantic", cap: 8, category: "western-analysis", reliability: "analysis-opinion" }
 
     # --- DEFENSE / MILITARY ---
-    - { url: "https://feeds.breakingdefense.com/BreakingDefense", name: "Breaking Defense", category: "defense-mil", reliability: "primary-reporting" }
+    - { url: "https://breakingdefense.com/feed/", name: "Breaking Defense", category: "defense-mil", reliability: "primary-reporting" }
     - { url: "https://www.airandspaceforces.com/feed/", name: "Air & Space Forces", category: "defense-mil", reliability: "primary-reporting" }
     - { url: "https://spacenews.com/feed/", name: "SpaceNews", category: "defense-mil", reliability: "primary-reporting" }
     - { url: "https://warontherocks.com/feed/", name: "War on the Rocks", cap: 5, category: "defense-mil", reliability: "analysis-opinion" }
