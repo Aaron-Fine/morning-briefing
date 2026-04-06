@@ -384,8 +384,27 @@ EMAIL_TEMPLATE = _env.from_string('''\
   </div>
   {% endif %}
 
+  <!-- CACHE VALLEY -->
+  {% if local_items %}
+  <div class="section">
+    <h2 class="sec-label">Cache Valley</h2>
+    {% for item in local_items %}
+    <div class="local-item">
+      {% if item is mapping %}
+        {% set headline = item.headline or item.title %}
+        {% set ctx = item.context or item.summary %}
+        {% if item.url %}<a href="{{ item.url }}">{{ headline }}</a>{% else %}<strong>{{ headline }}</strong>{% endif %}
+        {% if ctx %} — {{ ctx }}{% endif %}
+      {% else %}
+        {{ item }}
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <!-- PERSPECTIVE SEAMS -->
-  {% if contested_narratives or coverage_gaps or key_assumptions %}
+  {% if contested_narratives or coverage_gaps %}
   <div class="section">
     <h2 class="sec-label">Perspective Seams</h2>
 
@@ -423,20 +442,6 @@ EMAIL_TEMPLATE = _env.from_string('''\
       {% endfor %}
     </div>
     {% endif %}
-
-    {% if key_assumptions %}
-    <div style="margin-top: 16px;">
-      <div class="seam-sub">Key Assumptions Check</div>
-      {% for ka in key_assumptions %}
-      <div class="seam-item">
-        <div class="seam-topic">{{ ka.topic }}</div>
-        <div class="seam-desc">Assumes: {{ ka.assumption }}</div>
-        <div class="seam-desc" style="margin-top:4px;">Would invalidate: {{ ka.invalidator }}</div>
-        <div class="seam-sources">Confidence: {{ ka.confidence }}{% if ka.confidence_basis %} — {{ ka.confidence_basis }}{% endif %}</div>
-      </div>
-      {% endfor %}
-    </div>
-    {% endif %}
   </div>
   {% endif %}
 
@@ -458,26 +463,9 @@ EMAIL_TEMPLATE = _env.from_string('''\
       <div class="fr">
         <div class="fr-label">Further Reading</div>
         {% for fr in dive.further_reading %}
-        <a href="{{ fr.url }}">{{ fr.title }} <span class="src">— {{ fr.source }}</span></a>
+        <a href="{{ fr.url }}">{{ fr.label or fr.title }}{% if fr.source %} <span class="src">— {{ fr.source }}</span>{% endif %}</a>
         {% endfor %}
       </div>
-      {% endif %}
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  <!-- CACHE VALLEY -->
-  {% if local_items %}
-  <div class="section">
-    <h2 class="sec-label">Cache Valley</h2>
-    {% for item in local_items %}
-    <div class="local-item">
-      {% if item is mapping %}
-        {% if item.url %}<a href="{{ item.url }}">{{ item.headline }}</a>{% else %}<strong>{{ item.headline }}</strong>{% endif %}
-        {% if item.context %} — {{ item.context }}{% endif %}
-      {% else %}
-        {{ item }}
       {% endif %}
     </div>
     {% endfor %}
@@ -489,7 +477,7 @@ EMAIL_TEMPLATE = _env.from_string('''\
   <div class="section">
     <h2 class="sec-label">Week Ahead</h2>
     {% for item in week_ahead %}
-    <div class="cal-item"><span class="cal-date">{{ item.date }}</span> {{ item.event }}</div>
+    <div class="cal-item"><span class="cal-date">{{ item.date or "TBD" }}</span> {{ item.event }}</div>
     {% endfor %}
   </div>
   {% endif %}
@@ -503,6 +491,21 @@ EMAIL_TEMPLATE = _env.from_string('''\
       <div class="wk-title"><a href="{{ r.url }}">{{ r.title }}</a></div>
       <div class="wk-meta">{{ r.source }} · {{ r.read_time }}</div>
       <div class="wk-desc">{{ r.description }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- KEY ASSUMPTIONS CHECK -->
+  {% if key_assumptions %}
+  <div class="section">
+    <h2 class="sec-label">Key Assumptions Check</h2>
+    {% for ka in key_assumptions %}
+    <div class="seam-item">
+      <div class="seam-topic">{{ ka.topic }}</div>
+      <div class="seam-desc">Assumes: {{ ka.assumption }}</div>
+      <div class="seam-desc" style="margin-top:4px;">Would invalidate: {{ ka.invalidator }}</div>
+      <div class="seam-sources">Confidence: {{ ka.confidence }}{% if ka.confidence_basis %} — {{ ka.confidence_basis }}{% endif %}</div>
     </div>
     {% endfor %}
   </div>
