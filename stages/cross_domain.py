@@ -27,6 +27,70 @@ from llm import call_llm
 
 log = logging.getLogger(__name__)
 
+_VALID_TAGS = {"war", "domestic", "econ", "ai", "tech", "defense", "space", "cyber"}
+
+_TAG_LABELS = {
+    "war": "Conflict",
+    "domestic": "Politics",
+    "econ": "Economy",
+    "ai": "AI",
+    "tech": "Technology",
+    "defense": "Defense",
+    "space": "Space",
+    "cyber": "Cyber",
+}
+
+# Keyword → standard tag mapping for post-processing normalization.
+# Keys are lowercase substrings; first match wins.
+_TAG_KEYWORDS: list[tuple[str, str]] = [
+    # war / conflict
+    ("iran", "war"), ("israel", "war"), ("ukraine", "war"), ("russia", "war"),
+    ("military", "war"), ("combat", "war"), ("war", "war"), ("conflict", "war"),
+    ("attack", "war"), ("strike", "war"), ("missile", "war"), ("troops", "war"),
+    ("ceasefire", "war"), ("nato", "war"), ("hormuz", "war"), ("hostage", "war"),
+    # defense
+    ("defense", "defense"), ("pentagon", "defense"), ("f-35", "defense"),
+    ("f-15", "defense"), ("procurement", "defense"), ("dod", "defense"),
+    ("special forces", "defense"), ("recovery", "defense"), ("basing", "defense"),
+    # space
+    ("space", "space"), ("lunar", "space"), ("orbit", "space"), ("satellite", "space"),
+    ("cislunar", "space"), ("launch", "space"), ("nasa", "space"),
+    # ai
+    ("ai", "ai"), ("llm", "ai"), ("artificial intelligence", "ai"),
+    ("machine learning", "ai"), ("openai", "ai"), ("anthropic", "ai"),
+    ("developer", "ai"), ("tooling", "ai"), ("model", "ai"),
+    # tech
+    ("tech", "tech"), ("software", "tech"), ("cyber", "cyber"),
+    ("open source", "tech"), ("github", "tech"),
+    # cyber
+    ("cyber", "cyber"), ("hack", "cyber"), ("security breach", "cyber"),
+    ("ransomware", "cyber"), ("malware", "cyber"),
+    # econ
+    ("econ", "econ"), ("market", "econ"), ("trade", "econ"), ("tariff", "econ"),
+    ("inflation", "econ"), ("fed", "econ"), ("gdp", "econ"), ("labor", "econ"),
+    ("wage", "econ"), ("energy", "econ"), ("oil", "econ"), ("food", "econ"),
+    ("supply chain", "econ"), ("wto", "econ"), ("imf", "econ"),
+    # domestic / politics
+    ("trump", "domestic"), ("congress", "domestic"), ("senate", "domestic"),
+    ("white house", "domestic"), ("election", "domestic"), ("domestic", "domestic"),
+    ("administration", "domestic"), ("politics", "domestic"), ("gop", "domestic"),
+]
+
+
+def _normalize_tag(raw: str) -> str:
+    """Map a raw LLM tag to the standard CSS vocabulary.
+
+    Tries exact match first, then keyword scan, then falls back to 'domestic'.
+    """
+    normalized = raw.strip().lower()
+    if normalized in _VALID_TAGS:
+        return normalized
+    for keyword, tag in _TAG_KEYWORDS:
+        if keyword in normalized:
+            return tag
+    log.debug(f"cross_domain: unknown tag '{raw}' — defaulting to 'domestic'")
+    return "domestic"
+
 _SYSTEM_PROMPT = """You are the editor-in-chief of Aaron's Morning Digest. You receive domain analyses from four specialist desks (geopolitics, defense/space, AI/tech, economics) and a quality-control review from a seam detection analyst. Your job is NOT to rewrite their work — it's to find connections they couldn't see from within their domain, select the day's deep dives, and weave the pieces into a coherent editorial product.
 
 VOICE: Write as an informed colleague — direct, analytical, occasionally wry. Use first person when offering interpretation. Use topic sentences. Never hedge with "it remains to be seen" or "only time will tell." Attribute uncertainty to specific actors ("analysts disagree on whether...") rather than to the abstract situation. Favor the structure: what happened → why it matters → what to watch for.
@@ -80,8 +144,8 @@ JSON object:
 {
   "at_a_glance": [
     {
-      "tag": "war|domestic|econ|ai|tech|defense|space|cyber",
-      "tag_label": "human-readable label",
+      "tag": "MUST be exactly one of: war, domestic, econ, ai, tech, defense, space, cyber — no other values",
+      "tag_label": "human-readable label matching the tag (e.g. war→Conflict, domestic→Politics, econ→Economy, ai→AI, tech→Technology, defense→Defense, space→Space, cyber→Cyber)",
       "headline": "from domain analysis (may be lightly edited for consistency)",
       "facts": "from domain analysis (preserved as-is)",
       "analysis": "from domain analysis (preserved as-is)",
@@ -116,6 +180,7 @@ RULES:
 - Preserve domain analysts' facts and analysis verbatim in at_a_glance items — your editorial contribution is the ordering, cross_domain_notes, and deep dive writing.
 - If no stories warrant a deep dive, return an empty deep_dives array. Do not force one.
 - cross_domain_connections is metadata for the briefing packet — include all connections you identified, even minor ones.
+- TAG FIELD: use ONLY these exact values: war, domestic, econ, ai, tech, defense, space, cyber. No hyphens, no compound tags, no topic descriptions. Every at_a_glance item must have one of these eight values.
 - Output ONLY valid JSON. No markdown fences, no commentary outside the JSON."""
 
 
@@ -250,6 +315,11 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
     for t in raw_sources.get("analysis_transcripts", []):
         if t.get("url"):
             known_urls.add(t["url"])
+
+    # Normalize tags to the standard vocabulary
+    for item in result["at_a_glance"]:
+        item["tag"] = _normalize_tag(item.get("tag", ""))
+        item["tag_label"] = _TAG_LABELS.get(item["tag"], item.get("tag_label", ""))
 
     # Validate URLs in at_a_glance and deep_dives
     from validate import validate_urls
