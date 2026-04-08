@@ -9,6 +9,7 @@ _Last updated: 2026-04-08_
 ### Bug fixes
 - **`--force-friday` was broken** — only passed to `synthesize` (dead stage). Fixed: now passed to `cross_domain` in `pipeline.py`; `cross_domain.py` updated to accept `force_friday` kwarg and pass it to `_build_input`.
 - **Press release filter** — `stages/prepare_local.py` now filters items with `/press_releases/` in URL or PRNewswire/BusinessWire markers in summary.
+  - **Bonus bug found and fixed**: `PRNewswire` (without slashes) wasn't caught in summaries. Changed `/PRNewswire/` → `PRNewswire` in `_WIRE_MARKERS`.
 
 ### UI / template improvements
 - **At-a-glance voice labels** — Added SOURCES / ANALYSIS / THREAD micro-labels to each context block with distinct colors and a left-border visual separator for Analysis and Thread blocks.
@@ -19,7 +20,13 @@ _Last updated: 2026-04-08_
 
 ### Code cleanup
 - **`_cross_domain_item_to_glance` + `_domain_item_to_glance` merged** into `_item_to_glance` in `stages/assemble.py`. Aliases kept for safety.
-- **`stages/synthesize.py` and `digest.py`** — Confirmed dead code (neither is in `config.yaml` pipeline manifest). Left in place with a comment; safe to archive or delete.
+- **`stages/synthesize.py` and `digest.py`** — Deleted (confirmed dead code, neither in `config.yaml` pipeline manifest). References cleaned from `pipeline.py`.
+- **Prompt files moved to `prompts/`** — `chat_briefer_prompt.md`, `weather-display-prompt.md`, `scripture_study_prompt.md`, `morning-digest-v2-plan.md` relocated and naming standardized to snake_case.
+- **`modules/` directory created** — `modules/__init__.py` in place for weather Phase 2.
+- **`pytest>=8.0` added to `requirements.txt`**.
+- **`tests/` skeleton created** — `tests/__init__.py`, `tests/conftest.py`, `tests/test_prepare_local.py` (9 passing tests covering press release filter).
+- **Git hygiene verified** — `output/` and `__pycache__/` properly ignored; no tracked runtime artifacts.
+- **Configuration polish** — FreshRSS placeholder fields now have clarifying comments; `to_address` comment generalized from "your gmail address" to "your email address".
 
 ### AQI editorial comment (weather spec)
 - Added Utah DEQ action level language to `prompts/weather-display-prompt.md` Zone 1 spec.
@@ -33,7 +40,6 @@ Full implementation plan in `prompts/weather-display-prompt.md`. Summary of phas
 ### Phase 0 — Prep (do first)
 - [ ] Add `AIRNOW_API_KEY=` to `.env` (you have the key) and `.env.example`
 - [ ] Expand `config.yaml` `weather:` block with `nws_station`, `airnow_api_key`, display flags
-- [ ] Add `pytest>=8.0` to `requirements.txt`
 - [ ] Add `RUN mkdir -p /app/cache/weather` to `Dockerfile`
 - [ ] Add `cache/weather/*.json` to `.gitignore`
 
@@ -55,7 +61,7 @@ Key decisions:
 - Normals/records from hardcoded Logan NOAA tables with linear monthly interpolation.
 
 ### Phase 2 — SVG renderer (`modules/weather_display.py`) — new file
-Create `modules/__init__.py` (empty) first.
+`modules/__init__.py` already created.
 
 Public API:
 ```python
@@ -97,9 +103,11 @@ Zone renderers to implement:
   - Replace `<!-- WEATHER -->` block with `{% if weather_html %}...{% elif weather %}...{% endif %}`
   - Add Google Fonts `@import` (first line inside `<style>`) for JetBrains Mono + DM Sans
 
-### Phase 4 — Tests (`tests/` directory — currently doesn't exist)
-- [ ] Create `tests/__init__.py`, `tests/conftest.py`
-- [ ] Create `tests/fixtures/` with 7 weather JSON fixtures:
+### Phase 4 — Tests
+`tests/` directory created with `test_prepare_local.py` (9 passing tests).
+
+Remaining test files to create:
+- [ ] `tests/fixtures/` with 7 weather JSON fixtures:
   - `weather_clear.json` — copy from `output/artifacts/2026-04-07/weather.json`
   - `weather_inversion.json` — AQI 175, flat temps, no precip (Jan/Feb pattern)
   - `weather_snow.json` — precip_type=snow, AQI moderate
@@ -110,7 +118,6 @@ Zone renderers to implement:
 - [ ] `tests/test_weather_classify.py` — `_classify_precip`, `_extract_precip_timing`
 - [ ] `tests/test_weather_normals.py` — interpolation math
 - [ ] `tests/test_weather_display.py` — coord math, AQI color mapping, SVG structure
-- [ ] `tests/test_prepare_local.py` — press release filter (basic cases written mentally)
 - [ ] `tests/test_weather_integration.py` — full fixture → render → validate HTML
 
 Run tests inside Docker (after rebuild):
@@ -129,43 +136,7 @@ docker compose run --rm morning-digest python -m pytest tests/ -v
 
 ---
 
-## Repository cleanup
-
-### Dead code (safe to archive)
-- [ ] **Archive `digest.py`** (811 lines) — Original monolithic pipeline, fully replaced by `pipeline.py`. Move to `archive/` or delete.
-- [ ] **Archive `stages/synthesize.py`** (266 lines) — Phase 0 fallback, never in pipeline manifest. Replaced by `analyze_domain` + `cross_domain`.
-
-### File organization
-- [ ] **Move prompt/spec files to `docs/` or `prompts/`** — `chat_briefer_prompt.md`, `weather-display-prompt.md`, `Scripture Study Prompt.md`, `morning-digest-v2-plan.md` are mixed in with source files
-- [ ] **Standardize naming** — `Scripture Study Prompt.md` (spaces, title case) vs. `chat_briefer_prompt.md` (snake_case). Pick one convention.
-- [ ] **Create `modules/` directory** with `modules/__init__.py` — referenced in weather Phase 2 but doesn't exist yet
-
-### Git hygiene
-- [ ] **Untrack runtime artifacts in `output/`** — `output/` is in `.gitignore` but files were committed before that rule. Run `git rm --cached output/*` to clean index
-- [ ] **Verify `__pycache__/` is ignored** — directories exist on disk; confirm `.gitignore` is working and clean any tracked `.pyc` files
-- [ ] **Clean stale log files** — `output/digest.log.2026-04-*`, `output/dryrun*.log`, `output/sources_run.log`, `output/tag_test.log` are runtime noise
-
-### Testing
-- [ ] **Create `tests/` skeleton** — directory doesn't exist yet; biggest risk before weather module rewrite. Start with at least one passing test to establish the pattern.
-
-### Configuration polish
-- [ ] **Add comment to empty FreshRSS defaults** — `freshrss_url: ""`, `freshrss_user: ""`, `freshrss_password: ""` in `config.yaml` could use a note explaining they're placeholders
-- [ ] **Clarify `to_address` comment** — says "your gmail address" but SMTP host could be any provider; make comment generic
-
----
-
 ## Other open items
-
-### Docker rebuild reminder
-Code changes require a rebuild — only `config.yaml` and `output/` are volume-mounted:
-```bash
-docker compose build && docker compose up -d
-```
-
-### `.env` — add when starting weather Phase 0
-```
-AIRNOW_API_KEY=<your_key>
-```
 
 ### Docker rebuild reminder
 Code changes require a rebuild — only `config.yaml` and `output/` are volume-mounted:
