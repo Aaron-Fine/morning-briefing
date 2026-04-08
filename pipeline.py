@@ -13,7 +13,7 @@ Replaces the monolithic digest.py with a stage-based pipeline that:
 Usage:
   python pipeline.py                         # full run (schedule mode via entrypoint)
   python pipeline.py --dry-run               # full run, skip email send
-  python pipeline.py --stage synthesize      # re-run from synthesize onwards
+   python pipeline.py --stage cross_domain    # re-run from cross_domain onwards
   python pipeline.py --sources-only          # collect sources and dump, skip LLM
   python pipeline.py --force-friday          # force Friday mode (weekend reads)
   python pipeline.py --lookback-hours 72    # override YouTube lookback window
@@ -41,17 +41,18 @@ _ARTIFACTS_BASE = _OUTPUT_DIR / "artifacts"
 _NON_CRITICAL_STAGES = {
     "seams",
     "compress",
-    "prepare_weather",   # weather enhances but isn't required
-    "prepare_spiritual", # spiritual section is optional
-    "prepare_local",     # local news is optional
-    "anomaly",           # post-assembly checks — non-blocking
-    "briefing_packet",   # chat context artifact — non-blocking
+    "prepare_weather",  # weather enhances but isn't required
+    "prepare_spiritual",  # spiritual section is optional
+    "prepare_local",  # local news is optional
+    "anomaly",  # post-assembly checks — non-blocking
+    "briefing_packet",  # chat context artifact — non-blocking
 }
 
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
+
 
 def load_config() -> dict:
     with open(_ROOT / "config.yaml") as f:
@@ -62,6 +63,7 @@ def load_config() -> dict:
 # Logging
 # ---------------------------------------------------------------------------
 
+
 def _setup_log_file() -> None:
     _OUTPUT_DIR.mkdir(exist_ok=True)
     handler = logging.handlers.TimedRotatingFileHandler(
@@ -70,13 +72,16 @@ def _setup_log_file() -> None:
         backupCount=30,
         encoding="utf-8",
     )
-    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    )
     logging.getLogger().addHandler(handler)
 
 
 # ---------------------------------------------------------------------------
 # Artifact persistence
 # ---------------------------------------------------------------------------
+
 
 def _artifact_dir(run_date: str) -> Path:
     d = _ARTIFACTS_BASE / run_date
@@ -128,6 +133,7 @@ def _prune_artifacts(keep_days: int = 30) -> None:
     for d in _ARTIFACTS_BASE.iterdir():
         if d.is_dir() and len(d.name) == 10 and d.name < cutoff_str:
             import shutil
+
             shutil.rmtree(d, ignore_errors=True)
             log.debug(f"Pruned artifact dir: {d.name}")
 
@@ -143,15 +149,18 @@ def _prune_artifacts(keep_days: int = 30) -> None:
 # Stage registry — maps stage name → module
 # ---------------------------------------------------------------------------
 
+
 def _load_stage_module(name: str):
     """Dynamically import a stage module by name."""
     import importlib
+
     return importlib.import_module(f"stages.{name}")
 
 
 # ---------------------------------------------------------------------------
 # Retry
 # ---------------------------------------------------------------------------
+
 
 def _run_with_retry(fn, stage_name: str, max_retries: int = 2):
     for attempt in range(max_retries + 1):
@@ -172,6 +181,7 @@ def _run_with_retry(fn, stage_name: str, max_retries: int = 2):
 # ---------------------------------------------------------------------------
 # Pipeline execution
 # ---------------------------------------------------------------------------
+
 
 def _get_stage_model_config(stage_cfg: dict) -> dict | None:
     """Extract the model config dict from a stage config entry."""
@@ -231,7 +241,10 @@ def run_pipeline(
     # Determine artifact source directory for loading prior stage outputs
     # Try today's dir first, then most recent prior run
     def _find_load_dir() -> Path | None:
-        if any((_artifact_dir(run_date) / f"{s}.json").exists() for s in ["raw_sources", "synthesis_output"]):
+        if any(
+            (_artifact_dir(run_date) / f"{s}.json").exists()
+            for s in ["raw_sources", "synthesis_output"]
+        ):
             return artifact_dir
         return _find_most_recent_artifact_dir(before_date=run_date)
 
@@ -277,7 +290,9 @@ def run_pipeline(
             if idx_current < idx_from:
                 log.info(f"  Loading cached artifact for skipped stage: {stage_name}")
                 if load_dir:
-                    artifact_data = _load_artifact(load_dir, _stage_artifact_key(stage_name))
+                    artifact_data = _load_artifact(
+                        load_dir, _stage_artifact_key(stage_name)
+                    )
                     if artifact_data is not None:
                         context[_stage_artifact_key(stage_name)] = artifact_data
                 continue  # don't execute this stage
@@ -298,11 +313,13 @@ def run_pipeline(
         try:
             module = _load_stage_module(stage_name)
             extra_kwargs: dict = {}
-            if stage_name == "synthesize":
+            if stage_name == "cross_domain":
                 extra_kwargs["force_friday"] = force_friday
 
             outputs = _run_with_retry(
-                lambda m=module, ec=extra_kwargs: m.run(context, config, model_config, **ec),
+                lambda m=module, ec=extra_kwargs: m.run(
+                    context, config, model_config, **ec
+                ),
                 stage_name,
                 max_retries=2,
             )
@@ -315,12 +332,16 @@ def run_pipeline(
                 log.warning(
                     f"Stage '{stage_name}' failed after retries (non-critical, continuing): {e}"
                 )
-                run_meta["stage_failures"].append({"stage": stage_name, "error": str(e)})
+                run_meta["stage_failures"].append(
+                    {"stage": stage_name, "error": str(e)}
+                )
                 # Provide safe empty outputs so downstream stages don't crash
                 outputs = _empty_stage_output(stage_name)
             else:
                 log.error(f"Stage '{stage_name}' failed (critical): {e}")
-                run_meta["stage_failures"].append({"stage": stage_name, "error": str(e), "fatal": True})
+                run_meta["stage_failures"].append(
+                    {"stage": stage_name, "error": str(e), "fatal": True}
+                )
                 _save_artifact(artifact_dir, "run_meta", run_meta)
                 sys.exit(1)
 
@@ -343,7 +364,9 @@ def run_pipeline(
                 (artifact_dir / "digest.html").write_text(html, encoding="utf-8")
                 (_OUTPUT_DIR / "last_digest.html").write_text(html, encoding="utf-8")
                 if not dry_run:
-                    (_OUTPUT_DIR / f"{run_date}.html").write_text(html, encoding="utf-8")
+                    (_OUTPUT_DIR / f"{run_date}.html").write_text(
+                        html, encoding="utf-8"
+                    )
 
         # --sources-only: dump sources.json after collect and exit
         if sources_only and stage_name == "collect":
@@ -363,7 +386,9 @@ def run_pipeline(
     _prune_artifacts(keep_days=30)
 
     if dry_run:
-        log.info(f"=== Dry run complete — digest saved to {_OUTPUT_DIR / 'last_digest.html'} ===")
+        log.info(
+            f"=== Dry run complete — digest saved to {_OUTPUT_DIR / 'last_digest.html'} ==="
+        )
     else:
         send_result = context.get("send_result", {})
         if send_result.get("success"):
@@ -378,8 +403,8 @@ def _stage_artifact_key(stage_name: str) -> str:
     return {
         "collect": "raw_sources",
         "compress": "compressed_transcripts",
-        "synthesize": "synthesis_output",       # Phase 0 (legacy)
-        "analyze_domain": "domain_analysis",    # Phase 1+
+        # "synthesize" removed — was Phase 0 legacy, replaced by analyze_domain + cross_domain
+        "analyze_domain": "domain_analysis",  # Phase 1+
         "prepare_calendar": "calendar",
         "prepare_weather": "weather",
         "prepare_spiritual": "spiritual",
@@ -397,14 +422,21 @@ def _empty_stage_output(stage_name: str) -> dict:
     """Return safe empty outputs for a failed non-critical stage."""
     return {
         "compress": {"compressed_transcripts": []},
-        "seams": {"seam_data": {
-            "contested_narratives": [], "coverage_gaps": [],
-            "key_assumptions": [], "seam_count": 0, "quiet_day": True,
-        }},
+        "seams": {
+            "seam_data": {
+                "contested_narratives": [],
+                "coverage_gaps": [],
+                "key_assumptions": [],
+                "seam_count": 0,
+                "quiet_day": True,
+            }
+        },
         "prepare_weather": {"weather": {}},
         "prepare_spiritual": {"spiritual": {}},
         "prepare_local": {"local_items": []},
-        "anomaly": {"anomaly_report": {"anomalies": [], "checks_run": 0, "anomaly_count": 0}},
+        "anomaly": {
+            "anomaly_report": {"anomalies": [], "checks_run": 0, "anomaly_count": 0}
+        },
         "briefing_packet": {"briefing_packet": {}},
     }.get(stage_name, {})
 
@@ -413,26 +445,34 @@ def _empty_stage_output(stage_name: str) -> dict:
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Morning Digest v2 pipeline")
     parser.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Run full pipeline but save HTML to output/ instead of sending email",
     )
     parser.add_argument(
-        "--sources-only", action="store_true",
+        "--sources-only",
+        action="store_true",
         help="Collect sources and dump to output/sources.json; skip LLM and email",
     )
     parser.add_argument(
-        "--force-friday", action="store_true",
+        "--force-friday",
+        action="store_true",
         help="Force Friday mode (weekend reads) regardless of actual day",
     )
     parser.add_argument(
-        "--lookback-hours", type=int, default=None,
+        "--lookback-hours",
+        type=int,
+        default=None,
         help="Override YouTube lookback_hours (e.g. 120 to catch older videos)",
     )
     parser.add_argument(
-        "--stage", metavar="NAME", default=None,
+        "--stage",
+        metavar="NAME",
+        default=None,
         help="Re-run from this stage onwards, loading prior stage artifacts from disk",
     )
     args = parser.parse_args()
