@@ -399,8 +399,8 @@ EMAIL_TEMPLATE = _env.from_string("""\
   {% endif %}
 
   <!-- WEATHER -->
-  {% if weather_html %}
-  <div class="bar" style="padding:12px 32px;">{{ weather_html }}</div>
+   {% if weather_html %}
+   <div class="bar" style="padding:12px 32px;">{{ weather_html|safe }}</div>
   {% elif weather and weather.current_temp_f is not none %}
   <div class="bar">
     <span>{{ weather.city }}, {{ weather.state }} — {{ weather.condition }}{% if weather.aqi %} · AQI {{ weather.aqi }} ({{ weather.aqi_label }}){% endif %}</span>
