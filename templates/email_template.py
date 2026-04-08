@@ -474,10 +474,24 @@ EMAIL_TEMPLATE = _env.from_string("""\
   </div>
   {% endif %}
 
-  <!-- DEEP DIVES -->
-  {% if deep_dives %}
-  <div class="section">
-    <h2 class="sec-label">Deep Dives</h2>
+   <!-- WORTH READING -->
+   {% if weekend_reads %}
+   <div class="section">
+     <h2 class="sec-label">Worth Reading</h2>
+     {% for r in weekend_reads %}
+     <div class="weekend-item">
+       <div class="wk-title"><a href="{{ r.url }}">{{ r.title }}</a></div>
+       <div class="wk-meta">{{ r.source }} · {{ r.read_time }}</div>
+       <div class="wk-desc">{{ r.description }}</div>
+     </div>
+     {% endfor %}
+   </div>
+   {% endif %}
+
+   <!-- DEEP DIVES -->
+   {% if deep_dives %}
+   <div class="section">
+     <h2 class="sec-label">Deep Dives</h2>
     {% for dive in deep_dives %}
     <div class="card">
       <h3 class="card-hl">{{ dive.headline }}</h3>
@@ -553,21 +567,7 @@ EMAIL_TEMPLATE = _env.from_string("""\
   </div>
   {% endif %}
 
-  <!-- WEEKEND READS (Friday only) -->
-  {% if weekend_reads %}
-  <div class="section">
-    <h2 class="sec-label">Weekend Reading · Friday Edition</h2>
-    {% for r in weekend_reads %}
-    <div class="weekend-item">
-      <div class="wk-title"><a href="{{ r.url }}">{{ r.title }}</a></div>
-      <div class="wk-meta">{{ r.source }} · {{ r.read_time }}</div>
-      <div class="wk-desc">{{ r.description }}</div>
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  <!-- KEY ASSUMPTIONS CHECK -->
+   <!-- KEY ASSUMPTIONS CHECK -->
   {% if key_assumptions %}
   <div class="section">
     <h2 class="sec-label">Key Assumptions Check</h2>
