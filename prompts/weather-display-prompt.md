@@ -1,107 +1,196 @@
-# Weather Display Implementation — Sparkline B2 with AQI Strip
+# Weather Display Module — Implementation Guide
 
-## What This Is
+## Status: COMPLETE (Phases 0–4)
 
-Implement a 7-day weather forecast SVG display for the Morning Digest email briefing. The display is a single inline SVG embedded in an HTML email. It must render correctly in email clients (Gmail, Apple Mail, Proton Mail).
+This document describes the implemented weather display system. All code is in production.
 
-## Visual Design Specification
+## Architecture Overview
 
-The display has four vertical zones, top to bottom:
+The weather module consists of four components:
 
-### Zone 1: Header (text, not SVG)
-- Location, current temp, current condition, current AQI, wind, humidity
-- Example: `Logan, UT · 49°F Clear · AQI 26 (Good) · Wind calm · Humidity 54%`
-- Right-aligned: current date
-- When current AQI is Unhealthy (151) or worse, display a one-sentence editorial comment
-  on the line below the header, using Utah DEQ action level language:
-  - 151–200 Unhealthy (Red): "Red Action Day — everyone should limit prolonged outdoor activity."
-  - 201–300 Very Unhealthy (Purple): "Purple Action Day — avoid prolonged outdoor activity; sensitive groups should stay indoors."
-  - 301+ Hazardous (Maroon): "Maroon Action Day — Hazardous. Everyone should avoid all outdoor activity."
-  - Style this line in the AQI category color (see Zone 3 palette) so it draws the eye.
+1. **Data Layer** (`sources/weather.py`) — Fetches from NWS (primary) with Open-Meteo fallback, AirNow AQI, NOAA normals/records
+2. **SVG Renderer** (`modules/weather_display.py`) — `render_weather_html(weather, config) -> str`
+3. **Pipeline Stage** (`stages/prepare_weather.py`) — Calls renderer, returns `{"weather": ..., "weather_html": ...}`
+4. **Template Integration** (`templates/email_template.py`) — Embeds `weather_html` with `{% if weather_html %}` fallback
 
-### Zone 2: Temperature Chart (SVG, ~120px tall)
-Three background layers (bottom to top):
-1. **Record range band**: Faint white/transparent rectangle spanning the daily record high to record low for the 7-day window. Label right edge with `REC` markers.
-2. **Normal range band**: Green-tinted rectangle spanning the daily normal high to normal low. Label right edge with normal values (e.g., `57°n`, `33°n`).
-3. **Forecast band**: Semi-transparent fill between the high and low lines.
+## File Structure
 
-Two data lines:
-- **High line**: Solid, warm amber (#d09050), 2px, with dots at each day and temperature labels above each dot.
-- **Low line**: Dashed, cool blue (#5a7aa0), 1.5px, with dots and temperature labels below each dot.
-
-X-axis: 7 equally-spaced day positions. Y-axis: left side, temperature scale with 4-5 gridlines.
-
-### Zone 3: AQI Strip (SVG, ~10px tall)
-- One colored rectangle per day, colored by EPA AQI category:
-  - 0-50 Good: #00e400, low opacity (~0.15)
-  - 51-100 Moderate: #ffff00, opacity ~0.3
-  - 101-150 USG: #ff7e00, opacity ~0.45
-  - 151-200 Unhealthy: #ff0000, opacity ~0.5
-  - 201-300 Very Unhealthy: #8f3f97, opacity ~0.55
-  - 301+ Hazardous: #7e0023, opacity ~0.6
-- AQI numeric value as text INSIDE each colored rectangle, colored to match but lighter for readability.
-- Left label: `AQI` in small monospace.
-- When AQI is Good all week, the strip should be subtle (thin, low opacity) but still present.
-- When any day is Moderate or worse, increase strip height from 6px to 10px for the whole row.
-
-### Zone 4: Precipitation Bars (SVG, variable height, growing upward from baseline)
-- Bar height proportional to precipitation probability (0-100%).
-- Bar gradient by precipitation type:
-  - **Rain only**: Blue gradient (#5b9bd5), bottom-opaque to top-transparent.
-  - **Thunderstorm**: Blue-to-purple-to-amber gradient with faint amber (#c8a44a) stroke. Add ⚡ marker below bar.
-  - **Snow**: Blue gradient with white/ice tint (#a0d4f0). Add ❄ marker below bar.
-  - **Rain/snow mix**: Split gradient, blue lower half transitioning to ice-white upper half. Add 🌨 or `mix` label.
-  - **Freezing rain**: Blue gradient with red-orange (#e06040) stroke (danger signal). Add `frz` label.
-- Probability percentage label above each bar.
-- Days with 0% probability: no bar, no label.
-
-### Zone 5: Day Labels and Conditions (SVG text)
-- Day abbreviation in monospace: `TUE`, `WED`, etc.
-- Condition summary below in sans-serif: `Sunny`, `Shwrs PM`, `Snow Lkly`, etc.
-
-## Legend
-Render a small legend row between header and SVG with colored swatches for: Forecast Hi, Forecast Lo, Normal range, Record range, Precip, ⚡Tstorm, AQI scale.
-
-## Typography
-- Labels and data: `JetBrains Mono` (monospace), sizes 7-9px in SVG.
-- Conditions: `DM Sans` (sans-serif), size 7px.
-- Import both via Google Fonts in the HTML wrapper.
-
-## Color Palette (dark theme for email)
-- Background: #0f0f12
-- Card border: #252528
-- Grid lines: #1e1e22
-- Label text: #555 (secondary), #444 (tertiary)
-- High line: #d09050
-- Low line: #5a7aa0
-- Normal band: rgba(100,160,100,0.18) to rgba(100,160,100,0.06)
-- Record band: rgba(255,255,255,0.04) to rgba(255,255,255,0.01)
-- Precip blue: #5b9bd5
-- AQI: EPA standard colors listed above
-
-## Data Sources
-
-### Temperature Forecast
-**Primary: NWS API (free, no key required)**
-- Endpoint: `https://api.weather.gov/points/41.7369,-111.8348` → follow `forecast` link
-- Returns 14 periods (day/night pairs for 7 days) with temperature, shortForecast, detailedForecast, probabilityOfPrecipitation, windSpeed, windDirection.
-- Parse `shortForecast` for condition type (contains keywords like "Sunny", "Showers", "Snow", "Thunderstorms").
-- Parse `detailedForecast` for timing info ("after noon", "before 11pm", "mainly in the morning").
-- Rate limit: be polite, cache aggressively. Set `User-Agent` header to identify the application per NWS API policy.
-
-**Fallback: Open-Meteo (free, no key)**
-- Endpoint: `https://api.open-meteo.com/v1/forecast?latitude=41.7369&longitude=-111.8348&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,snowfall_sum,weathercode&temperature_unit=fahrenheit&timezone=America/Denver`
-- Provides precipitation_sum (mm) for intensity and snowfall_sum for snow detection.
-- Weather codes map to condition types (WMO standard).
-
-### Normal Temperatures
-**Primary: Open-Meteo Climate API**
-- Endpoint: `https://climate-api.open-meteo.com/v1/climate?latitude=41.7369&longitude=-111.8348&daily=temperature_2m_max_mean,temperature_2m_min_mean&start_date=YYYY-MM-DD&end_date=YYYY-MM-DD&models=EC_Earth3P_HR&temperature_unit=fahrenheit`
-- Query for the specific 7-day date range using climatological model.
-
-**Fallback: Hardcoded monthly normals for Logan (NOAA 1991-2020)**
-Use these as fallback if the API is unavailable. Interpolate linearly between months:
 ```
+sources/
+  weather.py            # Data fetching, caching, precip classification, normals
+modules/
+  weather_display.py    # SVG rendering, HTML generation
+stages/
+  prepare_weather.py    # Pipeline stage wrapper
+tests/
+  fixtures/
+    weather_clear.json
+    weather_inversion.json
+    weather_snow.json
+    weather_thunderstorm.json
+    weather_mixed.json
+    weather_minimal.json
+    weather_missing_aqi.json
+  test_weather_classify.py
+  test_weather_display.py
+  test_weather_integration.py
+```
+
+## Data Layer (`sources/weather.py`)
+
+### Public API
+```python
+def fetch_weather(config: dict) -> dict:
+    """Returns dict with keys:
+    current_temp_f, condition, wind_mph, wind_direction, humidity,
+    today_high_f, today_low_f, forecast: [day_dicts],
+    city, state, aqi, aqi_label, pm2_5, pm10,
+    aqi_forecast: {date_str: {aqi, aqi_label}},
+    normals: [{date, normal_hi, normal_lo, record_hi, record_lo}]
+    """
+```
+
+### Precipitation Classification
+```python
+def _classify_precip(short_forecast, detailed_forecast, temp_hi, temp_lo) -> str:
+    """Returns: 'none', 'rain', 'snow', 'thunderstorm', 'mix', 'freezing_rain'"""
+
+def _extract_precip_timing(detailed) -> str:
+    """Returns: '', 'AM', 'PM', 'eve', 'night'"""
+```
+
+### Normals & Records
+- NOAA 1991-2020 normals hardcoded for Logan, UT (month index 1-12)
+- Linear interpolation between 15th of each month for daily resolution
+- Year-boundary handling (December → January)
+
+### Caching
+- JSON files in `cache/weather/`
+- 2hr TTL for NWS forecast, 1hr TTL for AQI data
+- 24hr TTL for NWS points endpoint
+
+## SVG Renderer (`modules/weather_display.py`)
+
+### Public API
+```python
+def render_weather_html(weather: dict, config: dict) -> str:
+    """Returns complete HTML block (header + legend + SVG) for embedding.
+    
+    Fallback chain:
+    - empty weather → ""
+    - insufficient data → text-only header
+    - SVG exception → text-only fallback
+    """
+```
+
+### SVG Layout (5 zones)
+- **Zone 1**: Header div (location, temp, condition, AQI, wind, humidity)
+- **Zone 2**: Temperature chart (record band, normal band, forecast fill, high/low lines)
+- **Zone 3**: AQI strip (EPA-colored daily bars, `--` for missing data)
+- **Zone 4**: Precipitation bars (type-specific gradients, probability labels, emoji markers)
+- **Zone 5**: Day labels (abbreviations + condition summaries)
+
+### Key Constants
+```python
+SVG_WIDTH = 640
+SVG_HEIGHT = 230
+ZONE2_TOP = 8
+ZONE2_BOTTOM = 128
+ZONE3_Y = 133
+ZONE4_BASELINE = 190
+ZONE5_Y = 194
+DAY_COUNT = 7
+DAY_SPACING = (SVG_WIDTH - 60) / DAY_COUNT
+DAY_START_X = 50
+```
+
+### AQI Colors (EPA regulatory)
+| Category | Color | Opacity |
+|----------|-------|---------|
+| Good | #00e400 | 0.15 |
+| Moderate | #ffff00 | 0.30 |
+| USG | #ff7e00 | 0.45 |
+| Unhealthy | #ff0000 | 0.50 |
+| Very Unhealthy | #8f3f97 | 0.55 |
+| Hazardous | #7e0023 | 0.60 |
+
+### Precipitation Gradients
+| Type | Colors | Marker |
+|------|--------|--------|
+| rain | #5b9bd5 → transparent | — |
+| thunderstorm | #5b9bd5 → #8f3f97 → #c8a44a | ⚡ |
+| snow | #a0d4f0 → transparent | ❄ |
+| mix | #5b9bd5 → #a0d4f0 | 🌨 |
+| freezing_rain | #5b9bd5 → #e06040 | frz |
+
+## Pipeline Integration
+
+### prepare_weather stage
+```python
+def run(context, config, **kwargs) -> dict:
+    """Input: context["raw_sources"]["weather"]
+    Output: {"weather": <dict>, "weather_html": <str>}
+    """
+```
+
+### assemble stage
+- Receives `weather_html` from context
+- Wraps in `Markup()` to bypass Jinja2 autoescape
+- Passes to `render_email(template_data)`
+
+### email_template.py
+```jinja2
+{% if weather_html %}
+  {{ weather_html }}
+{% elif weather %}
+  <p>{{ weather.city }}, {{ weather.state }} — {{ weather.current_temp_f }}°F {{ weather.condition }}</p>
+{% endif %}
+```
+
+## Configuration
+
+```yaml
+weather:
+  enabled: true
+  nws_station: "KLGU"
+  aqi_strip: true
+  record_band: true
+  normal_band: true
+```
+
+Environment variables:
+- `AIRNOW_API_KEY` — Optional, degrades to Open-Meteo AQI fallback
+
+## Testing
+
+Run all weather tests:
+```bash
+docker compose run --rm morning-digest python -m pytest tests/test_weather_*.py -v
+```
+
+109 tests across 3 test files:
+- `test_weather_classify.py` — Precip classification and timing extraction
+- `test_weather_display.py` — SVG rendering, helper functions, all 7 fixtures
+- `test_weather_integration.py` — Full pipeline: prepare_weather → assemble → validate
+
+## Email Compatibility
+
+- Inline SVG only — no `<use>`, `<symbol>`, or external references
+- `<defs>` with `<linearGradient>` works in modern email clients
+- Google Fonts imported via `@import` (JetBrains Mono + DM Sans)
+- Emoji characters (❄, ⚡, 🌨) render natively
+- CSS variables (`--wx-*`) defined in all 4 theme blocks
+
+## Cache Valley Edge Cases (Handled)
+
+1. **Winter Inversions** — Flat temps, degrading AQI over days
+2. **Rain/Snow Mix** — Split gradient bars with 🌨 marker
+3. **Freezing Rain** — Blue-to-red gradient with "frz" label
+4. **PM Thunderstorms** — ⚡ marker + "PM" timing label
+5. **Missing AQI** — Thin gray `--` bars (never assumes "Good")
+6. **Record-Breaking** — Dots highlighted when within 2°F of records
+7. **NWS Failure** — Silent fallback to Open-Meteo
+8. **All Sources Fail** — Text-only fallback instead of broken SVG
 Month  Normal Hi  Normal Lo
 Jan    28.8       14.0
 Feb    31.5       17.8

@@ -12,7 +12,7 @@ Every morning at 6:00 AM MT, this container:
    - YouTube analysis channels (yt-dlp — transcripts from configured channels, no API key)
    - RSS feeds (25+ categorized feeds: non-western press, defense/military, geopolitics, AI/tech, economics, cybersecurity, and more)
    - Local news RSS (Cache Valley Daily, Herald Journal)
-   - Open-Meteo weather (Cache Valley forecast, no key needed)
+    - NWS weather (primary) with Open-Meteo fallback, AirNow AQI, NOAA normals/records
    - Finnhub market quotes (SPY, DIA, XAR, XLE)
    - Come Follow Me lesson schedule (LDS)
 
@@ -20,7 +20,7 @@ Every morning at 6:00 AM MT, this container:
    - **collect** — Fetches all sources (RSS, YouTube transcripts, weather, markets, CFM)
    - **compress** — Pre-compresses YouTube transcripts to ~400–800 word summaries (Kimi K2.5)
    - **analyze_domain** — Four specialist desks: geopolitics, defense/space, AI/tech, economics (Kimi K2.5)
-   - **prepare_*** — Calendar, weather, spiritual, local news enrichment passes
+    - **prepare_*** — Calendar, weather (SVG display), spiritual, local news enrichment passes
    - **seams** — Contested narratives, coverage gaps, key assumptions detection (Claude Sonnet)
    - **cross_domain** — Editor-in-chief synthesis: cross-domain connections, deep dive selection and writing, weekend reads on Fridays (Claude Sonnet)
    - **assemble** — Renders HTML digest from all stage outputs
@@ -277,6 +277,32 @@ The digest applies different editorial treatment to each category:
 | `perspective-diversity` | "Stress test" layer — surface only when contradicting consensus |
 | `cyber` | Cybersecurity |
 
+### Weather Display
+
+The weather module renders an inline SVG forecast display in the email with five zones:
+
+1. **Header** — Location, current temp, condition, AQI, wind, humidity. AQI Action Day alerts shown when AQI ≥ 151.
+2. **Temperature Chart** — 7-day high/low lines with record range band, normal range band, and forecast fill.
+3. **AQI Strip** — EPA-colored daily bars with numeric labels. Missing data shown as gray `--` bars.
+4. **Precipitation Bars** — Type-specific gradients (rain, snow, thunderstorm, mix, freezing rain) with probability labels and emoji markers.
+5. **Day Labels** — Day abbreviations and shortened condition summaries.
+
+```yaml
+weather:
+  enabled: true
+  nws_station: "KLGU"      # NWS observation station
+  aqi_strip: true          # Show AQI strip in SVG
+  record_band: true        # Show historical record range
+  normal_band: true        # Show NOAA 1991-2020 normals
+```
+
+**Data sources** (in priority order):
+- NWS API (primary) — forecast + current observations
+- Open-Meteo (fallback) — forecast + AQI + climate normals
+- AirNow API (optional) — current + forecast AQI
+- NOAA 1991-2020 normals — hardcoded for Logan, UT with linear interpolation
+- JSON caching — 2hr TTL for forecasts, 1hr for AQI
+
 ### Adding YouTube channels
 
 Find the channel's handle from their YouTube URL (e.g. `youtube.com/@PerunAU` → handle is `PerunAU`):
@@ -380,6 +406,8 @@ morning-digest/
 │   ├── markets.py           # Finnhub quotes
 │   ├── rss_feeds.py         # Direct RSS + FreshRSS
 │   └── come_follow_me.py    # LDS lesson schedule
+├── modules/
+│   └── weather_display.py   # SVG weather chart renderer
 ├── templates/
 │   └── email_template.py    # Jinja2 HTML email template (dark mode support)
 ├── output/                  # Generated at runtime (volume-mounted in Docker)
@@ -388,6 +416,11 @@ morning-digest/
 │   ├── digest.log           # Pipeline log (30-day rotation)
 │   └── artifacts/
 │       └── YYYY-MM-DD/      # Per-run JSON artifacts for each stage
+├── tests/
+│   ├── fixtures/            # JSON test fixtures (weather scenarios)
+│   ├── test_weather_classify.py
+│   ├── test_weather_display.py
+│   └── test_weather_integration.py
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
