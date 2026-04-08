@@ -1,0 +1,24 @@
+{
+  "current_temp_f": 45,
+  "condition": "Overcast",
+  "wind_mph": 5,
+  "wind_direction": "E",
+  "humidity": 70,
+  "today_high_f": 48,
+  "today_low_f": 38,
+  "city": "Logan",
+  "state": "UT",
+  "aqi": null,
+  "aqi_label": "unavailable",
+  "pm2_5": null,
+  "pm10": null,
+  "aqi_forecast": {},
+  "forecast": [
+    {"date": "2026-05-01", "day_name": "Fri", "high_f": 48, "low_f": 38, "precip_chance": 20, "condition": "Overcast", "short_forecast": "Overcast", "detailed_forecast": "Overcast, with a high near 48.", "precip_type": "none", "precip_timing": "", "normal_hi": 59.4, "normal_lo": 38.5, "record_hi": 93, "record_lo": 18},
+    {"date": "2026-05-02", "day_name": "Sat", "high_f": 52, "low_f": 40, "precip_chance": 30, "condition": "Partly cloudy", "short_forecast": "Partly Cloudy", "detailed_forecast": "Partly cloudy, with a high near 52.", "precip_type": "none", "precip_timing": "", "normal_hi": 59.6, "normal_lo": 38.7, "record_hi": 93, "record_lo": 19}
+  ],
+  "normals": [
+    {"date": "2026-05-01", "normal_hi": 59.4, "normal_lo": 38.5, "record_hi": 93, "record_lo": 18},
+    {"date": "2026-05-02", "normal_hi": 59.6, "normal_lo": 38.7, "record_hi": 93, "record_lo": 19}
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "current_temp_f": 38,
+  "condition": "Rain and snow",
+  "wind_mph": 10,
+  "wind_direction": "NW",
+  "humidity": 88,
+  "today_high_f": 40,
+  "today_low_f": 32,
+  "city": "Logan",
+  "state": "UT",
+  "aqi": 55,
+  "aqi_label": "Moderate",
+  "pm2_5": 14.2,
+  "pm10": 28.5,
+  "aqi_forecast": {
+    "2026-03-15": {"aqi": 55, "aqi_label": "Moderate"},
+    "2026-03-16": {"aqi": 48, "aqi_label": "Good"},
+    "2026-03-17": {"aqi": 42, "aqi_label": "Good"},
+    "2026-03-18": {"aqi": 65, "aqi_label": "Moderate"},
+    "2026-03-19": {"aqi": 78, "aqi_label": "Moderate"},
+    "2026-03-20": {"aqi": 52, "aqa_label": "Moderate"},
+    "2026-03-21": {"aqi": 38, "aqi_label": "Good"}
+  },
+  "forecast": [
+    {"date": "2026-03-15", "day_name": "Sun", "high_f": 40, "low_f": 32, "precip_chance": 70, "condition": "Rain and snow", "short_forecast": "Rain and Snow", "detailed_forecast": "Rain and snow before noon, then rain likely. Cloudy, with a high near 40.", "precip_type": "mix", "precip_timing": "AM", "normal_hi": 43.5, "normal_lo": 27.8, "record_hi": 78, "record_lo": -2},
+    {"date": "2026-03-16", "day_name": "Mon", "high_f": 42, "low_f": 30, "precip_chance": 40, "condition": "Chance snow", "short_forecast": "Chance Snow", "detailed_forecast": "A chance of snow in the morning, then partly cloudy. High near 42.", "precip_type": "snow", "precip_timing": "AM", "normal_hi": 43.8, "normal_lo": 28.1, "record_hi": 78, "record_lo": -1},
+    {"date": "2026-03-17", "day_name": "Tue", "high_f": 48, "low_f": 32, "precip_chance": 20, "condition": "Partly cloudy", "short_forecast": "Partly Cloudy", "detailed_forecast": "Partly cloudy, with a high near 48.", "precip_type": "none", "precip_timing": "", "normal_hi": 44.1, "normal_lo": 28.4, "record_hi": 79, "record_lo": 0},
+    {"date": "2026-03-18", "day_name": "Wed", "high_f": 45, "low_f": 34, "precip_chance": 50, "condition": "Chance rain", "short_forecast": "Chance Rain", "detailed_forecast": "A chance of rain after noon. Mostly cloudy, with a high near 45.", "precip_type": "rain", "precip_timing": "PM", "normal_hi": 44.4, "normal_lo": 28.7, "record_hi": 79, "record_lo": 1},
+    {"date": "2026-03-19", "day_name": "Thu", "high_f": 42, "low_f": 30, "precip_chance": 80, "condition": "Rain and snow", "short_forecast": "Rain/Snow", "detailed_forecast": "Rain and snow likely. Cloudy, with a high near 42. Snow accumulation around 1 inch possible.", "precip_type": "mix", "precip_timing": "", "normal_hi": 44.7, "normal_lo": 29.0, "record_hi": 80, "record_lo": 2},
+    {"date": "2026-03-20", "day_name": "Fri", "high_f": 38, "low_f": 28, "precip_chance": 60, "condition": "Snow likely", "short_forecast": "Snow Likely", "detailed_forecast": "Snow likely. Cloudy, with a high near 38.", "precip_type": "snow", "precip_timing": "", "normal_hi": 45.0, "normal_lo": 29.3, "record_hi": 80, "record_lo": 3},
+    {"date": "2026-03-21", "day_name": "Sat", "high_f": 44, "low_f": 30, "precip_chance": 10, "condition": "Mostly sunny", "short_forecast": "Mostly Sunny", "detailed_forecast": "Mostly sunny, with a high near 44.", "precip_type": "none", "precip_timing": "", "normal_hi": 45.3, "normal_lo": 29.6, "record_hi": 81, "record_lo": 4}
+  ],
+  "normals": [
+    {"date": "2026-03-15", "normal_hi": 43.5, "normal_lo": 27.8, "record_hi": 78, "record_lo": -2},
+    {"date": "2026-03-16", "normal_hi": 43.8, "normal_lo": 28.1, "record_hi": 78, "record_lo": -1},
+    {"date": "2026-03-17", "normal_hi": 44.1, "normal_lo": 28.4, "record_hi": 79, "record_lo": 0},
+    {"date": "2026-03-18", "normal_hi": 44.4, "normal_lo": 28.7, "record_hi": 79, "record_lo": 1},
+    {"date": "2026-03-19", "normal_hi": 44.7, "normal_lo": 29.0, "record_hi": 80, "record_lo": 2},
+    {"date": "2026-03-20", "normal_hi": 45.0, "normal_lo": 29.3, "record_hi": 80, "record_lo": 3},
+    {"date": "2026-03-21", "normal_hi": 45.3, "normal_lo": 29.6, "record_hi": 81, "record_lo": 4}
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "current_temp_f": 92,
+  "condition": "Partly cloudy",
+  "wind_mph": 15,
+  "wind_direction": "SW",
+  "humidity": 25,
+  "today_high_f": 95,
+  "today_low_f": 62,
+  "city": "Logan",
+  "state": "UT",
+  "aqi": 85,
+  "aqi_label": "Moderate",
+  "pm2_5": 22.1,
+  "pm10": 45.3,
+  "aqi_forecast": {
+    "2026-07-15": {"aqi": 85, "aqi_label": "Moderate"},
+    "2026-07-16": {"aqi": 92, "aqi_label": "Moderate"},
+    "2026-07-17": {"aqi": 78, "aqi_label": "Moderate"},
+    "2026-07-18": {"aqi": 65, "aqi_label": "Moderate"},
+    "2026-07-19": {"aqi": 55, "aqi_label": "Moderate"},
+    "2026-07-20": {"aqi": 48, "aqi_label": "Good"},
+    "2026-07-21": {"aqi": 42, "aqi_label": "Good"}
+  },
+  "forecast": [
+    {"date": "2026-07-15", "day_name": "Wed", "high_f": 95, "low_f": 62, "precip_chance": 10, "condition": "Mostly sunny", "short_forecast": "Mostly Sunny", "detailed_forecast": "Mostly sunny, with a high near 95.", "precip_type": "none", "precip_timing": "", "normal_hi": 83.3, "normal_lo": 55.4, "record_hi": 103, "record_lo": 35},
+    {"date": "2026-07-16", "day_name": "Thu", "high_f": 97, "low_f": 64, "precip_chance": 5, "condition": "Sunny", "short_forecast": "Sunny", "detailed_forecast": "Sunny, with a high near 97.", "precip_type": "none", "precip_timing": "", "normal_hi": 83.1, "normal_lo": 55.3, "record_hi": 103, "record_lo": 35},
+    {"date": "2026-07-17", "day_name": "Fri", "high_f": 93, "low_f": 63, "precip_chance": 40, "condition": "Chance thunderstorms", "short_forecast": "Chance T-storms", "detailed_forecast": "A chance of thunderstorms after noon. Partly cloudy, with a high near 93.", "precip_type": "thunderstorm", "precip_timing": "PM", "normal_hi": 82.9, "normal_lo": 55.2, "record_hi": 102, "record_lo": 35},
+    {"date": "2026-07-18", "day_name": "Sat", "high_f": 88, "low_f": 60, "precip_chance": 60, "condition": "Thunderstorms likely", "short_forecast": "T-storms Likely", "detailed_forecast": "Thunderstorms likely. Mainly in the afternoon. High near 88.", "precip_type": "thunderstorm", "precip_timing": "PM", "normal_hi": 82.7, "normal_lo": 55.1, "record_hi": 102, "record_lo": 34},
+    {"date": "2026-07-19", "day_name": "Sun", "high_f": 90, "low_f": 61, "precip_chance": 30, "condition": "Chance showers", "short_forecast": "Chance Showers", "detailed_forecast": "A chance of showers and thunderstorms in the evening. Partly cloudy, with a high near 90.", "precip_type": "thunderstorm", "precip_timing": "eve", "normal_hi": 82.5, "normal_lo": 55.0, "record_hi": 101, "record_lo": 34},
+    {"date": "2026-07-20", "day_name": "Mon", "high_f": 92, "low_f": 62, "precip_chance": 10, "condition": "Mostly sunny", "short_forecast": "Mostly Sunny", "detailed_forecast": "Mostly sunny, with a high near 92.", "precip_type": "none", "precip_timing": "", "normal_hi": 82.3, "normal_lo": 54.9, "record_hi": 101, "record_lo": 34},
+    {"date": "2026-07-21", "day_name": "Tue", "high_f": 94, "low_f": 63, "precip_chance": 5, "condition": "Sunny", "short_forecast": "Sunny", "detailed_forecast": "Sunny, with a high near 94.", "precip_type": "none", "precip_timing": "", "normal_hi": 82.1, "normal_lo": 54.8, "record_hi": 101, "record_lo": 33}
+  ],
+  "normals": [
+    {"date": "2026-07-15", "normal_hi": 83.3, "normal_lo": 55.4, "record_hi": 103, "record_lo": 35},
+    {"date": "2026-07-16", "normal_hi": 83.1, "normal_lo": 55.3, "record_hi": 103, "record_lo": 35},
+    {"date": "2026-07-17", "normal_hi": 82.9, "normal_lo": 55.2, "record_hi": 102, "record_lo": 35},
+    {"date": "2026-07-18", "normal_hi": 82.7, "normal_lo": 55.1, "record_hi": 102, "record_lo": 34},
+    {"date": "2026-07-19", "normal_hi": 82.5, "normal_lo": 55.0, "record_hi": 101, "record_lo": 34},
+    {"date": "2026-07-20", "normal_hi": 82.3, "normal_lo": 54.9, "record_hi": 101, "record_lo": 34},
+    {"date": "2026-07-21", "normal_hi": 82.1, "normal_lo": 54.8, "record_hi": 101, "record_lo": 33}
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "current_temp_f": 72,
+  "condition": "Clear",
+  "wind_mph": 8,
+  "wind_direction": "SW",
+  "humidity": 35,
+  "today_high_f": 75,
+  "today_low_f": 48,
+  "city": "Logan",
+  "state": "UT",
+  "aqi": 26,
+  "aqi_label": "Good",
+  "pm2_5": 6.2,
+  "pm10": 12.1,
+  "aqi_forecast": {
+    "2026-04-08": {"aqi": 26, "aqi_label": "Good"},
+    "2026-04-09": {"aqi": 32, "aqi_label": "Good"},
+    "2026-04-10": {"aqi": 45, "aqi_label": "Good"},
+    "2026-04-11": {"aqi": 38, "aqi_label": "Good"},
+    "2026-04-12": {"aqi": 29, "aqi_label": "Good"},
+    "2026-04-13": {"aqi": 31, "aqi_label": "Good"},
+    "2026-04-14": {"aqi": 27, "aqi_label": "Good"}
+  },
+  "forecast": [
+    {"date": "2026-04-08", "day_name": "Tue", "high_f": 75, "low_f": 48, "precip_chance": 0, "condition": "Sunny", "short_forecast": "Sunny", "detailed_forecast": "Sunny, with a high near 75.", "precip_type": "none", "precip_timing": "", "normal_hi": 48.6, "normal_lo": 30.9, "record_hi": 82, "record_lo": 10},
+    {"date": "2026-04-09", "day_name": "Wed", "high_f": 78, "low_f": 50, "precip_chance": 5, "condition": "Mostly sunny", "short_forecast": "Mostly Sunny", "detailed_forecast": "Mostly sunny, with a high near 78.", "precip_type": "none", "precip_timing": "", "normal_hi": 49.2, "normal_lo": 31.5, "record_hi": 82, "record_lo": 10},
+    {"date": "2026-04-10", "day_name": "Thu", "high_f": 72, "low_f": 46, "precip_chance": 10, "condition": "Partly cloudy", "short_forecast": "Partly Cloudy", "detailed_forecast": "Partly cloudy, with a high near 72.", "precip_type": "none", "precip_timing": "", "normal_hi": 49.8, "normal_lo": 32.1, "record_hi": 82, "record_lo": 11},
+    {"date": "2026-04-11", "day_name": "Fri", "high_f": 68, "low_f": 44, "precip_chance": 20, "condition": "Mostly cloudy", "short_forecast": "Mostly Cloudy", "detailed_forecast": "Mostly cloudy, with a high near 68.", "precip_type": "none", "precip_timing": "", "normal_hi": 50.4, "normal_lo": 32.7, "record_hi": 83, "record_lo": 12},
+    {"date": "2026-04-12", "day_name": "Sat", "high_f": 65, "low_f": 42, "precip_chance": 30, "condition": "Chance rain", "short_forecast": "Chance Rain", "detailed_forecast": "A chance of rain after noon. Mostly cloudy, with a high near 65.", "precip_type": "rain", "precip_timing": "PM", "normal_hi": 51.0, "normal_lo": 33.3, "record_hi": 83, "record_lo": 13},
+    {"date": "2026-04-13", "day_name": "Sun", "high_f": 60, "low_f": 40, "precip_chance": 60, "condition": "Rain likely", "short_forecast": "Rain Likely", "detailed_forecast": "Rain likely. Cloudy, with a high near 60.", "precip_type": "rain", "precip_timing": "", "normal_hi": 51.6, "normal_lo": 33.9, "record_hi": 84, "record_lo": 14},
+    {"date": "2026-04-14", "day_name": "Mon", "high_f": 58, "low_f": 38, "precip_chance": 40, "condition": "Showers", "short_forecast": "Showers", "detailed_forecast": "Showers in the morning, then partly sunny. High near 58.", "precip_type": "rain", "precip_timing": "AM", "normal_hi": 52.2, "normal_lo": 34.5, "record_hi": 84, "record_lo": 15}
+  ],
+  "normals": [
+    {"date": "2026-04-08", "normal_hi": 48.6, "normal_lo": 30.9, "record_hi": 82, "record_lo": 10},
+    {"date": "2026-04-09", "normal_hi": 49.2, "normal_lo": 31.5, "record_hi": 82, "record_lo": 10},
+    {"date": "2026-04-10", "normal_hi": 49.8, "normal_lo": 32.1, "record_hi": 82, "record_lo": 11},
+    {"date": "2026-04-11", "normal_hi": 50.4, "normal_lo": 32.7, "record_hi": 83, "record_lo": 12},
+    {"date": "2026-04-12", "normal_hi": 51.0, "normal_lo": 33.3, "record_hi": 83, "record_lo": 13},
+    {"date": "2026-04-13", "normal_hi": 51.6, "normal_lo": 33.9, "record_hi": 84, "record_lo": 14},
+    {"date": "2026-04-14", "normal_hi": 52.2, "normal_lo": 34.5, "record_hi": 84, "record_lo": 15}
+  ]
+}

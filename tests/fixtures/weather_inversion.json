@@ -1,0 +1,42 @@
+{
+  "current_temp_f": 28,
+  "condition": "Fog",
+  "wind_mph": 2,
+  "wind_direction": "S",
+  "humidity": 92,
+  "today_high_f": 32,
+  "today_low_f": 26,
+  "city": "Logan",
+  "state": "UT",
+  "aqi": 175,
+  "aqi_label": "Unhealthy",
+  "pm2_5": 85.3,
+  "pm10": 120.5,
+  "aqi_forecast": {
+    "2026-01-15": {"aqi": 155, "aqi_label": "Unhealthy"},
+    "2026-01-16": {"aqi": 175, "aqi_label": "Unhealthy"},
+    "2026-01-17": {"aqi": 190, "aqi_label": "Unhealthy"},
+    "2026-01-18": {"aqi": 165, "aqi_label": "Unhealthy"},
+    "2026-01-19": {"aqi": 95, "aqi_label": "Moderate"},
+    "2026-01-20": {"aqi": 45, "aqi_label": "Good"},
+    "2026-01-21": {"aqi": 38, "aqi_label": "Good"}
+  },
+  "forecast": [
+    {"date": "2026-01-15", "day_name": "Thu", "high_f": 32, "low_f": 26, "precip_chance": 0, "condition": "Fog", "short_forecast": "Fog", "detailed_forecast": "Fog. Cloudy, with a high near 32.", "precip_type": "none", "precip_timing": "", "normal_hi": 29.4, "normal_lo": 14.6, "record_hi": 60, "record_lo": -25},
+    {"date": "2026-01-16", "day_name": "Fri", "high_f": 31, "low_f": 25, "precip_chance": 0, "condition": "Fog", "short_forecast": "Fog", "detailed_forecast": "Fog. Cloudy, with a high near 31.", "precip_type": "none", "precip_timing": "", "normal_hi": 29.5, "normal_lo": 14.7, "record_hi": 60, "record_lo": -25},
+    {"date": "2026-01-17", "day_name": "Sat", "high_f": 30, "low_f": 24, "precip_chance": 10, "condition": "Mostly cloudy", "short_forecast": "Mostly Cloudy", "detailed_forecast": "Mostly cloudy, with a high near 30.", "precip_type": "none", "precip_timing": "", "normal_hi": 29.6, "normal_lo": 14.8, "record_hi": 60, "record_lo": -24},
+    {"date": "2026-01-18", "day_name": "Sun", "high_f": 33, "low_f": 27, "precip_chance": 30, "condition": "Chance snow", "short_forecast": "Chance Snow", "detailed_forecast": "A chance of snow after noon. Cloudy, with a high near 33.", "precip_type": "snow", "precip_timing": "PM", "normal_hi": 29.7, "normal_lo": 14.9, "record_hi": 61, "record_lo": -24},
+    {"date": "2026-01-19", "day_name": "Mon", "high_f": 35, "low_f": 22, "precip_chance": 60, "condition": "Snow likely", "short_forecast": "Snow Likely", "detailed_forecast": "Snow likely. Cloudy, with a high near 35.", "precip_type": "snow", "precip_timing": "", "normal_hi": 29.8, "normal_lo": 15.0, "record_hi": 61, "record_lo": -23},
+    {"date": "2026-01-20", "day_name": "Tue", "high_f": 30, "low_f": 18, "precip_chance": 40, "condition": "Snow showers", "short_forecast": "Snow Showers", "detailed_forecast": "Snow showers in the morning, then partly cloudy. High near 30.", "precip_type": "snow", "precip_timing": "AM", "normal_hi": 29.9, "normal_lo": 15.1, "record_hi": 61, "record_lo": -23},
+    {"date": "2026-01-21", "day_name": "Wed", "high_f": 28, "low_f": 15, "precip_chance": 0, "condition": "Mostly clear", "short_forecast": "Mostly Clear", "detailed_forecast": "Mostly clear, with a high near 28.", "precip_type": "none", "precip_timing": "", "normal_hi": 30.0, "normal_lo": 15.2, "record_hi": 62, "record_lo": -22}
+  ],
+  "normals": [
+    {"date": "2026-01-15", "normal_hi": 29.4, "normal_lo": 14.6, "record_hi": 60, "record_lo": -25},
+    {"date": "2026-01-16", "normal_hi": 29.5, "normal_lo": 14.7, "record_hi": 60, "record_lo": -25},
+    {"date": "2026-01-17", "normal_hi": 29.6, "normal_lo": 14.8, "record_hi": 60, "record_lo": -24},
+    {"date": "2026-01-18", "normal_hi": 29.7, "normal_lo": 14.9, "record_hi": 61, "record_lo": -24},
+    {"date": "2026-01-19", "normal_hi": 29.8, "normal_lo": 15.0, "record_hi": 61, "record_lo": -23},
+    {"date": "2026-01-20", "normal_hi": 29.9, "normal_lo": 15.1, "record_hi": 61, "record_lo": -23},
+    {"date": "2026-01-21", "normal_hi": 30.0, "normal_lo": 15.2, "record_hi": 62, "record_lo": -22}
+  ]
+}
