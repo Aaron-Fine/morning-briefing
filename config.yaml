@@ -109,8 +109,16 @@ youtube:
   lookback_hours: 48
 
 weather:
-  # Using Open-Meteo (free, no API key needed)
-  provider: "open-meteo"
+  # Primary: NWS API (free, no key required)
+  # Fallback: Open-Meteo (free, no key needed)
+  provider: "nws"
+  nws_station: "KLGU"  # Logan-Cache Airport
+  # Optional: AirNow API key for AQI forecast (register at airnowapi.org)
+  # Set AIRNOW_API_KEY in .env — degrades gracefully if absent
+  aqi_strip: true
+  record_band: true
+  normal_band: true
+  dark_theme: true
 
 markets:
   # Using Finnhub — set FINNHUB_API_KEY as env var

@@ -14,7 +14,7 @@ from jinja2 import Environment, BaseLoader
 # wrapped with markupsafe.Markup() by the caller AFTER sanitization — see stages/assemble.py.
 _env = Environment(loader=BaseLoader(), autoescape=True)
 
-EMAIL_TEMPLATE = _env.from_string('''\
+EMAIL_TEMPLATE = _env.from_string("""\
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -27,6 +27,7 @@ EMAIL_TEMPLATE = _env.from_string('''\
 </script>
 
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@400;500;600&display=swap');
   /* ── Light palette (default) ─────────────────────────────── */
   :root {
     --bg-page:    #e8e6e2;
@@ -70,6 +71,20 @@ EMAIL_TEMPLATE = _env.from_string('''\
     --tag-science-text:  #7e5109; --tag-science-bg:  #fef5e7;
     --tag-econ-text:     #1a5276; --tag-econ-bg:     #d4efdf;
     --tag-cyber-text:    #633974; --tag-cyber-bg:    #f5eef8;
+
+    /* Weather display */
+    --wx-bg:         #f7f5f0;
+    --wx-hi:         #d09050;
+    --wx-lo:         #5a7aa0;
+    --wx-normal:     rgba(100,160,100,0.18);
+    --wx-record:     rgba(255,255,255,0.04);
+    --wx-precip:     #5b9bd5;
+    --wx-snow:       #a0d4f0;
+    --wx-thunder:    #8f3f97;
+    --wx-frz:        #e06040;
+    --wx-grid:       #1e1e22;
+    --wx-label:      #555555;
+    --wx-label-dim:  #888888;
   }
 
   /* ── Dark palette — system preference (Proton Mail / Apple Mail) ── */
@@ -116,6 +131,20 @@ EMAIL_TEMPLATE = _env.from_string('''\
       --tag-science-text:  #e8b860; --tag-science-bg:  #281a06;
       --tag-econ-text:     #7ab4e8; --tag-econ-bg:     #0f2a3d;
       --tag-cyber-text:    #c89ae0; --tag-cyber-bg:    #221030;
+
+      /* Weather display */
+      --wx-bg:         #1c1a17;
+      --wx-hi:         #d09050;
+      --wx-lo:         #5a7aa0;
+      --wx-normal:     rgba(100,160,100,0.18);
+      --wx-record:     rgba(255,255,255,0.04);
+      --wx-precip:     #5b9bd5;
+      --wx-snow:       #a0d4f0;
+      --wx-thunder:    #8f3f97;
+      --wx-frz:        #e06040;
+      --wx-grid:       #1e1e22;
+      --wx-label:      #b0ada8;
+      --wx-label-dim:  #888582;
     }
   }
 
@@ -162,6 +191,20 @@ EMAIL_TEMPLATE = _env.from_string('''\
     --tag-science-text:  #e8b860; --tag-science-bg:  #281a06;
     --tag-econ-text:     #7ab4e8; --tag-econ-bg:     #0f2a3d;
     --tag-cyber-text:    #c89ae0; --tag-cyber-bg:    #221030;
+
+    /* Weather display */
+    --wx-bg:         #1c1a17;
+    --wx-hi:         #d09050;
+    --wx-lo:         #5a7aa0;
+    --wx-normal:     rgba(100,160,100,0.18);
+    --wx-record:     rgba(255,255,255,0.04);
+    --wx-precip:     #5b9bd5;
+    --wx-snow:       #a0d4f0;
+    --wx-thunder:    #8f3f97;
+    --wx-frz:        #e06040;
+    --wx-grid:       #1e1e22;
+    --wx-label:      #b0ada8;
+    --wx-label-dim:  #888582;
   }
 
   /* ── Light override — lets a dark-system user switch back ── */
@@ -207,6 +250,20 @@ EMAIL_TEMPLATE = _env.from_string('''\
     --tag-science-text:  #7e5109; --tag-science-bg:  #fef5e7;
     --tag-econ-text:     #1a5276; --tag-econ-bg:     #d4efdf;
     --tag-cyber-text:    #633974; --tag-cyber-bg:    #f5eef8;
+
+    /* Weather display */
+    --wx-bg:         #f7f5f0;
+    --wx-hi:         #d09050;
+    --wx-lo:         #5a7aa0;
+    --wx-normal:     rgba(100,160,100,0.18);
+    --wx-record:     rgba(255,255,255,0.04);
+    --wx-precip:     #5b9bd5;
+    --wx-snow:       #a0d4f0;
+    --wx-thunder:    #8f3f97;
+    --wx-frz:        #e06040;
+    --wx-grid:       #1e1e22;
+    --wx-label:      #555555;
+    --wx-label-dim:  #888888;
   }
 
   /* ── Layout ──────────────────────────────────────────────── */
@@ -342,7 +399,9 @@ EMAIL_TEMPLATE = _env.from_string('''\
   {% endif %}
 
   <!-- WEATHER -->
-  {% if weather and weather.current_temp_f is not none %}
+  {% if weather_html %}
+  <div class="bar" style="padding:12px 32px;">{{ weather_html }}</div>
+  {% elif weather and weather.current_temp_f is not none %}
   <div class="bar">
     <span>{{ weather.city }}, {{ weather.state }} — {{ weather.condition }}{% if weather.aqi %} · AQI {{ weather.aqi }} ({{ weather.aqi_label }}){% endif %}</span>
     <span class="bar-mono" style="float:right;">{{ weather.current_temp_f }}°F</span>
@@ -582,7 +641,7 @@ EMAIL_TEMPLATE = _env.from_string('''\
 
 </body>
 </html>
-''')
+""")
 
 
 def render_email(data: dict) -> str:

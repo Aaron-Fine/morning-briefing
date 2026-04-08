@@ -5,3 +5,4 @@ last_digest.html
 output/
 .DS_Store
 .claude/
+cache/weather/*.json

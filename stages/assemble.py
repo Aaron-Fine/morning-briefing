@@ -91,7 +91,9 @@ def _domain_item_to_deep_dive(item: dict) -> dict:
         "headline": item.get("headline", ""),
         "tag": item.get("tag", ""),  # preserved for anomaly detection
         "body": "\n".join(body_parts),
-        "why_it_matters": item.get("deep_dive_rationale", ""),  # rendered in callout box
+        "why_it_matters": item.get(
+            "deep_dive_rationale", ""
+        ),  # rendered in callout box
         "further_reading": item.get("links", []),
         "source_depth": item.get("source_depth", ""),
     }
@@ -134,7 +136,9 @@ def _build_from_domain_analysis(context: dict, config: dict) -> tuple[list, list
     return at_a_glance, deep_dives, market_context
 
 
-def run(context: dict, config: dict, model_config: dict | None = None, **kwargs) -> dict:
+def run(
+    context: dict, config: dict, model_config: dict | None = None, **kwargs
+) -> dict:
     """Assemble template data, render HTML, and return html + template_data artifacts."""
     seam_data = context.get("seam_data", {})
     raw_sources = context.get("raw_sources", {})
@@ -146,7 +150,9 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
         # Phase 3+: use editor-in-chief cross-domain synthesis output
         log.info("assemble: using cross_domain_output (Phase 3 mode)")
         xd = context["cross_domain_output"]
-        at_a_glance = [_cross_domain_item_to_glance(i) for i in xd.get("at_a_glance", [])]
+        at_a_glance = [
+            _cross_domain_item_to_glance(i) for i in xd.get("at_a_glance", [])
+        ]
         deep_dives_raw = xd.get("deep_dives", [])
         market_context = xd.get("market_context", "")
         weekend_reads = xd.get("weekend_reads", [])
@@ -154,8 +160,11 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
         spiritual = context.get("spiritual")
         if not spiritual:
             cfm = raw_sources.get("come_follow_me", {})
-            spiritual = {**cfm, "reflection": cfm.get("scripture_text", "")} if cfm else None
+            spiritual = (
+                {**cfm, "reflection": cfm.get("scripture_text", "")} if cfm else None
+            )
         weather = context.get("weather") or raw_sources.get("weather", {})
+        weather_html = context.get("weather_html", "")
         calendar = context.get("calendar", {})
         week_ahead = calendar.get("events", [])
         local_items = context.get("local_items") or raw_sources.get("local_news", [])
@@ -171,14 +180,19 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
         spiritual = context.get("spiritual")
         if not spiritual:
             cfm = raw_sources.get("come_follow_me", {})
-            spiritual = {**cfm, "reflection": cfm.get("scripture_text", "")} if cfm else None
+            spiritual = (
+                {**cfm, "reflection": cfm.get("scripture_text", "")} if cfm else None
+            )
         weather = context.get("weather") or raw_sources.get("weather", {})
+        weather_html = context.get("weather_html", "")
         calendar = context.get("calendar", {})
         week_ahead = calendar.get("events", [])
         local_items = context.get("local_items") or raw_sources.get("local_news", [])
 
     else:
-        log.error("assemble: no pipeline output found in context — producing empty digest")
+        log.error(
+            "assemble: no pipeline output found in context — producing empty digest"
+        )
         at_a_glance = []
         deep_dives_raw = []
         market_context = ""
@@ -187,13 +201,16 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
         local_items = []
         spiritual = None
         weather = raw_sources.get("weather", {})
+        weather_html = ""
 
     markets = raw_sources.get("markets", [])
 
     # Build source name lists for footer
     rss_names = [f["name"] for f in config.get("rss", {}).get("feeds", [])]
     local_names = [s["name"] for s in config.get("local_news", {}).get("sources", [])]
-    yt_names = [c["name"] for c in config.get("youtube", {}).get("analysis_channels", [])]
+    yt_names = [
+        c["name"] for c in config.get("youtube", {}).get("analysis_channels", [])
+    ]
     rss_source_names = ", ".join(rss_names + local_names) or "RSS feeds"
     yt_source_names = ", ".join(yt_names) if yt_names else ""
 
@@ -205,16 +222,24 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
             dive_copy["body"] = Markup(dive_copy["body"])
         deep_dives.append(dive_copy)
 
+    # Mark weather_html as safe (SVG display module generates trusted HTML)
+    if weather_html:
+        weather_html = Markup(weather_html)
+
     template_data = {
         "date_display": today.strftime("%A, %B %-d, %Y"),
         "generated_at": (
-            today.strftime("%-I:%M %p") + " "
-            + config.get("location", {}).get("timezone", "America/Denver").split("/")[-1]
+            today.strftime("%-I:%M %p")
+            + " "
+            + config.get("location", {})
+            .get("timezone", "America/Denver")
+            .split("/")[-1]
         ),
         "rss_source_names": rss_source_names,
         "yt_source_names": yt_source_names,
         "spiritual": spiritual,
         "weather": weather,
+        "weather_html": weather_html,
         "markets": markets,
         "at_a_glance": at_a_glance,
         "contested_narratives": seam_data.get("contested_narratives", []),

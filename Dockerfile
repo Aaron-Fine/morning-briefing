@@ -13,6 +13,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Create cache directory for weather data
+RUN mkdir -p /app/cache/weather
+
 # Copy application
 COPY . .
 
