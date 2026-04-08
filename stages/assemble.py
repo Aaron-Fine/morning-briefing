@@ -43,43 +43,37 @@ _TAG_LABELS = {
 }
 
 
-def _cross_domain_item_to_glance(item: dict) -> dict:
-    """Convert a cross-domain synthesis item to at_a_glance format."""
+def _item_to_glance(item: dict) -> dict:
+    """Convert a domain or cross-domain item to at_a_glance format.
+
+    Preserves facts, analysis, and cross_domain_note as separate fields so the
+    template can render them with distinct voice labels (SOURCES / ANALYSIS / THREAD).
+    Also builds a flat `context` string as a fallback for Phase 0 rendering.
+    """
     tag = item.get("tag", "")
-    body = item.get("facts", "")
+    facts = item.get("facts", "")
     analysis = item.get("analysis", "")
-    if analysis:
-        body = f"{body} {analysis}".strip()
-    cross_note = item.get("cross_domain_note")
+    cross_note = item.get("cross_domain_note", "")
+    parts = [p for p in [facts, analysis] if p]
     if cross_note:
-        body = f"{body} ({cross_note})".strip()
+        parts.append(f"({cross_note})")
     return {
         "tag": tag,
         "tag_label": item.get("tag_label") or _TAG_LABELS.get(tag, tag.capitalize()),
         "headline": item.get("headline", ""),
-        "context": body,
+        "facts": facts,
+        "analysis": analysis,
+        "cross_domain_note": cross_note,
+        "context": " ".join(parts),
         "links": item.get("links", []),
         "source_depth": item.get("source_depth", ""),
         "connection_hooks": item.get("connection_hooks", []),
     }
 
 
-def _domain_item_to_glance(item: dict) -> dict:
-    """Convert a domain analysis item to at_a_glance format."""
-    tag = item.get("tag", "")
-    body = item.get("facts", "")
-    analysis = item.get("analysis", "")
-    if analysis:
-        body = f"{body} {analysis}".strip()
-    return {
-        "tag": tag,
-        "tag_label": item.get("tag_label") or _TAG_LABELS.get(tag, tag.capitalize()),
-        "headline": item.get("headline", ""),
-        "context": body,
-        "links": item.get("links", []),
-        "source_depth": item.get("source_depth", ""),
-        "connection_hooks": item.get("connection_hooks", []),
-    }
+# Keep aliases so any future code that references the old names doesn't break silently.
+_cross_domain_item_to_glance = _item_to_glance
+_domain_item_to_glance = _item_to_glance
 
 
 def _domain_item_to_deep_dive(item: dict) -> dict:

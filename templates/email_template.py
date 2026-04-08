@@ -215,7 +215,7 @@ EMAIL_TEMPLATE = _env.from_string('''\
   .wrapper { max-width: 680px; margin: 0 auto; background: var(--bg-wrap); }
 
   /* Theme toggle bar — injected by JS, invisible in email clients */
-  .theme-bar { max-width: 680px; margin: 0 auto; padding: 8px 12px; text-align: right; background: var(--bg-page); }
+  .theme-bar { padding: 6px 32px; text-align: right; background: var(--bg-chrome); border-bottom: 1px solid rgba(255,255,255,0.05); }
   .theme-btn { font-family: 'Courier New', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; background: transparent; border: 1px solid var(--border); color: var(--text-muted); padding: 4px 10px; border-radius: 3px; cursor: pointer; }
   .theme-btn:hover { color: var(--text); border-color: var(--text-muted); }
 
@@ -264,6 +264,15 @@ EMAIL_TEMPLATE = _env.from_string('''\
   .tag-cyber    { color: var(--tag-cyber-text);    background: var(--tag-cyber-bg); }
   .scan-hl { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; line-height: 1.4; }
   .scan-ctx { font-size: 14px; color: var(--text-secondary); line-height: 1.45; }
+  .scan-ctx-block { margin-bottom: 6px; padding-left: 8px; border-left: 2px solid transparent; }
+  .scan-ctx-block:last-child { margin-bottom: 0; }
+  .scan-ctx-block-analysis { border-left-color: var(--border); }
+  .scan-ctx-block-thread   { border-left-color: var(--accent-seam); opacity: 0.9; }
+  .scan-voice { font-family: 'Courier New', monospace; font-size: 9px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; display: inline-block; min-width: 6.5ch; padding-right: 4px; vertical-align: baseline; }
+  .scan-voice-src      { color: var(--text-faint); }
+  .scan-voice-analysis { color: var(--text-muted); }
+  .scan-voice-thread   { color: var(--accent-seam); }
+  .aqi-warn { font-size: 13px; font-weight: 600; display: block; margin-top: 3px; }
   .scan-link { font-size: 13px; color: var(--link-subtle); margin-top: 4px; }
   .scan-link a { color: var(--link-subtle); text-decoration: none; border-bottom: 1px dotted var(--link-border); }
 
@@ -335,8 +344,11 @@ EMAIL_TEMPLATE = _env.from_string('''\
   <!-- WEATHER -->
   {% if weather and weather.current_temp_f is not none %}
   <div class="bar">
-    <span>{{ weather.city }}, {{ weather.state }} — {{ weather.condition }}</span>
+    <span>{{ weather.city }}, {{ weather.state }} — {{ weather.condition }}{% if weather.aqi %} · AQI {{ weather.aqi }} ({{ weather.aqi_label }}){% endif %}</span>
     <span class="bar-mono" style="float:right;">{{ weather.current_temp_f }}°F</span>
+    {% if weather.aqi and weather.aqi >= 151 %}
+    <span class="aqi-warn" style="color:{% if weather.aqi >= 301 %}#7e0023{% elif weather.aqi >= 201 %}#8f3f97{% else %}#d32f2f{% endif %};">{% if weather.aqi >= 301 %}Maroon Action Day — Hazardous air quality. Everyone should avoid all outdoor activity.{% elif weather.aqi >= 201 %}Purple Action Day — Very Unhealthy. Avoid prolonged outdoor activity; sensitive groups should stay indoors.{% else %}Red Action Day — Unhealthy air quality. Everyone should limit prolonged outdoor activity.{% endif %}</span>
+    {% endif %}
     {% if weather.forecast|length > 1 %}
     <br><span class="bar-detail">{% for day in weather.forecast[1:] %}{{ day.day_name }} {{ day.high_f }}°/{{ day.low_f }}° {{ day.condition }}{% if day.precip_chance >= 30 %} ({{ day.precip_chance }}%){% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</span>
     {% endif %}
@@ -371,7 +383,7 @@ EMAIL_TEMPLATE = _env.from_string('''\
         <span class="tag tag-{{ item.tag }}">{{ item.tag_label }}</span>
         <span class="scan-hl">{{ item.headline }}</span>
       </div>
-      <div class="scan-ctx">{{ item.context }}</div>
+      <div class="scan-ctx">{% if item.facts or item.analysis or item.cross_domain_note %}{% if item.facts %}<div class="scan-ctx-block"><span class="scan-voice scan-voice-src">Sources</span>{{ item.facts }}</div>{% endif %}{% if item.analysis %}<div class="scan-ctx-block scan-ctx-block-analysis"><span class="scan-voice scan-voice-analysis">Analysis</span>{{ item.analysis }}</div>{% endif %}{% if item.cross_domain_note %}<div class="scan-ctx-block scan-ctx-block-thread"><span class="scan-voice scan-voice-thread">Thread</span>{{ item.cross_domain_note }}</div>{% endif %}{% else %}{{ item.context }}{% endif %}</div>
       {% if item.links %}
       <div class="scan-link">
         {% for link in item.links %}
@@ -397,6 +409,33 @@ EMAIL_TEMPLATE = _env.from_string('''\
         {% if ctx %} — {{ ctx }}{% endif %}
       {% else %}
         {{ item }}
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- DEEP DIVES -->
+  {% if deep_dives %}
+  <div class="section">
+    <h2 class="sec-label">Deep Dives</h2>
+    {% for dive in deep_dives %}
+    <div class="card">
+      <h3 class="card-hl">{{ dive.headline }}</h3>
+      <div class="card-body">{{ dive.body }}</div>
+      {% if dive.why_it_matters %}
+      <div class="wim">
+        <div class="wim-label">Why It Matters</div>
+        <p>{{ dive.why_it_matters }}</p>
+      </div>
+      {% endif %}
+      {% if dive.further_reading %}
+      <div class="fr">
+        <div class="fr-label">Further Reading</div>
+        {% for fr in dive.further_reading %}
+        <a href="{{ fr.url }}">{{ fr.label or fr.title }}{% if fr.source %} <span class="src">— {{ fr.source }}</span>{% endif %}</a>
+        {% endfor %}
+      </div>
       {% endif %}
     </div>
     {% endfor %}
@@ -442,33 +481,6 @@ EMAIL_TEMPLATE = _env.from_string('''\
       {% endfor %}
     </div>
     {% endif %}
-  </div>
-  {% endif %}
-
-  <!-- DEEP DIVES -->
-  {% if deep_dives %}
-  <div class="section">
-    <h2 class="sec-label">Deep Dives</h2>
-    {% for dive in deep_dives %}
-    <div class="card">
-      <h3 class="card-hl">{{ dive.headline }}</h3>
-      <div class="card-body">{{ dive.body }}</div>
-      {% if dive.why_it_matters %}
-      <div class="wim">
-        <div class="wim-label">Why It Matters</div>
-        <p>{{ dive.why_it_matters }}</p>
-      </div>
-      {% endif %}
-      {% if dive.further_reading %}
-      <div class="fr">
-        <div class="fr-label">Further Reading</div>
-        {% for fr in dive.further_reading %}
-        <a href="{{ fr.url }}">{{ fr.label or fr.title }}{% if fr.source %} <span class="src">— {{ fr.source }}</span>{% endif %}</a>
-        {% endfor %}
-      </div>
-      {% endif %}
-    </div>
-    {% endfor %}
   </div>
   {% endif %}
 
@@ -524,7 +536,8 @@ EMAIL_TEMPLATE = _env.from_string('''\
 <!-- Browser-only toggle: injected by JS so it never appears as a dead button in email clients -->
 <script>
 (function() {
-  // Inject the toggle bar above the wrapper
+  // Inject the toggle bar inside the wrapper (respects max-width alignment)
+  var wrapper = document.querySelector('.wrapper');
   var bar = document.createElement('div');
   bar.className = 'theme-bar';
   var btn = document.createElement('button');
@@ -532,7 +545,11 @@ EMAIL_TEMPLATE = _env.from_string('''\
   btn.id = 'theme-toggle';
   btn.setAttribute('aria-label', 'Toggle colour theme');
   bar.appendChild(btn);
-  document.body.insertBefore(bar, document.body.firstChild);
+  if (wrapper) {
+    wrapper.insertBefore(bar, wrapper.firstChild);
+  } else {
+    document.body.insertBefore(bar, document.body.firstChild);
+  }
 
   var html = document.documentElement;
 

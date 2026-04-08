@@ -46,36 +46,88 @@ _TAG_LABELS = {
 # Keys are lowercase substrings; first match wins.
 _TAG_KEYWORDS: list[tuple[str, str]] = [
     # war / conflict
-    ("iran", "war"), ("israel", "war"), ("ukraine", "war"), ("russia", "war"),
-    ("military", "war"), ("combat", "war"), ("war", "war"), ("conflict", "war"),
-    ("attack", "war"), ("strike", "war"), ("missile", "war"), ("troops", "war"),
-    ("ceasefire", "war"), ("nato", "war"), ("hormuz", "war"), ("hostage", "war"),
+    ("iran", "war"),
+    ("israel", "war"),
+    ("ukraine", "war"),
+    ("russia", "war"),
+    ("military", "war"),
+    ("combat", "war"),
+    ("war", "war"),
+    ("conflict", "war"),
+    ("attack", "war"),
+    ("strike", "war"),
+    ("missile", "war"),
+    ("troops", "war"),
+    ("ceasefire", "war"),
+    ("nato", "war"),
+    ("hormuz", "war"),
+    ("hostage", "war"),
     # defense
-    ("defense", "defense"), ("pentagon", "defense"), ("f-35", "defense"),
-    ("f-15", "defense"), ("procurement", "defense"), ("dod", "defense"),
-    ("special forces", "defense"), ("recovery", "defense"), ("basing", "defense"),
+    ("defense", "defense"),
+    ("pentagon", "defense"),
+    ("f-35", "defense"),
+    ("f-15", "defense"),
+    ("procurement", "defense"),
+    ("dod", "defense"),
+    ("special forces", "defense"),
+    ("recovery", "defense"),
+    ("basing", "defense"),
     # space
-    ("space", "space"), ("lunar", "space"), ("orbit", "space"), ("satellite", "space"),
-    ("cislunar", "space"), ("launch", "space"), ("nasa", "space"),
+    ("space", "space"),
+    ("lunar", "space"),
+    ("orbit", "space"),
+    ("satellite", "space"),
+    ("cislunar", "space"),
+    ("launch", "space"),
+    ("nasa", "space"),
     # ai
-    ("ai", "ai"), ("llm", "ai"), ("artificial intelligence", "ai"),
-    ("machine learning", "ai"), ("openai", "ai"), ("anthropic", "ai"),
-    ("developer", "ai"), ("tooling", "ai"), ("model", "ai"),
+    ("ai", "ai"),
+    ("llm", "ai"),
+    ("artificial intelligence", "ai"),
+    ("machine learning", "ai"),
+    ("openai", "ai"),
+    ("anthropic", "ai"),
+    ("developer", "ai"),
+    ("tooling", "ai"),
+    ("model", "ai"),
     # tech
-    ("tech", "tech"), ("software", "tech"), ("cyber", "cyber"),
-    ("open source", "tech"), ("github", "tech"),
+    ("tech", "tech"),
+    ("software", "tech"),
+    ("cyber", "cyber"),
+    ("open source", "tech"),
+    ("github", "tech"),
     # cyber
-    ("cyber", "cyber"), ("hack", "cyber"), ("security breach", "cyber"),
-    ("ransomware", "cyber"), ("malware", "cyber"),
+    ("cyber", "cyber"),
+    ("hack", "cyber"),
+    ("security breach", "cyber"),
+    ("ransomware", "cyber"),
+    ("malware", "cyber"),
     # econ
-    ("econ", "econ"), ("market", "econ"), ("trade", "econ"), ("tariff", "econ"),
-    ("inflation", "econ"), ("fed", "econ"), ("gdp", "econ"), ("labor", "econ"),
-    ("wage", "econ"), ("energy", "econ"), ("oil", "econ"), ("food", "econ"),
-    ("supply chain", "econ"), ("wto", "econ"), ("imf", "econ"),
+    ("econ", "econ"),
+    ("market", "econ"),
+    ("trade", "econ"),
+    ("tariff", "econ"),
+    ("inflation", "econ"),
+    ("fed", "econ"),
+    ("gdp", "econ"),
+    ("labor", "econ"),
+    ("wage", "econ"),
+    ("energy", "econ"),
+    ("oil", "econ"),
+    ("food", "econ"),
+    ("supply chain", "econ"),
+    ("wto", "econ"),
+    ("imf", "econ"),
     # domestic / politics
-    ("trump", "domestic"), ("congress", "domestic"), ("senate", "domestic"),
-    ("white house", "domestic"), ("election", "domestic"), ("domestic", "domestic"),
-    ("administration", "domestic"), ("politics", "domestic"), ("gop", "domestic"),
+    ("trump", "domestic"),
+    ("congress", "domestic"),
+    ("senate", "domestic"),
+    ("white house", "domestic"),
+    ("election", "domestic"),
+    ("domestic", "domestic"),
+    ("administration", "domestic"),
+    ("politics", "domestic"),
+    ("gop", "domestic"),
 ]
 
 
@@ -92,6 +144,7 @@ def _normalize_tag(raw: str) -> str:
             return tag
     log.debug(f"cross_domain: unknown tag '{raw}' — defaulting to 'domestic'")
     return "domestic"
+
 
 _SYSTEM_PROMPT = """You are the editor-in-chief of Aaron's Morning Digest. You receive domain analyses from four specialist desks (geopolitics, defense/space, AI/tech, economics) and a quality-control review from a seam detection analyst. Your job is NOT to rewrite their work — it's to find connections they couldn't see from within their domain, select the day's deep dives, and weave the pieces into a coherent editorial product.
 
@@ -200,6 +253,7 @@ def _build_input(
     seam_data: dict,
     raw_sources: dict,
     previous_cross_domain: dict | None = None,
+    force_friday: bool = False,
 ) -> str:
     """Build the user content for the cross-domain synthesis prompt."""
     parts = []
@@ -229,15 +283,19 @@ def _build_input(
     # Previous-day continuity
     if previous_cross_domain:
         prev_glance_headlines = [
-            i.get("headline", "") for i in previous_cross_domain.get("at_a_glance", [])
+            i.get("headline", "")
+            for i in previous_cross_domain.get("at_a_glance", [])
             if i.get("headline")
         ]
         prev_dive_headlines = [
-            d.get("headline", "") for d in previous_cross_domain.get("deep_dives", [])
+            d.get("headline", "")
+            for d in previous_cross_domain.get("deep_dives", [])
             if d.get("headline")
         ]
         if prev_glance_headlines or prev_dive_headlines:
-            parts.append("\n=== CONTINUITY — Yesterday's digest included these stories ===")
+            parts.append(
+                "\n=== CONTINUITY — Yesterday's digest included these stories ==="
+            )
             if prev_glance_headlines:
                 parts.append("At a glance: " + " | ".join(prev_glance_headlines))
             if prev_dive_headlines:
@@ -249,8 +307,8 @@ def _build_input(
                 "If none of today's stories connect to yesterday, ignore this section entirely."
             )
 
-    # Friday: request weekend reads
-    if datetime.now().weekday() == 4:
+    # Friday: request weekend reads (also triggered by --force-friday CLI flag)
+    if force_friday or datetime.now().weekday() == 4:
         parts.append(
             "\n=== TODAY IS FRIDAY — ADD weekend_reads ===\n"
             "Select 3 substantial long-form pieces from the source data worth reading over the "
@@ -265,7 +323,9 @@ def _build_input(
     return "\n".join(parts)
 
 
-def run(context: dict, config: dict, model_config: dict | None = None, **kwargs) -> dict:
+def run(
+    context: dict, config: dict, model_config: dict | None = None, **kwargs
+) -> dict:
     """Run cross-domain synthesis and return the editorial product."""
     domain_analysis = context.get("domain_analysis", {})
     seam_data = context.get("seam_data", {})
@@ -275,16 +335,18 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
 
     # Check if we have domain analysis to work with
     has_items = any(
-        isinstance(v, dict) and v.get("items")
-        for v in domain_analysis.values()
+        isinstance(v, dict) and v.get("items") for v in domain_analysis.values()
     )
     if not has_items:
         log.warning("cross_domain: no domain analysis items — returning passthrough")
         return {"cross_domain_output": _empty_output(domain_analysis)}
 
     user_content = _build_input(
-        domain_analysis, seam_data, raw_sources,
+        domain_analysis,
+        seam_data,
+        raw_sources,
         context.get("previous_cross_domain"),
+        force_friday=kwargs.get("force_friday", False),
     )
 
     try:
@@ -342,9 +404,15 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
 
     # Validate URLs in at_a_glance, deep_dives, and weekend_reads
     for item in result["at_a_glance"]:
-        item["links"] = [lnk for lnk in item.get("links", []) if _url_allowed(lnk.get("url", ""))]
+        item["links"] = [
+            lnk for lnk in item.get("links", []) if _url_allowed(lnk.get("url", ""))
+        ]
     for dive in result["deep_dives"]:
-        dive["further_reading"] = [lnk for lnk in dive.get("further_reading", []) if _url_allowed(lnk.get("url", ""))]
+        dive["further_reading"] = [
+            lnk
+            for lnk in dive.get("further_reading", [])
+            if _url_allowed(lnk.get("url", ""))
+        ]
     for read in result["weekend_reads"]:
         if not _url_allowed(read.get("url", "")):
             read["url"] = ""
@@ -388,14 +456,18 @@ def _empty_output(domain_analysis: dict) -> dict:
         if item.get("analysis"):
             body_parts.append(f"<p>{item['analysis']}</p>")
         if item.get("deep_dive_rationale"):
-            body_parts.append(f"<p><em>Why this matters: {item['deep_dive_rationale']}</em></p>")
-        deep_dives.append({
-            "headline": item.get("headline", ""),
-            "body": "\n".join(body_parts),
-            "further_reading": item.get("links", []),
-            "source_depth": item.get("source_depth", ""),
-            "domains_bridged": [],
-        })
+            body_parts.append(
+                f"<p><em>Why this matters: {item['deep_dive_rationale']}</em></p>"
+            )
+        deep_dives.append(
+            {
+                "headline": item.get("headline", ""),
+                "body": "\n".join(body_parts),
+                "further_reading": item.get("links", []),
+                "source_depth": item.get("source_depth", ""),
+                "domains_bridged": [],
+            }
+        )
 
     return {
         "at_a_glance": at_a_glance,
