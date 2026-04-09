@@ -1,0 +1,361 @@
+{
+  "domain_analysis": {
+    "geopolitics": {
+      "items": [
+        {
+          "tag": "war",
+          "tag_label": "Conflict",
+          "headline": "China conducts large-scale amphibious drills near Taiwan as US carrier group transits South China Sea",
+          "facts": "Al Jazeera reports that China's Eastern Theater Command conducted joint exercises involving naval, air, and amphibious forces in waters surrounding Taiwan on April 3-4. The drills included simulated strikes on 'key targets' on the island, according to Chinese state media. SCMP reports that the USS Carl Vinson carrier strike group simultaneously transited the South China Sea, with the Pentagon confirming it was a 'routine passage' consistent with international law. Nikkei Asia notes that Japan's Self-Defense Forces scrambled fighters twice during the exercises in response to Chinese aircraft approaching the Yonaguni monitoring zone.",
+          "analysis": "My read: China is testing the operational tempo and response patterns of US and allied forces in the region while simultaneously signaling domestic resolve ahead of the 20th Party Congress preparatory meetings. The timing is notable — exercises during a routine US transit creates a deliberate juxtaposition that forces regional actors to choose sides in their public statements. Watch for Taiwan's response to the amphibious component specifically, as this represents an escalation beyond the air and naval drills that have become routine since 2022.",
+          "source_depth": "widely-reported",
+          "connection_hooks": [
+            {"entity": "USS Carl Vinson", "region": "South China Sea", "theme": "freedom-of-navigation", "policy": "defense-posture"},
+            {"entity": "PLA Eastern Theater Command", "region": "Taiwan Strait", "theme": "cross-strait-tensions", "policy": "military-exercises"},
+            {"entity": "Japan SDF", "region": "East China Sea", "theme": "regional-security-architecture", "policy": "defense-cooperation"}
+          ],
+          "links": [
+            {"url": "https://www.aljazeera.com/news/2026/4/4/china-amphibious-drills-taiwan", "label": "Al Jazeera"},
+            {"url": "https://www.reuters.com/world/asia-pacific/us-carrier-south-china-sea-2026-04-04/", "label": "Reuters"},
+            {"url": "https://spacenews.com/china-drills-regional-response/", "label": "SpaceNews"}
+          ],
+          "deep_dive_candidate": true,
+          "deep_dive_rationale": "The amphibious component is new and signals potential preparation for contingency operations beyond blockade scenarios. Combined with US carrier transit timing, this reveals escalating operational competition that affects defense procurement, alliance coordination, and regional economic stability."
+        },
+        {
+          "tag": "war",
+          "tag_label": "Conflict",
+          "headline": "Iran and Saudi Arabia resume direct talks on Yemen ceasefire framework",
+          "facts": "Dawn reports that Iranian and Saudi delegations met in Muscat on April 2 for the first direct bilateral talks on Yemen since the 2023 China-brokered rapprochement agreement. Al Jazeera confirms that Houthi representatives were not present at the Muscat meeting but were consulted separately by the Iranian delegation. The Hindu notes that India has quietly offered to participate in post-ceasefire reconstruction efforts, seeing an opportunity to counter Chinese influence in the region.",
+          "analysis": "My read: The Oman-mediated format suggests Saudi Arabia is seeking a face-saving exit from Yemen that doesn't appear to capitulate to Iranian demands. Iran's inclusion of Houthi consultation while keeping them out of the direct talks is a classic hedging strategy — maintaining leverage while appearing cooperative. The Indian offer to participate in reconstruction is the sleeper story here: it signals New Delhi's ambition to be a regional security player, not just an economic one.",
+          "source_depth": "corroborated",
+          "connection_hooks": [
+            {"entity": "Saudi Arabia", "region": "Middle East", "theme": "regional-de-escalation", "policy": "diplomacy"},
+            {"entity": "Iran", "region": "Middle East", "theme": "proxy-conflict-resolution", "policy": "foreign-policy"},
+            {"entity": "India", "region": "South Asia", "theme": "emerging-power-competition", "policy": "economic-statecraft"}
+          ],
+          "links": [
+            {"url": "https://www.dawn.com/news/iran-saudi-yemen-talks-muscat", "label": "Dawn"},
+            {"url": "https://www.thehindu.com/news/international/india-yemen-reconstruction-offer/article123456.ece", "label": "The Hindu"}
+          ],
+          "deep_dive_candidate": false,
+          "deep_dive_rationale": null
+        },
+        {
+          "tag": "war",
+          "tag_label": "Conflict",
+          "headline": "EU imposes new sanctions on Russian energy exports as Ukraine pushes for NATO membership timeline",
+          "facts": "Asia Times reports that the EU's 14th sanctions package targets Russian LNG exports and shipping insurance, with implementation expected by June 2026. The Atlantic notes internal disagreements between Germany and Poland over the timeline, with Berlin seeking a longer phase-out period. Adam Tooze writes that the sanctions' economic impact depends critically on whether India and Turkey continue to serve as re-export intermediaries — a question that remains unresolved.",
+          "analysis": "My read: The EU is caught between the political imperative to escalate pressure on Russia and the economic reality that European industry remains dependent on Russian energy inputs. The Germany-Poland split is the key fault line — Warsaw's hardline position reflects its security calculus, while Berlin's caution reflects industrial lobbying. Watch for whether the June implementation date holds; EU sanctions packages have historically slipped 2-3 months from announced timelines.",
+          "source_depth": "corroborated",
+          "connection_hooks": [
+            {"entity": "European Union", "region": "Europe", "theme": "sanctions-regime", "policy": "trade-policy"},
+            {"entity": "Germany", "region": "Europe", "theme": "energy-dependence", "policy": "industrial-policy"},
+            {"entity": "Ukraine", "region": "Eastern Europe", "theme": "nato-accession", "policy": "security-guarantees"}
+          ],
+          "links": [
+            {"url": "https://asiatimes.com/2026/04/eu-sanctions-russian-lng/", "label": "Asia Times"},
+            {"url": "https://www.theatlantic.com/international/archive/2026/04/eu-russia-sanctions/", "label": "The Atlantic"}
+          ],
+          "deep_dive_candidate": false,
+          "deep_dive_rationale": null
+        },
+        {
+          "tag": "domestic",
+          "tag_label": "Politics",
+          "headline": "US Congress debates bill to restrict Chinese investment in US tech startups",
+          "facts": "Daniel Drezner reports that the proposed 'Technology Investment Security Act' would require CFIUS review of all Chinese-linked investments in US startups above $500,000, regardless of sector. Slow Boring argues that the bill's broad language would capture investments in biotech, clean energy, and consumer technology — sectors with minimal national security relevance. The Cosmopolitan Globalist notes that European allies are watching the legislation closely as a potential model for their own investment screening regimes.",
+          "analysis": "My read: This is the latest escalation in the US-China tech decoupling trend, but the $500K threshold is unusually low and would affect hundreds of deals annually. The bill's breadth suggests it's designed more for political signaling than targeted security screening. Watch for lobbying activity from US venture capital firms — they are the most likely to push back on the broad language.",
+          "source_depth": "corroborated",
+          "connection_hooks": [
+            {"entity": "CFIUS", "region": "United States", "theme": "investment-screening", "policy": "tech-regulation"},
+            {"entity": "US venture capital", "region": "United States", "theme": "capital-flows", "policy": "startup-ecosystem"}
+          ],
+          "links": [
+            {"url": "https://danieldrezner.substack.com/p/tech-investment-security-act", "label": "Daniel Drezner"},
+            {"url": "https://slowboring.substack.com/p/chinese-investment-restrictions", "label": "Slow Boring"}
+          ],
+          "deep_dive_candidate": false,
+          "deep_dive_rationale": null
+        }
+      ]
+    },
+    "defense_space": {
+      "items": [
+        {
+          "tag": "defense",
+          "tag_label": "Defense",
+          "headline": "Pentagon awards $2.3B contract for next-generation hypersonic missile defense interceptors",
+          "facts": "Breaking Defense reports that Northrop Grumman received the contract for the Glide Phase Interceptor (GPI) program, with initial operational capability targeted for 2030. Air & Space Forces Magazine notes that the contract includes provisions for co-production with Japan and Australia under AUKUS Pillar II technology-sharing arrangements. War on the Rocks analysis suggests the GPI program faces significant technical challenges in discriminating between hypersonic glide vehicles and decoys during the terminal phase.",
+          "analysis": "My read: The $2.3B award is substantial but represents only the initial production tranche — total program cost is estimated at $15-20B. The Japan-Australia co-production angle is strategically significant: it creates allied supply chain interdependence that makes the program harder to cancel if technical difficulties arise. The discrimination challenge identified by War on the Rocks is the real story — hypersonic defense requires sensor fusion across multiple domains (space-based IR, ground-based radar, sea-based tracking) that doesn't yet exist operationally.",
+          "source_depth": "corroborated",
+          "connection_hooks": [
+            {"entity": "Northrop Grumman", "region": "United States", "theme": "missile-defense", "policy": "defense-procurement"},
+            {"entity": "AUKUS Pillar II", "region": "Indo-Pacific", "theme": "allied-interoperability", "policy": "technology-sharing"},
+            {"entity": "Glide Phase Interceptor", "region": "Global", "theme": "hypersonic-defense", "policy": "missile-defense"}
+          ],
+          "links": [
+            {"url": "https://breakingdefense.com/2026/04/pentagon-awards-gpi-contract/", "label": "Breaking Defense"},
+            {"url": "https://www.airandspaceforces.com/pentagon-hypersonic-interceptor/", "label": "Air & Space Forces Magazine"},
+            {"url": "https://warontherocks.com/2026/04/hypersonic-defense-challenges/", "label": "War on the Rocks"}
+          ],
+          "deep_dive_candidate": true,
+          "deep_dive_rationale": "The GPI program intersects with Aaron's UARC/FFRDC work context — the sensor fusion challenge for hypersonic defense is directly relevant to missile warning/tracking systems. The AUKUS co-production angle also creates supply chain implications that connect to the economics domain."
+        },
+        {
+          "tag": "space",
+          "tag_label": "Space",
+          "headline": "SDA awards additional Proliferated LEO contracts for tracking layer satellites",
+          "facts": "SpaceNews reports that the Space Development Agency awarded $1.8B in contracts for the Tranche 2 Tracking Layer, with Lockheed Martin, L3Harris, and Northrop Grumman as primary contractors. The contracts cover 28 satellites with infrared sensors designed to detect and track hypersonic and ballistic missile threats from low Earth orbit.",
+          "analysis": "My read: The SDA's proliferated architecture approach continues to gain momentum — 28 satellites in Tranche 2 brings the total tracking constellation to 56+ when combined with Tranche 1. This is directly relevant to Hill AFB and Utah's defense industry footprint. The key question is whether the tracking layer can achieve the data fusion and handoff reliability needed for operational missile defense.",
+          "source_depth": "single-source",
+          "connection_hooks": [
+            {"entity": "SDA", "region": "United States", "theme": "proliferated-leo", "policy": "space-architecture"},
+            {"entity": "L3Harris", "region": "United States", "theme": "defense-contractor", "policy": "space-procurement"}
+          ],
+          "links": [
+            {"url": "https://spacenews.com/sda-tranche2-tracking-contracts/", "label": "SpaceNews"}
+          ],
+          "deep_dive_candidate": false,
+          "deep_dive_rationale": null
+        },
+        {
+          "tag": "defense",
+          "tag_label": "Defense",
+          "headline": "China's DF-27 hypersonic glide vehicle enters operational service, Pentagon confirms",
+          "facts": "Breaking Defense reports that the Pentagon's annual China Military Power Report confirms the DF-27 has achieved initial operational capability. The system is assessed to have a range of 5,000-8,000 km and can maneuver during both boost and glide phases, complicating interception. Defense Tech and Acquisition notes that the DF-27's deployment timeline was accelerated by approximately 18 months compared to US intelligence estimates from 2024.",
+          "analysis": "My read: The DF-27's operational deployment changes the calculus for US force posture in the Western Pacific. Its range covers all of Guam and key bases in Japan, while its maneuverability challenges existing missile defense architectures. The acceleration of the deployment timeline suggests either a breakthrough in Chinese hypersonic technology or that US intelligence underestimated Chinese progress — both possibilities warrant attention.",
+          "source_depth": "corroborated",
+          "connection_hooks": [
+            {"entity": "DF-27", "region": "China", "theme": "hypersonic-weapons", "policy": "strategic-capabilities"},
+            {"entity": "US Indo-Pacific Command", "region": "Indo-Pacific", "theme": "force-posture", "policy": "military-planning"}
+          ],
+          "links": [
+            {"url": "https://breakingdefense.com/2026/04/df27-operational-pentagon/", "label": "Breaking Defense"},
+            {"url": "https://defenseacquisition.substack.com/p/df27-deployment-analysis", "label": "Defense Tech and Acquisition"}
+          ],
+          "deep_dive_candidate": true,
+          "deep_dive_rationale": "The DF-27 directly connects to the GPI program story — it's the threat the GPI is designed to counter. The timeline acceleration suggests the defense-industrial competition dynamic is intensifying faster."
+        }
+      ]
+    },
+    "ai_tech": {
+      "items": [
+        {
+          "tag": "ai",
+          "tag_label": "AI",
+          "headline": "OpenAI releases GPT-5 with integrated reasoning capabilities; early benchmarks show 40% improvement on complex tasks",
+          "facts": "Simon Willison reports that GPT-5 demonstrates significant improvements on multi-step reasoning tasks, particularly in code generation and mathematical problem-solving. Import AI notes that the model uses a hybrid architecture combining dense and MoE layers, with the reasoning component activated automatically for complex prompts. One Useful Thing highlights the implications for knowledge work, noting that the model's ability to maintain context across 200K+ tokens enables new workflows for research and analysis.",
+          "analysis": "My read: The 40% benchmark improvement is significant but should be interpreted cautiously — benchmark performance doesn't always translate to real-world capability. The hybrid architecture is the more interesting development: it suggests OpenAI is moving toward compute-efficient scaling rather than pure parameter growth. For knowledge workers, the 200K+ context window is the practical breakthrough — it enables analysis of full documents, codebases, and research corpora without chunking.",
+          "source_depth": "widely-reported",
+          "connection_hooks": [
+            {"entity": "OpenAI", "region": "United States", "theme": "AI-capability", "policy": "tech-regulation"},
+            {"entity": "GPT-5", "region": "Global", "theme": "large-language-models", "policy": "AI-governance"}
+          ],
+          "links": [
+            {"url": "https://simonwillison.net/2026/Apr/3/gpt5-release/", "label": "Simon Willison"},
+            {"url": "https://importai.substack.com/p/gpt5-technical-analysis", "label": "Import AI"},
+            {"url": "https://oneusefulthing.substack.com/p/gpt5-knowledge-work", "label": "One Useful Thing"}
+          ],
+          "deep_dive_candidate": true,
+          "deep_dive_rationale": "GPT-5's capabilities have implications across all domains — from automated intelligence analysis to defense applications. The hybrid architecture represents a paradigm shift in how AI systems are designed and deployed."
+        },
+        {
+          "tag": "cyber",
+          "tag_label": "Cyber",
+          "headline": "Major supply chain attack compromises 200+ organizations via compromised CI/CD pipeline",
+          "facts": "Risky Business reports that the attack exploited a vulnerability in a widely-used build automation tool, allowing attackers to inject malicious code into software artifacts. Venture in Security confirms that the compromised tool is used by organizations across government, defense, and critical infrastructure sectors. The attack was discovered when anomalous network behavior was detected at a European financial institution.",
+          "analysis": "My read: Supply chain attacks are becoming the preferred vector for sophisticated threat actors because they bypass traditional perimeter defenses. The CI/CD pipeline compromise is particularly concerning because it affects the software development lifecycle itself — organizations can't trust their own build processes. Watch for government response, as this type of attack on critical infrastructure typically triggers regulatory action.",
+          "source_depth": "corroborated",
+          "connection_hooks": [
+            {"entity": "CI/CD pipeline", "region": "Global", "theme": "supply-chain-security", "policy": "cybersecurity-regulation"},
+            {"entity": "Critical infrastructure", "region": "Global", "theme": "national-security", "policy": "cyber-defense"}
+          ],
+          "links": [
+            {"url": "https://risky.biz/news/supply-chain-attack-cicd/", "label": "Risky Business"},
+            {"url": "https://ventureinsecurity.net/p/cicd-compromise-analysis", "label": "Venture in Security"}
+          ],
+          "deep_dive_candidate": false,
+          "deep_dive_rationale": null
+        }
+      ]
+    },
+    "econ": {
+      "items": [
+        {
+          "tag": "econ",
+          "tag_label": "Economy",
+          "headline": "Federal Reserve signals potential rate cut as inflation shows signs of cooling; markets rally on dovish tone",
+          "facts": "The Overshoot reports that core PCE inflation fell to 2.3% year-over-year in March, the lowest reading since early 2021. Brad Setser notes that the decline is driven primarily by goods prices, while services inflation remains sticky at 3.8%. Market data shows SPY up 1.8%, DIA up 1.5%, with defense stocks (XAR) outperforming on geopolitical tensions.",
+          "analysis": "My read: The Fed's dovish signal is appropriate given the goods inflation decline, but the services stickiness suggests the labor market remains tight enough to generate wage-pressure inflation. The market rally may be premature — a single month of lower core PCE doesn't establish a trend. Watch for the next two months of data to confirm whether the cooling is structural or cyclical.",
+          "source_depth": "corroborated",
+          "connection_hooks": [
+            {"entity": "Federal Reserve", "region": "United States", "theme": "monetary-policy", "policy": "interest-rates"},
+            {"entity": "PCE inflation", "region": "United States", "theme": "inflation-dynamics", "policy": "economic-indicators"}
+          ],
+          "links": [
+            {"url": "https://theovershoot.co/p/fed-rate-cut-inflation", "label": "The Overshoot"},
+            {"url": "https://bradsetser.substack.com/p/services-inflation-sticky", "label": "Brad Setser"}
+          ],
+          "deep_dive_candidate": false,
+          "deep_dive_rationale": null
+        },
+        {
+          "tag": "econ",
+          "tag_label": "Economy",
+          "headline": "China's manufacturing PMI falls below 50 for third consecutive month, signaling economic contraction",
+          "facts": "Nikkei Asia reports that China's official manufacturing PMI dropped to 49.2 in March, below the 50-point threshold that separates expansion from contraction. SCMP notes that the decline is concentrated in export-oriented manufacturing, while domestic consumption shows modest growth. The Hindu reports that Indian manufacturers are gaining market share in textiles and electronics as companies diversify supply chains away from China.",
+          "analysis": "My read: China's manufacturing contraction is the most significant economic development this week. The export concentration suggests global demand weakness rather than purely domestic issues, but the three-month duration indicates structural problems in China's manufacturing sector. The supply chain diversification to India is a slow-burn story that connects to the geopolitics domain — economic statecraft as strategic competition.",
+          "source_depth": "corroborated",
+          "connection_hooks": [
+            {"entity": "China manufacturing", "region": "East Asia", "theme": "economic-contraction", "policy": "industrial-policy"},
+            {"entity": "India manufacturing", "region": "South Asia", "theme": "supply-chain-diversification", "policy": "economic-statecraft"}
+          ],
+          "links": [
+            {"url": "https://asia.nikkei.com/Economy/China-s-manufacturing-PMI-falls-below-50", "label": "Nikkei Asia"},
+            {"url": "https://www.scmp.com/economy/china-economy/article/manufacturing-decline", "label": "SCMP"},
+            {"url": "https://www.thehindu.com/business/Industry/indian-manufacturers-gain-market-share/article123456.ece", "label": "The Hindu"}
+          ],
+          "deep_dive_candidate": true,
+          "deep_dive_rationale": "China's manufacturing contraction has implications for global supply chains, defense procurement (Chinese components in Western systems), and geopolitical leverage. The supply chain diversification to India connects directly to the geopolitics domain's story about India's growing regional role."
+        }
+      ],
+      "market_context": "Markets rallied on Fed dovish signals, with SPY up 1.8% and DIA up 1.5%. Defense stocks (XAR) outperformed on geopolitical tensions and the GPI contract award. Energy stocks (XLE) were mixed, with oil prices reflecting uncertainty about Chinese demand. The market response to China's manufacturing PMI decline was muted, suggesting investors view it as a regional rather than global issue."
+    }
+  },
+  "seam_data": {
+    "contested_narratives": [
+      {
+        "topic": "China-Taiwan military escalation",
+        "description": "Chinese state media frames the amphibious drills as 'routine training' necessary for national sovereignty, while US and allied sources characterize them as 'provocactic escalation' that threatens regional stability. Al Jazeera's coverage emphasizes the historical context of cross-strait tensions, while Western outlets focus on the immediate military implications. The divergence centers on whether the drills represent a new phase of Chinese coercion or a continuation of established patterns.",
+        "sources_a": "Chinese state media, Al Jazeera",
+        "sources_b": "US Pentagon statements, SCMP, Nikkei Asia, Reuters",
+        "analytical_significance": "The framing divergence reveals fundamentally different assumptions about Chinese intentions and the legitimacy of Taiwan's status, which affects how readers should interpret future developments.",
+        "links": [
+          {"url": "https://www.aljazeera.com/news/2026/4/4/china-amphibious-drills-taiwan", "label": "Al Jazeera"},
+          {"url": "https://www.reuters.com/world/asia-pacific/us-carrier-south-china-sea-2026-04-04/", "label": "Reuters"}
+        ]
+      },
+      {
+        "topic": "EU sanctions effectiveness on Russian energy",
+        "description": "The Atlantic frames EU sanctions as a necessary but economically painful tool that is gradually weakening Russia's war machine. Asia Times argues that the sanctions are primarily symbolic, as Russian energy continues to flow through intermediaries in India and Turkey. The divergence centers on whether economic pressure translates to political leverage in the current conflict.",
+        "sources_a": "The Atlantic, EU official statements",
+        "sources_b": "Asia Times, Adam Tooze analysis",
+        "analytical_significance": "The effectiveness question determines whether the EU's strategy is sustainable or whether alternative approaches (diplomatic engagement, targeted sanctions) should be prioritized.",
+        "links": [
+          {"url": "https://www.theatlantic.com/international/archive/2026/04/eu-russia-sanctions/", "label": "The Atlantic"},
+          {"url": "https://asiatimes.com/2026/04/eu-sanctions-russian-lng/", "label": "Asia Times"}
+        ]
+      }
+    ],
+    "coverage_gaps": [
+      {
+        "topic": "India's role in Yemen reconstruction",
+        "description": "The Hindu's story about India's offer to participate in Yemen reconstruction received minimal coverage in other sources. This matters because it signals India's ambition to be a regional security player, not just an economic partner. The gap suggests Western media may be underweighting India's growing diplomatic influence in the Middle East.",
+        "present_in": "The Hindu",
+        "absent_from": "Geopolitics analysis, Western media",
+        "links": [
+          {"url": "https://www.thehindu.com/news/international/india-yemen-reconstruction-offer/article123456.ece", "label": "The Hindu"}
+        ]
+      },
+      {
+        "topic": "China's manufacturing PMI impact on global supply chains",
+        "description": "While the economics desk covered China's PMI decline, the defense/space analysis didn't connect this to potential impacts on Chinese defense manufacturing and export capabilities. This matters because Chinese manufacturing weakness could affect global defense supply chains, particularly for components used in US and allied systems.",
+        "present_in": "Economics analysis, Nikkei Asia, SCMP",
+        "absent_from": "Defense/space analysis",
+        "links": [
+          {"url": "https://asia.nikkei.com/Economy/China-s-manufacturing-PMI-falls-below-50", "label": "Nikkei Asia"},
+          {"url": "https://www.scmp.com/economy/china-economy/article/manufacturing-decline", "label": "SCMP"}
+        ]
+      }
+    ],
+    "key_assumptions": [
+      {
+        "topic": "China-Taiwan military escalation",
+        "assumption": "The analysis assumes China's amphibious drills are preparatory for potential contingency operations rather than purely coercive signaling.",
+        "invalidator": "If China conducts similar drills without any follow-on operational changes (troop movements, logistics build-up, diplomatic pressure), the preparatory interpretation weakens.",
+        "confidence": "medium",
+        "confidence_basis": "The amphibious component is new and significant, but China has a history of using military exercises for political signaling without operational follow-through."
+      },
+      {
+        "topic": "GPI program and hypersonic defense",
+        "assumption": "The analysis assumes the GPI program will achieve operational capability by 2030 as planned, despite identified technical challenges.",
+        "invalidator": "If technical challenges in sensor fusion and discrimination prove insurmountable, the 2030 timeline slips significantly, leaving a capability gap that adversaries could exploit.",
+        "confidence": "low",
+        "confidence_basis": "Hypersonic defense is an unsolved problem globally, and the technical challenges identified by War on the Rocks are fundamental, not incremental."
+      }
+    ],
+    "seam_count": 5,
+    "quiet_day": false
+  },
+  "raw_sources": {
+    "rss": [
+      {
+        "url": "https://www.aljazeera.com/xml/rss/all.xml",
+        "title": "China conducts large-scale amphibious drills near Taiwan",
+        "summary": "Chinese military conducted joint exercises involving naval, air, and amphibious forces in waters surrounding Taiwan. Drills included simulated strikes on key targets.",
+        "category": "non-western",
+        "reliability": "primary-reporting",
+        "source": "Al Jazeera",
+        "published": "2026-04-04T08:00:00Z"
+      },
+      {
+        "url": "https://spacenews.com/feed/",
+        "title": "SDA awards additional Proliferated LEO contracts",
+        "summary": "Space Development Agency awarded $1.8B in contracts for Tranche 2 Tracking Layer satellites.",
+        "category": "defense-mil",
+        "reliability": "primary-reporting",
+        "source": "SpaceNews",
+        "published": "2026-04-04T10:30:00Z"
+      },
+      {
+        "url": "https://simonwillison.net/atom/everything/",
+        "title": "OpenAI releases GPT-5 with integrated reasoning",
+        "summary": "GPT-5 demonstrates significant improvements on multi-step reasoning tasks, particularly in code generation and mathematical problem-solving.",
+        "category": "ai-tech",
+        "reliability": "analysis-opinion",
+        "source": "Simon Willison",
+        "published": "2026-04-03T14:00:00Z"
+      },
+      {
+        "url": "https://theovershoot.co/feed",
+        "title": "Federal Reserve signals potential rate cut",
+        "summary": "Core PCE inflation fell to 2.3% year-over-year in March, lowest since early 2021.",
+        "category": "econ-trade",
+        "reliability": "analysis-opinion",
+        "source": "The Overshoot",
+        "published": "2026-04-04T16:00:00Z"
+      }
+    ],
+    "local_news": [],
+    "analysis_transcripts": [
+      {
+        "url": "https://www.youtube.com/watch?v=example1",
+        "channel": "Perun",
+        "title": "The Hypersonic Defense Challenge: Why GPI Matters",
+        "compressed_transcript": "Perun discusses the technical and strategic challenges of hypersonic missile defense. He argues that the Glide Phase Interceptor program is critical for US force posture in the Western Pacific, but faces significant technical hurdles in sensor fusion and discrimination. He notes that China's DF-27 deployment timeline acceleration suggests either a breakthrough in Chinese hypersonic technology or US intelligence underestimation."
+      },
+      {
+        "url": "https://www.youtube.com/watch?v=example2",
+        "channel": "Beau of the Fifth Column",
+        "title": "China-Taiwan: What the Drills Really Mean",
+        "compressed_transcript": "Beau analyzes the Chinese amphibious drills near Taiwan, arguing that they represent a new phase of Chinese coercion rather than preparation for invasion. He notes that the drills are timed to coincide with US carrier transits to maximize political impact, and that Taiwan's response will be critical in determining whether this becomes a new pattern of Chinese behavior."
+      }
+    ],
+    "markets": [
+      {"symbol": "SPY", "label": "S&P 500", "price": 520.50, "change_pct": 1.8},
+      {"symbol": "DIA", "label": "Dow", "price": 39500.00, "change_pct": 1.5},
+      {"symbol": "XAR", "label": "Defense", "price": 125.30, "change_pct": 2.4},
+      {"symbol": "XLE", "label": "Energy", "price": 88.75, "change_pct": -0.3}
+    ]
+  },
+  "previous_cross_domain": {
+    "at_a_glance": [
+      {"headline": "US and China hold first high-level talks since 2024"},
+      {"headline": "European energy crisis deepens as Russian supplies dwindle"}
+    ],
+    "deep_dives": [
+      {"headline": "The New Cold War: How US-China Tech Competition is Reshaping Global Supply Chains"}
+    ]
+  }
+}
