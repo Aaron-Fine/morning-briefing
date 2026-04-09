@@ -16,13 +16,35 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-VALID_TAGS = {"war", "ai", "domestic", "defense", "space", "tech", "local", "science", "econ", "cyber"}
-VALID_TAG_LABELS = {"War", "AI", "US", "Defense", "Space", "Tech", "Local", "Science", "Econ", "Cyber"}
+VALID_TAGS = {
+    "war",
+    "ai",
+    "domestic",
+    "defense",
+    "space",
+    "tech",
+    "local",
+    "science",
+    "econ",
+    "cyber",
+}
+VALID_TAG_LABELS = {
+    "War",
+    "AI",
+    "US",
+    "Defense",
+    "Space",
+    "Tech",
+    "Local",
+    "Science",
+    "Econ",
+    "Cyber",
+}
 
 # HTML tags allowed in deep dive body fields after sanitization
 _ALLOWED_HTML_TAGS = {"p", "em", "strong", "a", "ul", "li", "ol", "br"}
 _HTML_TAG_RE = re.compile(r"<(/?)(\w+)([^>]*)>", re.IGNORECASE)
-_URL_RE = re.compile(r'https?://\S+')
+_URL_RE = re.compile(r"https?://\S+")
 
 
 def _extract_urls_from_value(value: Any) -> list[str]:
@@ -41,11 +63,13 @@ def _extract_urls_from_value(value: Any) -> list[str]:
 
 def _strip_disallowed_html(html: str) -> str:
     """Strip HTML tags not in _ALLOWED_HTML_TAGS, preserving their text content."""
+
     def replace_tag(m: re.Match) -> str:
         tag = m.group(2).lower()
         if tag in _ALLOWED_HTML_TAGS:
             return m.group(0)  # keep allowed tags
         return ""  # strip disallowed tags, keep text
+
     return _HTML_TAG_RE.sub(replace_tag, html)
 
 
@@ -107,12 +131,16 @@ def _validate_at_a_glance(items: list, known_urls: set[str], source_data: dict) 
         if total > 0 and count / total > 0.4:
             log.warning(
                 f"validate: source distribution anomaly — '{source}' accounts for "
-                f"{count}/{total} items ({count/total:.0%}). Possible editorial manipulation."
+                f"{count}/{total} items ({count / total:.0%}). Possible editorial manipulation."
             )
 
     # Collect source titles for verbatim echo detection
-    source_titles = {item.get("title", "").lower() for item in source_data.get("rss", [])}
-    source_titles.update(item.get("title", "").lower() for item in source_data.get("local_news", []))
+    source_titles = {
+        item.get("title", "").lower() for item in source_data.get("rss", [])
+    }
+    source_titles.update(
+        item.get("title", "").lower() for item in source_data.get("local_news", [])
+    )
 
     cleaned = []
     for i, item in enumerate(items):
@@ -132,13 +160,15 @@ def _validate_at_a_glance(items: list, known_urls: set[str], source_data: dict) 
         if headline.lower() in source_titles:
             log.info(f"validate: verbatim echo detected in headline: {headline[:60]!r}")
 
-        cleaned.append({
-            "tag": tag,
-            "tag_label": item.get("tag_label", tag.capitalize()),
-            "headline": headline,
-            "context": str(item.get("context", "")),
-            "links": validate_urls(item.get("links", []), known_urls),
-        })
+        cleaned.append(
+            {
+                "tag": tag,
+                "tag_label": item.get("tag_label", tag.capitalize()),
+                "headline": headline,
+                "context": str(item.get("context", "")),
+                "links": validate_urls(item.get("links", []), known_urls),
+            }
+        )
 
     return cleaned
 
@@ -155,13 +185,19 @@ def _validate_deep_dives(dives: list, known_urls: set[str]) -> list:
         body = str(dive.get("body", ""))
         body_clean = _strip_disallowed_html(body)
         if body_clean != body:
-            log.info(f"validate: stripped disallowed HTML tags from deep dive body (dive {i})")
-        cleaned.append({
-            "headline": str(dive.get("headline", "")),
-            "body": body_clean,
-            "why_it_matters": str(dive.get("why_it_matters", "")),
-            "further_reading": validate_urls(dive.get("further_reading", []), known_urls),
-        })
+            log.info(
+                f"validate: stripped disallowed HTML tags from deep dive body (dive {i})"
+            )
+        cleaned.append(
+            {
+                "headline": str(dive.get("headline", "")),
+                "body": body_clean,
+                "why_it_matters": str(dive.get("why_it_matters", "")),
+                "further_reading": validate_urls(
+                    dive.get("further_reading", []), known_urls
+                ),
+            }
+        )
     return cleaned
 
 
@@ -201,7 +237,9 @@ def validate_stage_output(output: dict, source_data: dict, stage_name: str) -> d
         Never raises.
     """
     if not isinstance(output, dict):
-        log.error(f"validate [{stage_name}]: output is not a dict ({type(output).__name__}), returning empty")
+        log.error(
+            f"validate [{stage_name}]: output is not a dict ({type(output).__name__}), returning empty"
+        )
         return {}
 
     known_urls = _collect_known_urls(source_data)
@@ -211,12 +249,26 @@ def validate_stage_output(output: dict, source_data: dict, stage_name: str) -> d
     if "at_a_glance" in result:
         items = _validate_at_a_glance(result["at_a_glance"], known_urls, source_data)
         # Length sanity check
-        min_items = source_data.get("_config", {}).get("digest", {}).get("at_a_glance", {}).get("min_items", 3)
-        max_items = source_data.get("_config", {}).get("digest", {}).get("at_a_glance", {}).get("max_items", 20)
+        min_items = (
+            source_data.get("_config", {})
+            .get("digest", {})
+            .get("at_a_glance", {})
+            .get("min_items", 3)
+        )
+        max_items = (
+            source_data.get("_config", {})
+            .get("digest", {})
+            .get("at_a_glance", {})
+            .get("max_items", 20)
+        )
         if len(items) < min_items:
-            log.warning(f"validate [{stage_name}]: only {len(items)} at_a_glance items (min {min_items})")
+            log.warning(
+                f"validate [{stage_name}]: only {len(items)} at_a_glance items (min {min_items})"
+            )
         elif len(items) > max_items:
-            log.warning(f"validate [{stage_name}]: {len(items)} at_a_glance items exceeds max {max_items}")
+            log.warning(
+                f"validate [{stage_name}]: {len(items)} at_a_glance items exceeds max {max_items}"
+            )
         result["at_a_glance"] = items
 
     # --- Deep Dives ---
@@ -245,7 +297,12 @@ def validate_stage_output(output: dict, source_data: dict, stage_name: str) -> d
             result["local_items"] = validate_urls(items, known_urls)
 
     # --- URL validation on any remaining fields ---
-    for field in ("week_ahead", "weekend_reads", "market_context", "spiritual_reflection"):
+    for field in (
+        "week_ahead",
+        "worth_reading",
+        "market_context",
+        "spiritual_reflection",
+    ):
         if field in result:
             result[field] = validate_urls(result[field], known_urls)
 

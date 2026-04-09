@@ -4,7 +4,7 @@ _Last updated: 2026-04-08_
 
 ---
 
-## Done this session
+## Done
 
 ### Bug fixes
 - **`--force-friday` was broken** — only passed to `synthesize` (dead stage). Fixed: now passed to `cross_domain` in `pipeline.py`; `cross_domain.py` updated to accept `force_friday` kwarg and pass it to `_build_input`.
@@ -17,6 +17,7 @@ _Last updated: 2026-04-08_
 - **AQI in weather bar** — Current AQI and label now shown inline in the weather bar: `Logan, UT — Clear · AQI 51 (Moderate)`.
 - **Section order** — Moved Perspective Seams to follow Deep Dives (was between Cache Valley and Deep Dives).
 - **Theme toggle** — Now injected inside `.wrapper` so it aligns with content; styled to match the dark chrome header instead of floating above the page.
+- **Worth Reading** — Renamed "Weekend Reading · Friday Edition" to "Worth Reading", moved before Deep Dives. Now appears daily instead of Friday-only.
 
 ### Code cleanup
 - **`_cross_domain_item_to_glance` + `_domain_item_to_glance` merged** into `_item_to_glance` in `stages/assemble.py`. Aliases kept for safety.
@@ -39,19 +40,18 @@ _Last updated: 2026-04-08_
 - **Phase 4**: 109/109 tests passing across 3 test files + 7 JSON fixtures.
 - **Phase 5**: Updated `README.md` with weather module docs, converted `prompts/weather-display-prompt.md` to implementation guide.
 - **Bug fix**: Added `|safe` filter to `weather_html` in template (was being HTML-escaped despite `Markup()` wrapper).
-- **UI change**: Renamed "Weekend Reading · Friday Edition" to "Worth Reading", moved before Deep Dives.
+
+### Cross-domain model comparison
+- Tested 5 models (Kimi K2.5, Qwen3.6 Plus, Claude Sonnet 4, Claude Opus 4, Claude Opus 4.6) on cross-domain synthesis quality.
+- Selected **Claude Opus 4.6** for cross_domain stage — best quality-to-cost ratio, hits all 3 bridge types, neutral framing.
+
+### Pipeline quality fixes (2026-04-08)
+- **At-a-glance cap enforcement** — `cross_domain.py` now enforces `digest.at_a_glance.max_items` (7) in post-processing, sorting by source_depth priority then cross_domain_note presence. Prompt updated to reference the config limit instead of hardcoded 12.
+- **URL validation domain-level matching** — `analyze_domain.py` switched from exact URL matching to domain-level matching (`urlparse().netloc`), preventing false negatives when the LLM strips UTM params or normalizes URLs. Fixes false-positive `source_absence` anomaly warnings.
+- **Econ domain sources expanded** — Added Financial Times, The Economist (Finance & Economics), and Reuters Markets to `config.yaml` econ-trade category (was only The Overshoot + Brad Setser).
 
 ---
 
-## Other open items
+## Open items
 
-### Docker rebuild reminder
-Code changes require a rebuild — only `config.yaml` and `output/` are volume-mounted:
-```bash
-docker compose build && docker compose up -d
-```
-
-### `.env` — add when starting weather Phase 0
-```
-AIRNOW_API_KEY=<your_key>
-```
+_(None — all tasks completed)_

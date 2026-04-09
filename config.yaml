@@ -72,7 +72,7 @@ pipeline:
     - name: cross_domain
       model:
         provider: anthropic
-        model: "claude-sonnet-4-6"
+        model: "claude-opus-4-6"
         max_tokens: 16000
         temperature: 0.3
 
@@ -175,6 +175,9 @@ rss:
     # --- ECONOMICS / TRADE ---
     - { url: "https://theovershoot.co/feed", name: "The Overshoot (Matt Klein)", cap: 3, category: "econ-trade", reliability: "analysis-opinion" }
     - { url: "https://bradsetser.substack.com/feed", name: "Brad Setser", cap: 3, category: "econ-trade", reliability: "analysis-opinion" }
+    - { url: "https://www.ft.com/rss/home", name: "Financial Times", cap: 5, category: "econ-trade", reliability: "primary-reporting" }
+    - { url: "https://www.economist.com/finance-and-economics/rss.xml", name: "The Economist (Finance & Economics)", cap: 5, category: "econ-trade", reliability: "analysis-opinion" }
+    - { url: "https://www.reuters.com/markets/", name: "Reuters Markets", cap: 5, category: "econ-trade", reliability: "primary-reporting" }
 
     # --- GLOBAL SOUTH ---
     - { url: "https://www.ipsnews.net/news/headlines/feed/", name: "Inter Press Service", cap: 5, category: "global-south", reliability: "primary-reporting" }
@@ -216,17 +219,16 @@ topics:
 
 digest:
   at_a_glance:
-    min_items: 6
-    normal_items: 10
-    max_items: 14
+    min_items: 4
+    normal_items: 5
+    max_items: 7
   deep_dives:
     count: 2
     include_further_reading: true
   youtube:
     analysis_synthesis: true  # feed compressed transcripts into synthesis pipeline
-  weekend_reads:
+  worth_reading:
     enabled: true
-    day: "friday"
     count: 3
   week_ahead:
     enabled: true

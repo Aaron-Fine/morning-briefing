@@ -155,7 +155,7 @@ def run(
         ]
         deep_dives_raw = xd.get("deep_dives", [])
         market_context = xd.get("market_context", "")
-        weekend_reads = xd.get("weekend_reads", [])
+        worth_reading = xd.get("worth_reading", [])
 
         spiritual = context.get("spiritual")
         if not spiritual:
@@ -175,7 +175,7 @@ def run(
         at_a_glance, deep_dives_raw, market_context = _build_from_domain_analysis(
             context, config
         )
-        weekend_reads = []
+        worth_reading = []
 
         spiritual = context.get("spiritual")
         if not spiritual:
@@ -196,7 +196,7 @@ def run(
         at_a_glance = []
         deep_dives_raw = []
         market_context = ""
-        weekend_reads = []
+        worth_reading = []
         week_ahead = []
         local_items = []
         spiritual = None
@@ -248,7 +248,7 @@ def run(
         "local_items": local_items,
         "market_context": market_context,
         "week_ahead": week_ahead,
-        "weekend_reads": weekend_reads,
+        "worth_reading": worth_reading,
         "deep_dives": deep_dives,
     }
 

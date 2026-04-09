@@ -185,7 +185,7 @@ Produce the final at_a_glance list by:
 - Taking all non-deep-dive items from all four domain analyses.
 - Ordering by editorial importance: widely-reported stories first, then corroborated, then single-source. Within each tier, lead with stories that have cross-domain connections.
 - Adding cross_domain_note where applicable.
-- Capping at 12 items (quality over quantity).
+- Capping at 7 items (quality over quantity — the editor will enforce this cap).
 
 DEDUPLICATION RULES (critical):
 - If a story appears as an at-a-glance item AND is selected for a deep dive: the at-a-glance entry keeps its original facts/analysis, and the deep dive must NOT repeat them. The deep dive adds the connective and deeper analysis only.
@@ -228,7 +228,7 @@ JSON object:
     }
   ],
   "market_context": "from econ domain analysis, preserved as-is",
-  "weekend_reads": [   // FRIDAY ONLY — omit entirely on other days
+  "worth_reading": [   // 3 long-form pieces worth slow reading today
     {
       "title": "article title",
       "url": "exact URL from sources",
@@ -307,14 +307,13 @@ def _build_input(
                 "If none of today's stories connect to yesterday, ignore this section entirely."
             )
 
-    # Friday: request weekend reads (also triggered by --force-friday CLI flag)
-    if force_friday or datetime.now().weekday() == 4:
-        parts.append(
-            "\n=== TODAY IS FRIDAY — ADD weekend_reads ===\n"
-            "Select 3 substantial long-form pieces from the source data worth reading over the "
-            "weekend. Prioritize depth, lasting relevance, and pieces that reward slow reading "
-            "over breaking news. Include the weekend_reads array in your JSON output."
-        )
+    # Always request worth_reading picks
+    parts.append(
+        "\n=== WORTH READING ===\n"
+        "Select 3 substantial long-form pieces from the source data worth reading today. "
+        "Prioritize depth, lasting relevance, and pieces that reward slow reading "
+        "over breaking news. Include the worth_reading array in your JSON output."
+    )
 
     parts.append(
         "\n\nPerform cross-domain synthesis: discover connections, select deep dives, "
@@ -372,7 +371,7 @@ def run(
     result.setdefault("at_a_glance", [])
     result.setdefault("deep_dives", [])
     result.setdefault("cross_domain_connections", [])
-    result.setdefault("weekend_reads", [])
+    result.setdefault("worth_reading", [])
     if "market_context" not in result:
         econ = domain_analysis.get("econ", {})
         result["market_context"] = econ.get("market_context", "")
@@ -402,7 +401,7 @@ def run(
         item["tag"] = _normalize_tag(item.get("tag", ""))
         item["tag_label"] = _TAG_LABELS.get(item["tag"], item.get("tag_label", ""))
 
-    # Validate URLs in at_a_glance, deep_dives, and weekend_reads
+    # Validate URLs in at_a_glance, deep_dives, and worth_reading
     for item in result["at_a_glance"]:
         item["links"] = [
             lnk for lnk in item.get("links", []) if _url_allowed(lnk.get("url", ""))
@@ -413,9 +412,29 @@ def run(
             for lnk in dive.get("further_reading", [])
             if _url_allowed(lnk.get("url", ""))
         ]
-    for read in result["weekend_reads"]:
+    for read in result["worth_reading"]:
         if not _url_allowed(read.get("url", "")):
             read["url"] = ""
+
+    # Enforce at-a-glance item cap from config
+    digest_cfg = config.get("digest", {})
+    glance_cfg = digest_cfg.get("at_a_glance", {})
+    max_items = glance_cfg.get("max_items", 7)
+    if len(result["at_a_glance"]) > max_items:
+        # Sort by source_depth priority, then by cross_domain_note presence
+        depth_priority = {"widely-reported": 0, "corroborated": 1, "single-source": 2}
+        result["at_a_glance"].sort(
+            key=lambda i: (
+                depth_priority.get(i.get("source_depth", ""), 3),
+                0 if i.get("cross_domain_note") else 1,
+            )
+        )
+        dropped = result["at_a_glance"][max_items:]
+        result["at_a_glance"] = result["at_a_glance"][:max_items]
+        log.info(
+            f"  cross_domain: capped at_a_glance from {max_items + len(dropped)} "
+            f"to {max_items} items (dropped {len(dropped)} lower-priority items)"
+        )
 
     n_glance = len(result["at_a_glance"])
     n_dives = len(result["deep_dives"])

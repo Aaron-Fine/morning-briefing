@@ -475,10 +475,10 @@ EMAIL_TEMPLATE = _env.from_string("""\
   {% endif %}
 
    <!-- WORTH READING -->
-   {% if weekend_reads %}
+   {% if worth_reading %}
    <div class="section">
      <h2 class="sec-label">Worth Reading</h2>
-     {% for r in weekend_reads %}
+     {% for r in worth_reading %}
      <div class="weekend-item">
        <div class="wk-title"><a href="{{ r.url }}">{{ r.title }}</a></div>
        <div class="wk-meta">{{ r.source }} · {{ r.read_time }}</div>
