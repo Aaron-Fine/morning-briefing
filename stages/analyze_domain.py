@@ -27,7 +27,6 @@ Each item schema:
   deep_dive_rationale (str|null)
 """
 
-import json
 import logging
 from urllib.parse import urlparse
 
@@ -372,7 +371,7 @@ def _run_domain_pass(
     source_block_parts = [f"RSS/WEB SOURCES ({cfg['label']}):"]
     source_block_parts.append(_fmt_rss_items(filtered_rss))
     if filtered_transcripts:
-        source_block_parts.append(f"\nYOUTUBE ANALYSIS TRANSCRIPTS:")
+        source_block_parts.append("\nYOUTUBE ANALYSIS TRANSCRIPTS:")
         source_block_parts.append(_fmt_transcripts(filtered_transcripts))
     if domain_key == "econ" and markets:
         source_block_parts.append(

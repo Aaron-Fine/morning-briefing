@@ -18,7 +18,6 @@ Outputs: seam_data (dict)
 Non-critical: returns empty results on failure so the pipeline can continue.
 """
 
-import json
 import logging
 
 from llm import call_llm

@@ -333,7 +333,6 @@ def evaluate_cross_domain_quality(output: dict) -> dict:
 
     # Check for specific cross-domain connections we expect
     # (China manufacturing -> defense supply chain, GPI -> DF-27, etc.)
-    connection_themes = [c.get("theme", "").lower() for c in connections]
     connection_domains = [c.get("domains", []) for c in connections]
 
     # Expected: at least one connection that bridges geopolitics and econ
@@ -414,7 +413,7 @@ def run_single_model(model_key: str, fixture: dict) -> dict:
 
         output = result.get("cross_domain_output", {})
         if not output:
-            print(f"  ERROR: No cross_domain_output returned")
+            print("  ERROR: No cross_domain_output returned")
             return {"error": "No output", "elapsed": elapsed}
 
         print(f"  Completed in {elapsed:.1f}s")
@@ -457,7 +456,6 @@ def print_comparison_report(results: list[dict]) -> None:
             print(f"  ERROR: {r['error']}")
             continue
 
-        model = r["model"]
         label = r["label"]
         s = r["structural"]
         b = r["bias"]
@@ -465,7 +463,7 @@ def print_comparison_report(results: list[dict]) -> None:
 
         print(f"\n--- {label} ({r['elapsed']:.1f}s) ---")
 
-        print(f"\n  STRUCTURAL:")
+        print("\n  STRUCTURAL:")
         print(f"    at_a_glance items: {s.get('at_a_glance_count', 'N/A')}")
         print(f"    deep dives: {s.get('deep_dive_count', 'N/A')}")
         print(f"    worth_reading: {s.get('worth_reading_count', 'N/A')}")
@@ -475,15 +473,15 @@ def print_comparison_report(results: list[dict]) -> None:
         print(f"    all tags valid: {s.get('all_tags_valid', 'N/A')}")
         print(f"    URLs valid: {s.get('urls_start_with_http', 'N/A')}")
 
-        print(f"\n  BIAS INDICATORS:")
-        print(f"    China-Taiwan framing:")
+        print("\n  BIAS INDICATORS:")
+        print("    China-Taiwan framing:")
         for k, v in b.get("china_taiwan_framing", {}).items():
             print(f"      {k}: {v}")
-        print(f"    Russia sanctions framing:")
+        print("    Russia sanctions framing:")
         for k, v in b.get("russia_sanctions_framing", {}).items():
             print(f"      {k}: {v}")
         print(f"    India acknowledged: {b.get('india_acknowledged', 'N/A')}")
-        print(f"    AI framing:")
+        print("    AI framing:")
         for k, v in b.get("ai_framing", {}).items():
             print(f"      {k}: {v}")
         print(
@@ -498,7 +496,7 @@ def print_comparison_report(results: list[dict]) -> None:
             f"    Ordering (widely before single): {b.get('ordering_widely_before_single', 'N/A')}"
         )
 
-        print(f"\n  CROSS-DOMAIN QUALITY:")
+        print("\n  CROSS-DOMAIN QUALITY:")
         print(f"    Geopolitics-Econ bridge: {q.get('geopolitics_econ_bridge', 'N/A')}")
         print(f"    Defense-AI bridge: {q.get('defense_ai_bridge', 'N/A')}")
         print(f"    Econ-Defense bridge: {q.get('econ_defense_bridge', 'N/A')}")

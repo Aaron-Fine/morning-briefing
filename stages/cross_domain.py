@@ -22,7 +22,6 @@ Outputs: cross_domain_output (dict) containing at_a_glance, deep_dives,
 
 import json
 import logging
-from datetime import datetime
 from urllib.parse import urlparse
 
 from llm import call_llm

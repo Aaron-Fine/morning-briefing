@@ -1,0 +1,15 @@
+# Ruff linter configuration for Morning Digest
+# Runs as part of the test suite: python -m pytest tests/
+
+target-version = "py312"
+
+[lint]
+# F: pyflakes (unused imports, undefined names, dead code)
+# E: basic pycodestyle errors (syntax-adjacent issues only)
+# W: pycodestyle warnings (trailing whitespace, etc.)
+select = ["F", "E711", "E712", "E721", "W191"]
+
+# Don't flag unused imports in __init__.py files (they're re-exports)
+[lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/*" = ["F401", "F811"]

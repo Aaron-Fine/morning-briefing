@@ -13,7 +13,6 @@ entirely. Stripped lines are logged at DEBUG level for review.
 """
 
 import logging
-import re
 from html.parser import HTMLParser
 
 log = logging.getLogger(__name__)
