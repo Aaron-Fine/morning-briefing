@@ -431,7 +431,7 @@ def _empty_stage_output(stage_name: str) -> dict:
                 "quiet_day": True,
             }
         },
-        "prepare_weather": {"weather": {}},
+        "prepare_weather": {"weather": {}, "weather_html": ""},
         "prepare_spiritual": {"spiritual": {}},
         "prepare_local": {"local_items": []},
         "anomaly": {

@@ -117,10 +117,11 @@ def _build_header_html(weather: dict) -> str:
         aqi_alert = f'<span style="color:{color};font-size:13px;font-weight:600;display:block;margin-top:3px;">{msg}</span>'
 
     return (
-        f'<div style="font-family:JetBrains Mono,monospace;font-size:13px;color:#ccc;'
+        f'<div style="font-family:JetBrains Mono,monospace;font-size:13px;'
+        f'color:var(--wx-label, #b0ada8);'
         f'margin-bottom:4px;display:flex;justify-content:space-between;align-items:baseline;">'
         f"<span>{header_text}</span>"
-        f'<span style="color:#888;font-size:11px;">{date_str}</span>'
+        f'<span style="color:var(--wx-label-dim, #888582);font-size:11px;">{date_str}</span>'
         f"</div>"
         f"{aqi_alert}"
     )
@@ -129,37 +130,37 @@ def _build_header_html(weather: dict) -> str:
 def _build_legend_html(weather: dict, show_aqi: bool, show_records: bool) -> str:
     """Legend row with colored swatches."""
     parts = [
-        '<div style="font-size:10px;color:#888;margin-bottom:6px;display:flex;gap:12px;flex-wrap:wrap;">'
+        '<div style="font-size:10px;color:var(--wx-label-dim, #888582);margin-bottom:6px;display:flex;gap:12px;flex-wrap:wrap;">'
     ]
 
     parts.append(
         '<span style="display:inline-flex;align-items:center;gap:3px;">'
-        '<span style="width:8px;height:8px;background:#d09050;border-radius:50%;display:inline-block;"></span>'
+        '<span style="width:8px;height:8px;background:var(--wx-hi, #d09050);border-radius:50%;display:inline-block;"></span>'
         "Forecast Hi</span>"
     )
 
     parts.append(
         '<span style="display:inline-flex;align-items:center;gap:3px;">'
-        '<span style="width:8px;height:1px;border-top:1px dashed #5a7aa0;display:inline-block;"></span>'
+        '<span style="width:8px;height:1px;border-top:1px dashed var(--wx-lo, #5a7aa0);display:inline-block;"></span>'
         "Forecast Lo</span>"
     )
 
     parts.append(
         '<span style="display:inline-flex;align-items:center;gap:3px;">'
-        '<span style="width:8px;height:8px;background:rgba(100,160,100,0.18);border-radius:1px;display:inline-block;"></span>'
+        '<span style="width:8px;height:8px;background:var(--wx-normal, rgba(100,160,100,0.18));border-radius:1px;display:inline-block;"></span>'
         "Normal</span>"
     )
 
     if show_records:
         parts.append(
             '<span style="display:inline-flex;align-items:center;gap:3px;">'
-            '<span style="width:8px;height:8px;background:rgba(255,255,255,0.04);border-radius:1px;display:inline-block;"></span>'
+            '<span style="width:8px;height:8px;background:var(--wx-record, rgba(255,255,255,0.06));border-radius:1px;display:inline-block;"></span>'
             "Record</span>"
         )
 
     parts.append(
         '<span style="display:inline-flex;align-items:center;gap:3px;">'
-        '<span style="width:8px;height:8px;background:#5b9bd5;border-radius:1px;display:inline-block;"></span>'
+        '<span style="width:8px;height:8px;background:var(--wx-precip, #5b9bd5);border-radius:1px;display:inline-block;"></span>'
         "Precip</span>"
     )
 
@@ -264,9 +265,9 @@ def _render_zone2_gridlines(temp_min: float, temp_max: float) -> str:
         if ZONE2_TOP <= y <= ZONE2_BOTTOM:
             lines.append(
                 f'<line x1="40" y1="{y}" x2="{SVG_WIDTH - 10}" y2="{y}" '
-                f'stroke="#1e1e22" stroke-width="0.5"/>'
+                f'style="stroke:var(--wx-grid, #333);stroke-width:0.5;"/>'
                 f'<text x="35" y="{y + 3}" text-anchor="end" '
-                f'font-size="7" fill="#555">{t}°</text>'
+                f'font-size="7" style="fill:var(--wx-label-dim, #888582);">{t}°</text>'
             )
 
     return "".join(lines)
@@ -294,7 +295,7 @@ def _render_zone2_bands(
             y_lo = _temp_to_y(rec_lo, temp_min, temp_max)
             bands.append(
                 f'<rect x="{x}" y="{y_hi}" width="{w}" height="{y_lo - y_hi}" '
-                f'fill="rgba(255,255,255,0.02)" rx="1"/>'
+                f'style="fill:var(--wx-record, rgba(255,255,255,0.04));" rx="1"/>'
             )
 
         if show_normals and i < len(normals):
@@ -305,7 +306,7 @@ def _render_zone2_bands(
             y_lo = _temp_to_y(norm_lo, temp_min, temp_max)
             bands.append(
                 f'<rect x="{x}" y="{y_hi}" width="{w}" height="{y_lo - y_hi}" '
-                f'fill="rgba(100,160,100,0.12)" rx="1"/>'
+                f'style="fill:var(--wx-normal, rgba(100,160,100,0.18));" rx="1"/>'
             )
 
         # Forecast band (between high and low)
@@ -316,7 +317,7 @@ def _render_zone2_bands(
             y_lo = _temp_to_y(lo, temp_min, temp_max)
             bands.append(
                 f'<rect x="{x}" y="{y_hi}" width="{w}" height="{y_lo - y_hi}" '
-                f'fill="rgba(208,144,80,0.08)" rx="2"/>'
+                f'fill="rgba(208,144,80,0.10)" rx="2"/>'
             )
 
     return "".join(bands)
@@ -353,7 +354,8 @@ def _render_zone2_lines(
             for idx, p in enumerate(high_points)
         )
         elements.append(
-            f'<path d="{path_d}" fill="none" stroke="#d09050" stroke-width="2"/>'
+            f'<path d="{path_d}" fill="none" '
+            f'style="stroke:var(--wx-hi, #d09050);stroke-width:2;"/>'
         )
 
     # Low line
@@ -363,8 +365,8 @@ def _render_zone2_lines(
             for idx, p in enumerate(low_points)
         )
         elements.append(
-            f'<path d="{path_d}" fill="none" stroke="#5a7aa0" stroke-width="1.5" '
-            f'stroke-dasharray="4,2"/>'
+            f'<path d="{path_d}" fill="none" '
+            f'style="stroke:var(--wx-lo, #5a7aa0);stroke-width:1.5;stroke-dasharray:4,2;"/>'
         )
 
     # Dots and labels
@@ -380,17 +382,21 @@ def _render_zone2_lines(
                     break
 
         r = 4 if near_record else 2.5
-        elements.append(f'<circle cx="{x}" cy="{y}" r="{r}" fill="#d09050"/>')
+        elements.append(
+            f'<circle cx="{x}" cy="{y}" r="{r}" style="fill:var(--wx-hi, #d09050);"/>'
+        )
         elements.append(
             f'<text x="{x}" y="{y - 6}" text-anchor="middle" '
-            f'font-size="7" fill="#d09050">{round(temp)}°</text>'
+            f'font-size="7" style="fill:var(--wx-hi, #d09050);">{round(temp)}°</text>'
         )
 
     for x, y, temp in low_points:
-        elements.append(f'<circle cx="{x}" cy="{y}" r="2.5" fill="#5a7aa0"/>')
+        elements.append(
+            f'<circle cx="{x}" cy="{y}" r="2.5" style="fill:var(--wx-lo, #5a7aa0);"/>'
+        )
         elements.append(
             f'<text x="{x}" y="{y + 12}" text-anchor="middle" '
-            f'font-size="7" fill="#5a7aa0">{round(temp)}°</text>'
+            f'font-size="7" style="fill:var(--wx-lo, #5a7aa0);">{round(temp)}°</text>'
         )
 
     return "".join(elements)
@@ -427,14 +433,15 @@ def _render_zone3_aqi(forecast: list, aqi_forecast: dict) -> str:
                 f'<rect x="{x}" y="{ZONE3_Y}" width="{w}" height="2" '
                 f'fill="#666" opacity="0.2" rx="1"/>'
                 f'<text x="{x + w / 2}" y="{ZONE3_Y + 8}" '
-                f'text-anchor="middle" font-size="6" fill="#888">--</text>'
+                f'text-anchor="middle" font-size="6" '
+                f'style="fill:var(--wx-label-dim, #888582);">--</text>'
             )
 
     # Left label
     rects.insert(
         0,
         f'<text x="35" y="{ZONE3_Y + strip_height / 2 + 3}" '
-        f'font-size="7" fill="#888">AQI</text>',
+        f'font-size="7" style="fill:var(--wx-label-dim, #888582);">AQI</text>',
     )
 
     return "".join(rects)
@@ -466,13 +473,13 @@ def _render_zone4_precip(forecast: list) -> str:
         else:
             bars.append(
                 f'<rect x="{x}" y="{y}" width="{w}" height="{height}" '
-                f'fill="#5b9bd5" opacity="0.6" rx="1"/>'
+                f'style="fill:var(--wx-precip, #5b9bd5);opacity:0.6;" rx="1"/>'
             )
 
         # Probability label above bar
         bars.append(
             f'<text x="{x + w / 2}" y="{y - 2}" text-anchor="middle" '
-            f'font-size="6" fill="#888">{precip_pct}%</text>'
+            f'font-size="6" style="fill:var(--wx-label-dim, #888582);">{precip_pct}%</text>'
         )
 
         # Type marker below bar
@@ -480,14 +487,14 @@ def _render_zone4_precip(forecast: list) -> str:
         if marker:
             bars.append(
                 f'<text x="{x + w / 2}" y="{ZONE4_BASELINE + 10}" text-anchor="middle" '
-                f'font-size="7" fill="#aaa">{marker}</text>'
+                f'font-size="7" style="fill:var(--wx-label, #b0ada8);">{marker}</text>'
             )
 
         # Timing label
         if precip_timing:
             bars.append(
                 f'<text x="{x + w / 2}" y="{ZONE4_BASELINE + 18}" text-anchor="middle" '
-                f'font-size="6" fill="#777">{precip_timing}</text>'
+                f'font-size="6" style="fill:var(--wx-label-dim, #888582);">{precip_timing}</text>'
             )
 
     return "".join(bars)
@@ -506,9 +513,10 @@ def _render_zone5_labels(forecast: list) -> str:
 
         labels.append(
             f'<text x="{x}" y="{ZONE5_Y}" text-anchor="middle" '
-            f'font-size="8" fill="#aaa" font-weight="600">{day_name.upper()}</text>'
+            f'font-size="8" font-weight="600" '
+            f'style="fill:var(--wx-label, #b0ada8);">{day_name.upper()}</text>'
             f'<text x="{x}" y="{ZONE5_Y + 12}" text-anchor="middle" '
-            f'font-size="7" fill="#777">{short_cond}</text>'
+            f'font-size="7" style="fill:var(--wx-label-dim, #888582);">{short_cond}</text>'
         )
 
     return "".join(labels)

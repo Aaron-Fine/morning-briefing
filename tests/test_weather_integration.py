@@ -151,8 +151,8 @@ class TestRenderWeatherHtmlIntegration:
         weather = _load_fixture("weather_clear.json")
         config = _make_config()
         html = render_weather_html(weather, config)
-        # Records show as subtle white bands
-        assert "rgba(255,255,255,0.02)" in html
+        # Records show as subtle bands via CSS var with fallback
+        assert "--wx-record" in html
 
     def test_day_labels_present(self):
         weather = _load_fixture("weather_clear.json")
@@ -201,7 +201,7 @@ class TestRenderWeatherHtmlIntegration:
         weather = _load_fixture("weather_clear.json")
         config = _make_config(record_band=False)
         html = render_weather_html(weather, config)
-        assert "rgba(255,255,255,0.02)" not in html
+        assert "--wx-record" not in html
 
     def test_normal_band_disabled(self):
         weather = _load_fixture("weather_clear.json")

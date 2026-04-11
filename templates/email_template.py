@@ -74,15 +74,15 @@ EMAIL_TEMPLATE = _env.from_string("""\
 
     /* Weather display */
     --wx-bg:         #f7f5f0;
-    --wx-hi:         #d09050;
-    --wx-lo:         #5a7aa0;
-    --wx-normal:     rgba(100,160,100,0.18);
-    --wx-record:     rgba(255,255,255,0.04);
+    --wx-hi:         #c07830;
+    --wx-lo:         #4a6a90;
+    --wx-normal:     rgba(80,140,80,0.18);
+    --wx-record:     rgba(0,0,0,0.04);
     --wx-precip:     #5b9bd5;
     --wx-snow:       #a0d4f0;
     --wx-thunder:    #8f3f97;
     --wx-frz:        #e06040;
-    --wx-grid:       #1e1e22;
+    --wx-grid:       #d8d5d0;
     --wx-label:      #555555;
     --wx-label-dim:  #888888;
   }
@@ -135,14 +135,14 @@ EMAIL_TEMPLATE = _env.from_string("""\
       /* Weather display */
       --wx-bg:         #1c1a17;
       --wx-hi:         #d09050;
-      --wx-lo:         #5a7aa0;
+      --wx-lo:         #6a9ac0;
       --wx-normal:     rgba(100,160,100,0.18);
-      --wx-record:     rgba(255,255,255,0.04);
+      --wx-record:     rgba(255,255,255,0.06);
       --wx-precip:     #5b9bd5;
       --wx-snow:       #a0d4f0;
       --wx-thunder:    #8f3f97;
       --wx-frz:        #e06040;
-      --wx-grid:       #1e1e22;
+      --wx-grid:       #2e2b27;
       --wx-label:      #b0ada8;
       --wx-label-dim:  #888582;
     }
@@ -195,14 +195,14 @@ EMAIL_TEMPLATE = _env.from_string("""\
     /* Weather display */
     --wx-bg:         #1c1a17;
     --wx-hi:         #d09050;
-    --wx-lo:         #5a7aa0;
+    --wx-lo:         #6a9ac0;
     --wx-normal:     rgba(100,160,100,0.18);
-    --wx-record:     rgba(255,255,255,0.04);
+    --wx-record:     rgba(255,255,255,0.06);
     --wx-precip:     #5b9bd5;
     --wx-snow:       #a0d4f0;
     --wx-thunder:    #8f3f97;
     --wx-frz:        #e06040;
-    --wx-grid:       #1e1e22;
+    --wx-grid:       #2e2b27;
     --wx-label:      #b0ada8;
     --wx-label-dim:  #888582;
   }
@@ -253,15 +253,15 @@ EMAIL_TEMPLATE = _env.from_string("""\
 
     /* Weather display */
     --wx-bg:         #f7f5f0;
-    --wx-hi:         #d09050;
-    --wx-lo:         #5a7aa0;
-    --wx-normal:     rgba(100,160,100,0.18);
-    --wx-record:     rgba(255,255,255,0.04);
+    --wx-hi:         #c07830;
+    --wx-lo:         #4a6a90;
+    --wx-normal:     rgba(80,140,80,0.18);
+    --wx-record:     rgba(0,0,0,0.04);
     --wx-precip:     #5b9bd5;
     --wx-snow:       #a0d4f0;
     --wx-thunder:    #8f3f97;
     --wx-frz:        #e06040;
-    --wx-grid:       #1e1e22;
+    --wx-grid:       #d8d5d0;
     --wx-label:      #555555;
     --wx-label-dim:  #888888;
   }
