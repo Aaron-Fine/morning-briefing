@@ -1,6 +1,6 @@
 # Morning Digest — TODO
 
-_Last updated: 2026-04-10_
+_Last updated: 2026-04-11_
 
 ---
 
@@ -74,9 +74,18 @@ _Last updated: 2026-04-10_
 - **Consolidated `_collect_known_urls`** — Created `utils/urls.py` with shared `collect_known_urls()` function. Both `validate.py` and `stages/seams.py` now import from the shared utility. `seams.py` variant (which also includes domain analysis links) uses the optional `domain_analysis` parameter.
 - **`validate.py` `VALID_TAG_LABELS` converted to dict** — Was a bare set of label strings, now a proper tag→label mapping (`{"war": "Conflict", ...}`) matching `cross_domain._TAG_LABELS`. Contract tests updated to verify dict equality and value consistency.
 
+### Test coverage (2026-04-11)
+- **`tests/test_collect.py`** — 8 tests covering `collect.run()`: all-source orchestration, markets/spiritual disable toggles, YouTube failure resilience, local news sourcing, source_counts inclusion, raw_sources output.
+- **`tests/test_prepare_spiritual.py`** — 12 tests covering `prepare_spiritual.run()`: LLM reflection generation, scripture fallback on error/empty/missing model_config, CFM data validation, prompt content/params correctness, field preservation.
+- **`tests/test_analyze_domain.py`** — 36 tests covering `_filter_rss`, `_filter_transcripts`, `_fmt_*` helpers, `_run_domain_pass`, empty domain results, LLM call params.
+- **`tests/test_prepare_calendar.py`** — 12 tests covering `_parse_date` format variants, event merging (holidays/church/econ/launches), chronological sorting, cap enforcement, missing data handling.
+- **`tests/test_assemble.py`** — 34 tests covering `_item_to_glance`, `_domain_item_to_deep_dive`, `_build_from_domain_analysis`, `_extract_peripheral_data`, `assemble.run()` Phase 3/Phase 1/empty fallback modes, Markup wrapping.
+- **`tests/test_send.py`** — 22 tests covering `_send_digest`, `_send_failure_notification`, `send.run()`, credential validation, UTF-8 Q-encoding subjects, plain-text fallback, timestamp format.
+- **Total: 688 tests passing** across all test files.
+
 ---
 
 ## Open items
 
 ### Test coverage gaps
-_All source modules now have dedicated test coverage in `tests/test_sources.py` (rss_feeds, come_follow_me, holidays, economic_calendar, launches). Additional coverage added in `tests/test_cross_domain.py`, `tests/test_seams.py`, `tests/test_youtube.py`, `tests/test_markets.py`, `tests/test_stages.py`, `tests/test_assemble.py`, `tests/test_contracts.py`, and `tests/test_prepare_local.py`._
+_All source modules now have dedicated test coverage in `tests/test_sources.py` (rss_feeds, come_follow_me, holidays, economic_calendar, launches). Additional coverage added in `tests/test_cross_domain.py`, `tests/test_seams.py`, `tests/test_youtube.py`, `tests/test_markets.py`, `tests/test_stages.py`, `tests/test_assemble.py` (template assembly, Phase 3/1/empty modes, Markup wrapping), `tests/test_send.py` (SMTP delivery, failure notification, credential validation), `tests/test_contracts.py`, `tests/test_prepare_local.py`, `tests/test_collect.py`, `tests/test_prepare_spiritual.py`, `tests/test_analyze_domain.py`, and `tests/test_prepare_calendar.py`._

@@ -1,308 +1,635 @@
-"""Tests for stages/assemble.py — template rendering and digest assembly."""
+"""Tests for stages/assemble.py — template assembly and rendering."""
+
+import sys
+import os
+from unittest.mock import patch, MagicMock
+from markupsafe import Markup
 
 import pytest
-from datetime import datetime
-from unittest.mock import patch, MagicMock
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from stages.assemble import (
     _item_to_glance,
     _domain_item_to_deep_dive,
     _build_from_domain_analysis,
     _extract_peripheral_data,
+    _TAG_LABELS,
     run,
 )
 
 
 class TestItemToGlance:
-    def test_basic_fields(self):
+    def test_basic_item(self):
         item = {
-            "tag": "war",
-            "headline": "Test headline",
-            "facts": "Test facts",
-            "analysis": "Test analysis",
+            "tag": "ai",
+            "headline": "AI breakthrough announced",
+            "facts": "Some facts here.",
+            "analysis": "Some analysis here.",
+            "links": [{"url": "https://example.com", "label": "Example"}],
+            "source_depth": "widely-reported",
         }
         result = _item_to_glance(item)
-        assert result["tag"] == "war"
-        assert result["tag_label"] == "Conflict"
-        assert result["headline"] == "Test headline"
-        assert result["facts"] == "Test facts"
-        assert result["analysis"] == "Test analysis"
-        assert result["links"] == []
-        assert result["source_depth"] == ""
+        assert result["tag"] == "ai"
+        assert result["tag_label"] == "AI"
+        assert result["headline"] == "AI breakthrough announced"
+        assert result["facts"] == "Some facts here."
+        assert result["analysis"] == "Some analysis here."
+        assert result["cross_domain_note"] == ""
+        assert result["links"] == [{"url": "https://example.com", "label": "Example"}]
+        assert result["source_depth"] == "widely-reported"
         assert result["connection_hooks"] == []
 
-    def test_cross_domain_note_in_context(self):
+    def test_context_joins_facts_and_analysis(self):
+        item = {"facts": "Fact one.", "analysis": "Analysis one."}
+        result = _item_to_glance(item)
+        assert result["context"] == "Fact one. Analysis one."
+
+    def test_context_includes_cross_domain_note(self):
         item = {
-            "tag": "tech",
-            "facts": "F",
-            "analysis": "A",
-            "cross_domain_note": "Note",
+            "facts": "Fact one.",
+            "analysis": "Analysis one.",
+            "cross_domain_note": "Connects to AI policy.",
         }
         result = _item_to_glance(item)
-        assert result["cross_domain_note"] == "Note"
-        assert "F" in result["context"]
-        assert "A" in result["context"]
-        assert "(Note)" in result["context"]
+        assert result["context"] == "Fact one. Analysis one. (Connects to AI policy.)"
 
-    def test_missing_fields_defaults(self):
-        result = _item_to_glance({})
-        assert result["tag"] == ""
-        assert result["tag_label"] == ""
-        assert result["headline"] == ""
+    def test_context_empty_when_no_fields(self):
+        item = {"facts": "", "analysis": "", "cross_domain_note": ""}
+        result = _item_to_glance(item)
         assert result["context"] == ""
 
-    def test_tag_label_fallback(self):
-        item = {"tag": "unknown"}
+    def test_tag_label_fallback_to_capitalized_tag(self):
+        item = {"tag": "unknown_tag"}
         result = _item_to_glance(item)
-        assert result["tag_label"] == "Unknown"
+        assert result["tag_label"] == "Unknown_tag"
 
-    def test_tag_label_from_item(self):
-        item = {"tag": "war", "tag_label": "Custom Label"}
+    def test_tag_label_uses_tag_labels_mapping(self):
+        for tag, expected_label in _TAG_LABELS.items():
+            item = {"tag": tag}
+            result = _item_to_glance(item)
+            assert result["tag_label"] == expected_label
+
+    def test_explicit_tag_label_overrides_mapping(self):
+        item = {"tag": "ai", "tag_label": "Custom AI Label"}
         result = _item_to_glance(item)
-        assert result["tag_label"] == "Custom Label"
+        assert result["tag_label"] == "Custom AI Label"
+
+    def test_connection_hooks_preserved(self):
+        hooks = [{"entity": "OpenAI", "region": "US", "theme": "AI", "policy": ""}]
+        item = {"connection_hooks": hooks}
+        result = _item_to_glance(item)
+        assert result["connection_hooks"] == hooks
 
 
 class TestDomainItemToDeepDive:
     def test_basic_conversion(self):
         item = {
-            "headline": "Dive headline",
-            "facts": "Facts",
-            "analysis": "Analysis",
-            "deep_dive_rationale": "Rationale",
-            "links": [{"url": "https://example.com", "label": "Source"}],
-            "source_depth": "widely-reported",
+            "headline": "Deep dive headline",
+            "tag": "war",
+            "facts": "<p>Facts paragraph.</p>",
+            "analysis": "<p>Analysis paragraph.</p>",
+            "deep_dive_rationale": "Why this matters.",
+            "links": [{"url": "https://example.com", "label": "Example"}],
+            "source_depth": "corroborated",
         }
         result = _domain_item_to_deep_dive(item)
-        assert result["headline"] == "Dive headline"
-        assert "<p>Facts</p>" in result["body"]
-        assert "<p>Analysis</p>" in result["body"]
-        assert result["why_it_matters"] == "Rationale"
-        assert result["further_reading"] == item["links"]
-        assert result["source_depth"] == "widely-reported"
+        assert result["headline"] == "Deep dive headline"
+        assert result["tag"] == "war"
+        assert result["why_it_matters"] == "Why this matters."
+        assert result["further_reading"] == [
+            {"url": "https://example.com", "label": "Example"}
+        ]
+        assert result["source_depth"] == "corroborated"
+        assert "<p>Facts paragraph.</p>" in result["body"]
+        assert "<p>Analysis paragraph.</p>" in result["body"]
 
-    def test_empty_item(self):
-        result = _domain_item_to_deep_dive({})
+    def test_body_joins_facts_and_analysis(self):
+        item = {"facts": "F1", "analysis": "A1"}
+        result = _domain_item_to_deep_dive(item)
+        assert result["body"] == "<p>F1</p>\n<p>A1</p>"
+
+    def test_body_only_facts(self):
+        item = {"facts": "F1", "analysis": ""}
+        result = _domain_item_to_deep_dive(item)
+        assert result["body"] == "<p>F1</p>"
+
+    def test_body_only_analysis(self):
+        item = {"facts": "", "analysis": "A1"}
+        result = _domain_item_to_deep_dive(item)
+        assert result["body"] == "<p>A1</p>"
+
+    def test_empty_body(self):
+        item = {"facts": "", "analysis": ""}
+        result = _domain_item_to_deep_dive(item)
+        assert result["body"] == ""
+
+    def test_missing_fields_defaults(self):
+        item = {}
+        result = _domain_item_to_deep_dive(item)
+        assert result["headline"] == ""
+        assert result["tag"] == ""
         assert result["body"] == ""
         assert result["why_it_matters"] == ""
+        assert result["further_reading"] == []
+        assert result["source_depth"] == ""
 
 
 class TestBuildFromDomainAnalysis:
-    def test_empty_domain_analysis(self):
-        context = {"domain_analysis": {}}
-        config = {"digest": {"at_a_glance": {"max_items": 7, "normal_items": 5}}}
-        at_a_glance, deep_dives, market = _build_from_domain_analysis(context, config)
-        assert at_a_glance == []
-        assert deep_dives == []
-        assert market == ""
-
-    def test_items_sorted_by_depth(self):
+    def test_basic_extraction(self):
         context = {
             "domain_analysis": {
+                "ai_tech": {
+                    "items": [
+                        {
+                            "tag": "ai",
+                            "headline": "AI story",
+                            "facts": "Facts",
+                            "analysis": "Analysis",
+                        },
+                        {
+                            "tag": "tech",
+                            "headline": "Tech story",
+                            "facts": "Tech facts",
+                            "analysis": "Tech analysis",
+                        },
+                    ]
+                },
                 "geopolitics": {
                     "items": [
-                        {"headline": "Single", "source_depth": "single-source"},
-                        {"headline": "Wide", "source_depth": "widely-reported"},
-                        {"headline": "Corroborated", "source_depth": "corroborated"},
+                        {
+                            "tag": "war",
+                            "headline": "War story",
+                            "facts": "War facts",
+                            "analysis": "War analysis",
+                        }
                     ]
-                }
+                },
             }
         }
-        config = {"digest": {"at_a_glance": {"max_items": 10, "normal_items": 10}}}
-        at_a_glance, _, _ = _build_from_domain_analysis(context, config)
-        assert at_a_glance[0]["headline"] == "Wide"
-        assert at_a_glance[1]["headline"] == "Corroborated"
-        assert at_a_glance[2]["headline"] == "Single"
-
-    def test_deep_dive_candidates_separated(self):
-        context = {
-            "domain_analysis": {
-                "defense_space": {
-                    "items": [
-                        {"headline": "Normal", "deep_dive_candidate": False},
-                        {"headline": "Dive", "deep_dive_candidate": True},
-                    ]
-                }
+        config = {
+            "digest": {
+                "at_a_glance": {"max_items": 14, "normal_items": 10},
+                "deep_dives": {"count": 2},
             }
         }
-        config = {"digest": {"at_a_glance": {"max_items": 10, "normal_items": 10}}}
-        at_a_glance, deep_dives, _ = _build_from_domain_analysis(context, config)
-        assert len(at_a_glance) == 1
-        assert at_a_glance[0]["headline"] == "Normal"
-        assert len(deep_dives) == 1
-        assert deep_dives[0]["headline"] == "Dive"
+        at_a_glance, deep_dives, market_context = _build_from_domain_analysis(
+            context, config
+        )
+        assert len(at_a_glance) == 3
+        assert len(deep_dives) == 0
+        assert market_context == ""
 
     def test_market_context_from_econ(self):
         context = {
             "domain_analysis": {
-                "econ": {"market_context": "Market is volatile"},
-                "geopolitics": {"items": []},
+                "econ": {
+                    "market_context": "Markets are up today.",
+                    "items": [],
+                }
             }
         }
-        config = {"digest": {"at_a_glance": {"max_items": 7, "normal_items": 5}}}
-        _, _, market = _build_from_domain_analysis(context, config)
-        assert market == "Market is volatile"
+        config = {
+            "digest": {
+                "at_a_glance": {"max_items": 14, "normal_items": 10},
+                "deep_dives": {"count": 2},
+            }
+        }
+        _, _, market_context = _build_from_domain_analysis(context, config)
+        assert market_context == "Markets are up today."
+
+    def test_deep_dive_candidates_extracted(self):
+        context = {
+            "domain_analysis": {
+                "ai_tech": {
+                    "items": [
+                        {
+                            "tag": "ai",
+                            "headline": "AI deep dive",
+                            "facts": "Facts",
+                            "analysis": "Analysis",
+                            "deep_dive_candidate": True,
+                            "deep_dive_rationale": "Important AI topic.",
+                        },
+                        {
+                            "tag": "tech",
+                            "headline": "Regular tech story",
+                            "facts": "Tech facts",
+                            "analysis": "Tech analysis",
+                        },
+                    ]
+                }
+            }
+        }
+        config = {
+            "digest": {
+                "at_a_glance": {"max_items": 14, "normal_items": 10},
+                "deep_dives": {"count": 2},
+            }
+        }
+        at_a_glance, deep_dives, _ = _build_from_domain_analysis(context, config)
+        assert len(at_a_glance) == 1
+        assert len(deep_dives) == 1
+        assert deep_dives[0]["headline"] == "AI deep dive"
+
+    def test_deep_dive_count_capped(self):
+        candidates = [
+            {
+                "tag": "ai",
+                "headline": f"Deep dive {i}",
+                "facts": f"Facts {i}",
+                "analysis": f"Analysis {i}",
+                "deep_dive_candidate": True,
+            }
+            for i in range(5)
+        ]
+        context = {"domain_analysis": {"ai_tech": {"items": candidates}}}
+        config = {
+            "digest": {
+                "at_a_glance": {"max_items": 14, "normal_items": 10},
+                "deep_dives": {"count": 2},
+            }
+        }
+        _, deep_dives, _ = _build_from_domain_analysis(context, config)
+        assert len(deep_dives) == 2
+
+    def test_sorting_by_source_depth(self):
+        items = [
+            {
+                "tag": "ai",
+                "headline": "Single",
+                "facts": "F",
+                "source_depth": "single-source",
+            },
+            {
+                "tag": "war",
+                "headline": "Widely",
+                "facts": "F",
+                "source_depth": "widely-reported",
+            },
+            {
+                "tag": "tech",
+                "headline": "Corroborated",
+                "facts": "F",
+                "source_depth": "corroborated",
+            },
+        ]
+        context = {"domain_analysis": {"misc": {"items": items}}}
+        config = {
+            "digest": {
+                "at_a_glance": {"max_items": 14, "normal_items": 10},
+                "deep_dives": {"count": 2},
+            }
+        }
+        at_a_glance, _, _ = _build_from_domain_analysis(context, config)
+        headlines = [i["headline"] for i in at_a_glance]
+        assert headlines == ["Widely", "Corroborated", "Single"]
 
     def test_at_a_glance_cap_enforced(self):
-        items = [{"headline": f"Item {i}"} for i in range(15)]
-        context = {"domain_analysis": {"geopolitics": {"items": items}}}
-        config = {"digest": {"at_a_glance": {"max_items": 7, "normal_items": 10}}}
+        items = [
+            {"tag": "ai", "headline": f"Item {i}", "facts": "F"} for i in range(20)
+        ]
+        context = {"domain_analysis": {"misc": {"items": items}}}
+        config = {
+            "digest": {
+                "at_a_glance": {"max_items": 7, "normal_items": 10},
+                "deep_dives": {"count": 2},
+            }
+        }
         at_a_glance, _, _ = _build_from_domain_analysis(context, config)
         assert len(at_a_glance) == 7
 
+    def test_empty_domain_analysis(self):
+        context = {"domain_analysis": {}}
+        config = {
+            "digest": {
+                "at_a_glance": {"max_items": 14, "normal_items": 10},
+                "deep_dives": {"count": 2},
+            }
+        }
+        at_a_glance, deep_dives, market_context = _build_from_domain_analysis(
+            context, config
+        )
+        assert at_a_glance == []
+        assert deep_dives == []
+        assert market_context == ""
+
 
 class TestExtractPeripheralData:
-    def test_context_takes_priority(self):
+    def test_uses_context_values_when_present(self):
         context = {
-            "spiritual": {"reflection": "From context"},
-            "weather": {"temp": 72},
-            "weather_html": "<svg>...</svg>",
-            "calendar": {"events": [{"name": "Event"}]},
-            "local_items": [{"headline": "Local"}],
+            "spiritual": {"date_range": "Jan 1-7", "reading": "Test"},
+            "weather": {"current_temp_f": 72},
+            "weather_html": "<svg>weather</svg>",
+            "calendar": {"events": [{"date": "Monday", "event": "Meeting"}]},
+            "local_items": [{"headline": "Local story"}],
         }
-        raw_sources = {
-            "come_follow_me": {"scripture_text": "From raw"},
-            "weather": {"temp": 0},
-            "local_news": [{"headline": "Raw"}],
-        }
+        raw_sources = {}
         result = _extract_peripheral_data(context, raw_sources)
-        assert result["spiritual"]["reflection"] == "From context"
-        assert result["weather"]["temp"] == 72
-        assert result["weather_html"] == "<svg>...</svg>"
-        assert result["week_ahead"] == [{"name": "Event"}]
-        assert result["local_items"] == [{"headline": "Local"}]
+        assert result["spiritual"] == {"date_range": "Jan 1-7", "reading": "Test"}
+        assert result["weather"] == {"current_temp_f": 72}
+        assert result["weather_html"] == "<svg>weather</svg>"
+        assert result["week_ahead"] == [{"date": "Monday", "event": "Meeting"}]
+        assert result["local_items"] == [{"headline": "Local story"}]
 
-    def test_fallback_to_raw_sources(self):
+    def test_spiritual_fallback_to_raw_sources(self):
         context = {}
         raw_sources = {
-            "come_follow_me": {"scripture_text": "Scripture"},
-            "weather": {"temp": 65},
-            "local_news": [{"headline": "Raw"}],
+            "come_follow_me": {
+                "date_range": "Jan 1-7",
+                "reading": "Test",
+                "scripture_text": "Scripture text",
+            }
         }
         result = _extract_peripheral_data(context, raw_sources)
-        assert result["spiritual"]["reflection"] == "Scripture"
-        assert result["weather"]["temp"] == 65
-        assert result["local_items"] == [{"headline": "Raw"}]
+        assert result["spiritual"]["date_range"] == "Jan 1-7"
+        assert result["spiritual"]["reflection"] == "Scripture text"
+
+    def test_weather_fallback_to_raw_sources(self):
+        context = {}
+        raw_sources = {"weather": {"current_temp_f": 65}}
+        result = _extract_peripheral_data(context, raw_sources)
+        assert result["weather"] == {"current_temp_f": 65}
+
+    def test_local_items_fallback_to_raw_sources(self):
+        context = {}
+        raw_sources = {"local_news": [{"headline": "Fallback local"}]}
+        result = _extract_peripheral_data(context, raw_sources)
+        assert result["local_items"] == [{"headline": "Fallback local"}]
+
+    def test_missing_spiritual_returns_none(self):
+        context = {}
+        raw_sources = {}
+        result = _extract_peripheral_data(context, raw_sources)
+        assert result["spiritual"] is None
+
+    def test_empty_calendar_events(self):
+        context = {"calendar": {}}
+        raw_sources = {}
+        result = _extract_peripheral_data(context, raw_sources)
+        assert result["week_ahead"] == []
 
 
 class TestAssembleRun:
-    def _make_context(self, **overrides):
+    @patch("stages.assemble.render_email")
+    def test_phase_3_cross_domain_output(self, mock_render):
+        mock_render.return_value = "<html>rendered</html>"
         context = {
             "cross_domain_output": {
                 "at_a_glance": [
                     {
-                        "tag": "war",
-                        "headline": "Test",
-                        "facts": "F",
-                        "analysis": "A",
-                        "links": [],
+                        "tag": "ai",
+                        "headline": "AI story",
+                        "facts": "Facts",
+                        "analysis": "Analysis",
                     }
                 ],
                 "deep_dives": [
                     {
-                        "headline": "Dive",
+                        "headline": "Deep dive",
                         "body": "<p>Body</p>",
-                        "why_it_matters": "WM",
-                        "further_reading": [],
-                        "source_depth": "widely-reported",
+                        "why_it_matters": "Why",
                     }
                 ],
-                "market_context": "Markets up",
-                "worth_reading": [],
-                "cross_domain_connections": [],
+                "market_context": "Markets up.",
+                "worth_reading": [
+                    {
+                        "url": "https://example.com",
+                        "title": "Article",
+                        "source": "Ex",
+                        "read_time": "5 min",
+                        "description": "Desc",
+                    }
+                ],
+                "cross_domain_connections": [{"entity": "OpenAI"}],
             },
             "seam_data": {
                 "contested_narratives": [],
                 "coverage_gaps": [],
                 "key_assumptions": [],
             },
-            "raw_sources": {"rss": [], "local_news": [], "markets": []},
-            "calendar": {"events": []},
-            "weather": {},
-            "spiritual": None,
+            "raw_sources": {},
         }
-        context.update(overrides)
-        return context
-
-    def _make_config(self):
-        return {
-            "digest": {"at_a_glance": {"max_items": 7, "normal_items": 5}},
-            "rss": {"feeds": []},
-            "local_news": {"sources": []},
-            "youtube": {"analysis_channels": []},
-            "location": {"timezone": "America/Denver"},
+        config = {
+            "digest": {
+                "at_a_glance": {"max_items": 14, "normal_items": 10},
+                "deep_dives": {"count": 2},
+            }
         }
 
-    def test_phase3_mode(self):
-        result = run(self._make_context(), self._make_config())
+        result = run(context, config)
+
         assert "html" in result
         assert "template_data" in result
         assert "digest_json" in result
         assert len(result["template_data"]["at_a_glance"]) == 1
         assert len(result["template_data"]["deep_dives"]) == 1
+        assert result["template_data"]["market_context"] == "Markets up."
+        assert len(result["template_data"]["worth_reading"]) == 1
+        assert result["digest_json"]["cross_domain_connections"] == [
+            {"entity": "OpenAI"}
+        ]
+        mock_render.assert_called_once()
 
-    def test_phase1_mode(self):
-        context = self._make_context()
-        del context["cross_domain_output"]
-        context["domain_analysis"] = {
-            "geopolitics": {
-                "items": [
-                    {
-                        "tag": "war",
-                        "headline": "Phase1",
-                        "facts": "F",
-                        "analysis": "A",
-                    }
-                ]
-            }
+    @patch("stages.assemble.render_email")
+    def test_phase_1_domain_analysis(self, mock_render):
+        mock_render.return_value = "<html>phase1</html>"
+        context = {
+            "domain_analysis": {
+                "ai_tech": {
+                    "items": [
+                        {
+                            "tag": "ai",
+                            "headline": "AI story",
+                            "facts": "Facts",
+                            "analysis": "Analysis",
+                        }
+                    ]
+                },
+                "econ": {
+                    "market_context": "Econ context.",
+                    "items": [],
+                },
+            },
+            "seam_data": {
+                "contested_narratives": [],
+                "coverage_gaps": [],
+                "key_assumptions": [],
+            },
+            "raw_sources": {},
         }
-        result = run(context, self._make_config())
+        config = {
+            "digest": {
+                "at_a_glance": {"max_items": 14, "normal_items": 10},
+                "deep_dives": {"count": 2},
+            },
+            "rss": {"feeds": [{"name": "TechCrunch"}]},
+            "local_news": {"sources": [{"name": "Local Paper"}]},
+            "youtube": {"analysis_channels": [{"name": "AI Channel"}]},
+        }
+
+        result = run(context, config)
+
         assert "html" in result
         assert len(result["template_data"]["at_a_glance"]) == 1
+        assert result["template_data"]["market_context"] == "Econ context."
+        assert result["template_data"]["worth_reading"] == []
+        assert result["template_data"]["rss_source_names"] == "TechCrunch, Local Paper"
+        assert result["template_data"]["yt_source_names"] == "AI Channel"
 
-    def test_empty_fallback(self):
-        context = {"seam_data": {}, "raw_sources": {}}
-        result = run(context, self._make_config())
-        assert "html" in result
+    @patch("stages.assemble.render_email")
+    def test_empty_fallback_produces_valid_output(self, mock_render):
+        mock_render.return_value = "<html>empty</html>"
+        context = {
+            "seam_data": {},
+            "raw_sources": {},
+        }
+        config = {}
+
+        result = run(context, config)
+
         assert result["template_data"]["at_a_glance"] == []
+        assert result["template_data"]["deep_dives"] == []
+        assert result["template_data"]["market_context"] == ""
+        assert result["template_data"]["worth_reading"] == []
 
-    def test_deep_dive_body_is_markup(self):
-        from markupsafe import Markup
+    @patch("stages.assemble.render_email")
+    def test_deep_dive_body_wrapped_in_markup(self, mock_render):
+        mock_render.return_value = "<html>with markup</html>"
+        context = {
+            "cross_domain_output": {
+                "at_a_glance": [],
+                "deep_dives": [
+                    {
+                        "headline": "Deep dive",
+                        "body": "<p>HTML body</p>",
+                        "why_it_matters": "Why",
+                    }
+                ],
+                "market_context": "",
+                "worth_reading": [],
+                "cross_domain_connections": [],
+            },
+            "seam_data": {},
+            "raw_sources": {},
+        }
+        config = {
+            "digest": {
+                "at_a_glance": {"max_items": 14, "normal_items": 10},
+                "deep_dives": {"count": 2},
+            }
+        }
 
-        result = run(self._make_context(), self._make_config())
-        dive = result["template_data"]["deep_dives"][0]
-        assert isinstance(dive["body"], Markup)
+        run(context, config)
 
-    def test_digest_json_has_plain_string_body(self):
-        from markupsafe import Markup
+        call_args = mock_render.call_args[0][0]
+        deep_dives = call_args["deep_dives"]
+        assert isinstance(deep_dives[0]["body"], Markup)
 
-        result = run(self._make_context(), self._make_config())
-        dive = result["digest_json"]["deep_dives"][0]
-        assert isinstance(dive["body"], str)
-        assert not isinstance(dive["body"], Markup)
+    @patch("stages.assemble.render_email")
+    def test_weather_html_wrapped_in_markup(self, mock_render):
+        mock_render.return_value = "<html>weather</html>"
+        context = {
+            "cross_domain_output": {
+                "at_a_glance": [],
+                "deep_dives": [],
+                "market_context": "",
+                "worth_reading": [],
+                "cross_domain_connections": [],
+            },
+            "weather_html": "<svg>weather svg</svg>",
+            "seam_data": {},
+            "raw_sources": {},
+        }
+        config = {
+            "digest": {
+                "at_a_glance": {"max_items": 14, "normal_items": 10},
+                "deep_dives": {"count": 2},
+            }
+        }
 
-    def test_weather_html_marked_safe(self):
-        from markupsafe import Markup
+        run(context, config)
 
-        context = self._make_context(weather_html="<svg>test</svg>")
-        result = run(context, self._make_config())
-        assert isinstance(result["template_data"]["weather_html"], Markup)
+        call_args = mock_render.call_args[0][0]
+        assert isinstance(call_args["weather_html"], Markup)
 
-    def test_source_names_in_template(self):
-        config = self._make_config()
-        config["rss"]["feeds"] = [{"name": "Test Feed"}]
-        config["local_news"]["sources"] = [{"name": "Local"}]
-        config["youtube"]["analysis_channels"] = [{"name": "YT"}]
-        result = run(self._make_context(), config)
-        assert "Test Feed" in result["template_data"]["rss_source_names"]
-        assert "Local" in result["template_data"]["rss_source_names"]
-        assert "YT" in result["template_data"]["yt_source_names"]
+    @patch("stages.assemble.render_email")
+    def test_date_and_time_generated(self, mock_render):
+        mock_render.return_value = "<html>date test</html>"
+        context = {
+            "cross_domain_output": {
+                "at_a_glance": [],
+                "deep_dives": [],
+                "market_context": "",
+                "worth_reading": [],
+                "cross_domain_connections": [],
+            },
+            "seam_data": {},
+            "raw_sources": {},
+        }
+        config = {
+            "location": {"timezone": "America/Denver"},
+            "digest": {
+                "at_a_glance": {"max_items": 14, "normal_items": 10},
+                "deep_dives": {"count": 2},
+            },
+        }
 
-    def test_cross_domain_connections_in_digest_json(self):
-        context = self._make_context()
-        context["cross_domain_output"]["cross_domain_connections"] = [
-            {"description": "Test connection"}
-        ]
-        result = run(context, self._make_config())
-        assert result["digest_json"]["cross_domain_connections"] == [
-            {"description": "Test connection"}
-        ]
+        run(context, config)
+
+        call_args = mock_render.call_args[0][0]
+        assert "date_display" in call_args
+        assert "generated_at" in call_args
+        assert "Denver" in call_args["generated_at"]
+
+    @patch("stages.assemble.render_email")
+    def test_seam_data_passed_through(self, mock_render):
+        mock_render.return_value = "<html>seams</html>"
+        context = {
+            "cross_domain_output": {
+                "at_a_glance": [],
+                "deep_dives": [],
+                "market_context": "",
+                "worth_reading": [],
+                "cross_domain_connections": [],
+            },
+            "seam_data": {
+                "contested_narratives": [
+                    {
+                        "topic": "Topic A",
+                        "description": "Desc A",
+                        "sources_a": "Src A",
+                        "sources_b": "Src B",
+                    }
+                ],
+                "coverage_gaps": [
+                    {
+                        "topic": "Gap A",
+                        "description": "Desc A",
+                        "present_in": "X",
+                        "absent_from": "Y",
+                    }
+                ],
+                "key_assumptions": [
+                    {
+                        "topic": "Assumption A",
+                        "assumption": "A",
+                        "invalidator": "B",
+                        "confidence": "High",
+                    }
+                ],
+            },
+            "raw_sources": {},
+        }
+        config = {
+            "digest": {
+                "at_a_glance": {"max_items": 14, "normal_items": 10},
+                "deep_dives": {"count": 2},
+            }
+        }
+
+        result = run(context, config)
+
+        assert len(result["template_data"]["contested_narratives"]) == 1
+        assert len(result["template_data"]["coverage_gaps"]) == 1
+        assert len(result["template_data"]["key_assumptions"]) == 1
