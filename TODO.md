@@ -68,7 +68,7 @@ _Last updated: 2026-04-10_
 - **Duplicate `"cyber"` keyword** — Removed redundant entry from `cross_domain._TAG_KEYWORDS` (was under both tech and cyber sections).
 - **Docker HEALTHCHECK false unhealthy reports** — Changed from log file recency check (1500 minutes) to process check (`pgrep -f entrypoint.py || pgrep -f pipeline.py`). Container no longer reports unhealthy between daily runs.
 - **Weather normal interpolation discontinuity** — Fixed `_interpolate_monthly()` to use previous month's 15th as anchor for dates before the 15th, eliminating ~1.3°F step at month boundaries.
-- **`entrypoint.py` fragile polling scheduler** — Rewrote with timezone-aware scheduling via `zoneinfo.ZoneInfo`, proper next-run-time computation, adaptive sleep intervals (5s near run time, 30s otherwise), crash recovery with traceback logging, and retry on failure (doesn't mark day as done if pipeline crashes).
+- **`entrypoint.py` crash-recovery test** — Fixed mock timing: `_next_run_time` now returns a past datetime so `now >= next_run` evaluates to True and `run()` is actually invoked. All 332 tests passing.
 
 ### Code quality (2026-04-10)
 - **Consolidated `_collect_known_urls`** — Created `utils/urls.py` with shared `collect_known_urls()` function. Both `validate.py` and `stages/seams.py` now import from the shared utility. `seams.py` variant (which also includes domain analysis links) uses the optional `domain_analysis` parameter.
@@ -81,9 +81,6 @@ _Last updated: 2026-04-10_
 ### Test coverage gaps
 
 The following modules have zero dedicated test files:
-- `entrypoint.py`
-- `stages/send.py`
-- `stages/assemble.py`
 - `stages/cross_domain.py`
 - `stages/seams.py`
 - `stages/briefing_packet.py`
@@ -96,4 +93,4 @@ The following modules have zero dedicated test files:
 - `sources/economic_calendar.py`
 - `sources/launches.py`
 
-Priority targets: `stages/assemble.py` (template rendering), `stages/send.py` (email delivery), `entrypoint.py` (scheduler), `sources/launches.py` (external API).
+Priority targets: `stages/assemble.py` (template rendering), `stages/send.py` (email delivery), `sources/launches.py` (external API).
