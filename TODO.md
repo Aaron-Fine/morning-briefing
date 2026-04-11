@@ -70,23 +70,13 @@ _Last updated: 2026-04-10_
 - **Weather normal interpolation discontinuity** — Fixed `_interpolate_monthly()` to use previous month's 15th as anchor for dates before the 15th, eliminating ~1.3°F step at month boundaries.
 - **`entrypoint.py` fragile polling scheduler** — Rewrote with timezone-aware scheduling via `zoneinfo.ZoneInfo`, proper next-run-time computation, adaptive sleep intervals (5s near run time, 30s otherwise), crash recovery with traceback logging, and retry on failure (doesn't mark day as done if pipeline crashes).
 
+### Code quality (2026-04-10)
+- **Consolidated `_collect_known_urls`** — Created `utils/urls.py` with shared `collect_known_urls()` function. Both `validate.py` and `stages/seams.py` now import from the shared utility. `seams.py` variant (which also includes domain analysis links) uses the optional `domain_analysis` parameter.
+- **`validate.py` `VALID_TAG_LABELS` converted to dict** — Was a bare set of label strings, now a proper tag→label mapping (`{"war": "Conflict", ...}`) matching `cross_domain._TAG_LABELS`. Contract tests updated to verify dict equality and value consistency.
+
 ---
 
 ## Open items
-
-### Code quality
-
-#### 1. Duplicate `_collect_known_urls` in `validate.py` and `stages/seams.py`
-- **Files**: `validate.py:76`, `stages/seams.py:121`
-- **Problem**: The same function (build a set of known-good URLs from raw source data) exists in two modules with slightly different implementations. `seams.py` also includes URLs from domain analysis links, while `validate.py` does not.
-- **Fix**: Consolidate into a shared utility (e.g., `utils/urls.py`) and import from both modules. Or accept the difference if the seam detection genuinely needs a broader URL set — but document why.
-- **Impact**: Low — maintenance burden if the logic needs to change in the future.
-
-#### 2. `validate.py` `VALID_TAG_LABELS` is a set, not a dict
-- **File**: `validate.py:31-42`
-- **Problem**: `VALID_TAG_LABELS` is a `set` of label strings (`{"Conflict", "Politics", ...}`), not a dict mapping tags to labels. It cannot be used for tag→label lookups downstream. It's only consumed by `test_contracts.py` for consistency checking.
-- **Fix**: Either convert to a dict (`{"war": "Conflict", "domestic": "Politics", ...}`) to match `cross_domain._TAG_LABELS`, or remove it entirely and derive the set of valid labels from `_TAG_LABELS.values()` in the contract tests.
-- **Impact**: Low — works for its current purpose but is a maintenance trap (someone might try to use it as a mapping).
 
 ### Test coverage gaps
 

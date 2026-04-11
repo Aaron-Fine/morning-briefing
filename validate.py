@@ -14,6 +14,8 @@ import logging
 import re
 from typing import Any
 
+from utils.urls import collect_known_urls
+
 log = logging.getLogger(__name__)
 
 VALID_TAGS = {
@@ -29,16 +31,16 @@ VALID_TAGS = {
     "cyber",
 }
 VALID_TAG_LABELS = {
-    "Conflict",
-    "Politics",
-    "Economy",
-    "AI",
-    "Technology",
-    "Defense",
-    "Space",
-    "Cyber",
-    "Local",
-    "Science",
+    "war": "Conflict",
+    "ai": "AI",
+    "domestic": "Politics",
+    "defense": "Defense",
+    "space": "Space",
+    "tech": "Technology",
+    "local": "Local",
+    "science": "Science",
+    "econ": "Economy",
+    "cyber": "Cyber",
 }
 
 # HTML tags allowed in deep dive body fields after sanitization
@@ -75,17 +77,7 @@ def _strip_disallowed_html(html: str) -> str:
 
 def _collect_known_urls(source_data: dict) -> set[str]:
     """Build the set of known-good URLs from raw source data."""
-    known: set[str] = set()
-    for item in source_data.get("rss", []):
-        if item.get("url"):
-            known.add(item["url"])
-    for item in source_data.get("local_news", []):
-        if item.get("url"):
-            known.add(item["url"])
-    for t in source_data.get("analysis_transcripts", []):
-        if t.get("url"):
-            known.add(t["url"])
-    return known
+    return collect_known_urls(source_data)
 
 
 def validate_urls(output_json: Any, known_urls: set[str]) -> Any:

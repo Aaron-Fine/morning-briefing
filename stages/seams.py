@@ -21,6 +21,7 @@ Non-critical: returns empty results on failure so the pipeline can continue.
 import logging
 
 from llm import call_llm
+from utils.urls import collect_known_urls
 from validate import validate_urls
 
 log = logging.getLogger(__name__)
@@ -120,25 +121,7 @@ RULES:
 
 def _collect_known_urls(raw_sources: dict, domain_analysis: dict) -> set[str]:
     """Build the set of known-good URLs from raw sources and domain artifacts."""
-    known: set[str] = set()
-    for item in raw_sources.get("rss", []):
-        if item.get("url"):
-            known.add(item["url"])
-    for item in raw_sources.get("local_news", []):
-        if item.get("url"):
-            known.add(item["url"])
-    for t in raw_sources.get("analysis_transcripts", []):
-        if t.get("url"):
-            known.add(t["url"])
-    # URLs from domain analysis items
-    for domain_result in domain_analysis.values():
-        if not isinstance(domain_result, dict):
-            continue
-        for item in domain_result.get("items", []):
-            for link in item.get("links", []):
-                if link.get("url"):
-                    known.add(link["url"])
-    return known
+    return collect_known_urls(raw_sources, domain_analysis)
 
 
 def _build_domain_summary(domain_analysis: dict) -> str:
@@ -152,7 +135,9 @@ def _build_domain_summary(domain_analysis: dict) -> str:
             continue
         parts.append(f"\n--- {domain_key.upper()} ANALYSIS ({len(items)} items) ---")
         for item in items:
-            dive_flag = " [DEEP DIVE CANDIDATE]" if item.get("deep_dive_candidate") else ""
+            dive_flag = (
+                " [DEEP DIVE CANDIDATE]" if item.get("deep_dive_candidate") else ""
+            )
             parts.append(
                 f"\nHeadline: {item.get('headline', '')}{dive_flag}\n"
                 f"Tag: {item.get('tag', '')} | Depth: {item.get('source_depth', '')}\n"
@@ -170,7 +155,9 @@ def _build_domain_summary(domain_analysis: dict) -> str:
                 parts.append(f"Connection hooks: {'; '.join(hook_strs)}")
             links = item.get("links", [])
             if links:
-                link_strs = [f"{l.get('label', '?')}: {l.get('url', '')}" for l in links[:3]]
+                link_strs = [
+                    f"{l.get('label', '?')}: {l.get('url', '')}" for l in links[:3]
+                ]
                 parts.append(f"Links: {', '.join(link_strs)}")
         # Include market_context for econ
         if domain_key == "econ" and domain_result.get("market_context"):
@@ -220,19 +207,24 @@ def _build_transcript_summary(compressed_transcripts: list) -> str:
     return "\n".join(parts)
 
 
-def run(context: dict, config: dict, model_config: dict | None = None, **kwargs) -> dict:
+def run(
+    context: dict, config: dict, model_config: dict | None = None, **kwargs
+) -> dict:
     """Detect narrative seams, coverage gaps, and key assumptions."""
     domain_analysis = context.get("domain_analysis", {})
     raw_sources = context.get("raw_sources", {})
     compressed_transcripts = context.get("compressed_transcripts", [])
 
     # Phase 2: use Claude Sonnet for bias diversity (different model than domain analysis)
-    effective_config = model_config or config.get("llm", {}).get("seam_detection", {
-        "provider": "anthropic",
-        "model": "claude-sonnet-4-6",
-        "max_tokens": 5000,
-        "temperature": 0.3,
-    })
+    effective_config = model_config or config.get("llm", {}).get(
+        "seam_detection",
+        {
+            "provider": "anthropic",
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 5000,
+            "temperature": 0.3,
+        },
+    )
 
     # Build the comprehensive user prompt
     domain_summary = _build_domain_summary(domain_analysis)
@@ -291,10 +283,12 @@ Perform all three detection tasks: contested narratives, coverage gaps, and key 
 
     except Exception as e:
         log.warning(f"Seam detection failed (non-fatal): {e}")
-        return {"seam_data": {
-            "contested_narratives": [],
-            "coverage_gaps": [],
-            "key_assumptions": [],
-            "seam_count": 0,
-            "quiet_day": True,
-        }}
+        return {
+            "seam_data": {
+                "contested_narratives": [],
+                "coverage_gaps": [],
+                "key_assumptions": [],
+                "seam_count": 0,
+                "quiet_day": True,
+            }
+        }

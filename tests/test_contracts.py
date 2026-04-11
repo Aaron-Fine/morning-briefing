@@ -61,14 +61,22 @@ class TestTagVocabularyConsistency:
 
 
 class TestTagLabelConsistency:
-    """validate.VALID_TAG_LABELS must match the values of cross_domain._TAG_LABELS."""
+    """validate.VALID_TAG_LABELS must match cross_domain._TAG_LABELS."""
 
-    def test_validate_labels_match_cross_domain_label_values(self):
+    def test_validate_labels_match_cross_domain_labels(self):
+        assert VALID_TAG_LABELS == _TAG_LABELS, (
+            f"validate.VALID_TAG_LABELS != cross_domain._TAG_LABELS. "
+            f"Missing: {_TAG_LABELS.keys() - VALID_TAG_LABELS.keys()}, "
+            f"Extra: {VALID_TAG_LABELS.keys() - _TAG_LABELS.keys()}"
+        )
+
+    def test_validate_label_values_match(self):
         cross_domain_label_values = set(_TAG_LABELS.values())
-        assert VALID_TAG_LABELS == cross_domain_label_values, (
-            f"validate.VALID_TAG_LABELS != cross_domain._TAG_LABELS values. "
-            f"Missing: {cross_domain_label_values - VALID_TAG_LABELS}, "
-            f"Extra: {VALID_TAG_LABELS - cross_domain_label_values}"
+        validate_label_values = set(VALID_TAG_LABELS.values())
+        assert validate_label_values == cross_domain_label_values, (
+            f"validate.VALID_TAG_LABELS values != cross_domain._TAG_LABELS values. "
+            f"Missing: {cross_domain_label_values - validate_label_values}, "
+            f"Extra: {validate_label_values - cross_domain_label_values}"
         )
 
 
