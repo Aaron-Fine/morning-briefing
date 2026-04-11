@@ -79,18 +79,4 @@ _Last updated: 2026-04-10_
 ## Open items
 
 ### Test coverage gaps
-
-The following modules have zero dedicated test files:
-- `stages/cross_domain.py`
-- `stages/seams.py`
-- `stages/briefing_packet.py`
-- `stages/anomaly.py`
-- `sources/youtube.py`
-- `sources/markets.py`
-- `sources/rss_feeds.py`
-- `sources/come_follow_me.py`
-- `sources/holidays.py`
-- `sources/economic_calendar.py`
-- `sources/launches.py`
-
-Priority targets: `stages/assemble.py` (template rendering), `stages/send.py` (email delivery), `sources/launches.py` (external API).
+_All source modules now have dedicated test coverage in `tests/test_sources.py` (rss_feeds, come_follow_me, holidays, economic_calendar, launches). Additional coverage added in `tests/test_cross_domain.py`, `tests/test_seams.py`, `tests/test_youtube.py`, `tests/test_markets.py`, `tests/test_stages.py`, `tests/test_assemble.py`, `tests/test_contracts.py`, and `tests/test_prepare_local.py`._
