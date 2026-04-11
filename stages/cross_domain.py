@@ -28,7 +28,18 @@ from llm import call_llm
 
 log = logging.getLogger(__name__)
 
-_VALID_TAGS = {"war", "domestic", "econ", "ai", "tech", "defense", "space", "cyber"}
+_VALID_TAGS = {
+    "war",
+    "domestic",
+    "econ",
+    "ai",
+    "tech",
+    "defense",
+    "space",
+    "cyber",
+    "local",
+    "science",
+}
 
 _TAG_LABELS = {
     "war": "Conflict",
@@ -39,6 +50,8 @@ _TAG_LABELS = {
     "defense": "Defense",
     "space": "Space",
     "cyber": "Cyber",
+    "local": "Local",
+    "science": "Science",
 }
 
 # Keyword → standard tag mapping for post-processing normalization.
@@ -92,7 +105,6 @@ _TAG_KEYWORDS: list[tuple[str, str]] = [
     # tech
     ("tech", "tech"),
     ("software", "tech"),
-    ("cyber", "cyber"),
     ("open source", "tech"),
     ("github", "tech"),
     # cyber
@@ -117,6 +129,22 @@ _TAG_KEYWORDS: list[tuple[str, str]] = [
     ("supply chain", "econ"),
     ("wto", "econ"),
     ("imf", "econ"),
+    # science
+    ("science", "science"),
+    ("climate", "science"),
+    ("research", "science"),
+    ("study", "science"),
+    ("discovery", "science"),
+    ("experiment", "science"),
+    ("peer-reviewed", "science"),
+    # local
+    ("local", "local"),
+    ("utah", "local"),
+    ("cache valley", "local"),
+    ("logan", "local"),
+    ("community", "local"),
+    ("municipal", "local"),
+    ("county", "local"),
     # domestic / politics
     ("trump", "domestic"),
     ("congress", "domestic"),
@@ -198,8 +226,8 @@ JSON object:
 {
   "at_a_glance": [
     {
-      "tag": "MUST be exactly one of: war, domestic, econ, ai, tech, defense, space, cyber — no other values",
-      "tag_label": "human-readable label matching the tag (e.g. war→Conflict, domestic→Politics, econ→Economy, ai→AI, tech→Technology, defense→Defense, space→Space, cyber→Cyber)",
+      "tag": "MUST be exactly one of: war, domestic, econ, ai, tech, defense, space, cyber, local, science — no other values",
+      "tag_label": "human-readable label matching the tag (e.g. war→Conflict, domestic→Politics, econ→Economy, ai→AI, tech→Technology, defense→Defense, space→Space, cyber→Cyber, local→Local, science→Science)",
       "headline": "from domain analysis (may be lightly edited for consistency)",
       "facts": "from domain analysis (preserved as-is)",
       "analysis": "from domain analysis (preserved as-is)",
@@ -213,6 +241,7 @@ JSON object:
     {
       "headline": "deep dive headline",
       "body": "<p>HTML body text, 4-8 paragraphs...</p>",
+      "why_it_matters": "1-2 sentence summary of why this story matters beyond the headline",
       "further_reading": [{"url": "exact URL", "label": "Source Name: Article Title"}],
       "source_depth": "from the original domain item",
       "domains_bridged": ["geopolitics", "defense_space"]
@@ -243,7 +272,7 @@ RULES:
 - Preserve domain analysts' facts and analysis verbatim in at_a_glance items — your editorial contribution is the ordering, cross_domain_notes, and deep dive writing.
 - If no stories warrant a deep dive, return an empty deep_dives array. Do not force one.
 - cross_domain_connections is metadata for the briefing packet — include all connections you identified, even minor ones.
-- TAG FIELD: use ONLY these exact values: war, domestic, econ, ai, tech, defense, space, cyber. No hyphens, no compound tags, no topic descriptions. Every at_a_glance item must have one of these eight values.
+- TAG FIELD: use ONLY these exact values: war, domestic, econ, ai, tech, defense, space, cyber, local, science. No hyphens, no compound tags, no topic descriptions. Every at_a_glance item must have one of these ten values.
 - Output ONLY valid JSON. No markdown fences, no commentary outside the JSON."""
 
 

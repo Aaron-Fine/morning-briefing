@@ -553,42 +553,49 @@ def _compute_normals_and_records(forecast: list[dict]) -> list[dict]:
 def _interpolate_monthly(table: dict, dt: datetime) -> tuple[float, float]:
     """Linearly interpolate between monthly values for a given date.
 
-    Uses the 15th of each month as anchor points.
+    Uses the 15th of each month as anchor points. Dates before the 15th
+    interpolate between the previous month's 15th and the current month's 15th.
+    Dates on/after the 15th interpolate between the current month's 15th and
+    the next month's 15th.
     """
     month = dt.month
+    day = dt.day
 
-    # Value for the 15th of this month
-    hi_15, lo_15 = table[month]
-
-    # Value for the 15th of next month
-    next_month = month + 1 if month < 12 else 1
-    hi_next, lo_next = table[next_month]
-
-    # Day of year for the 15th of this month and next
-    if month < 12:
-        day_15_this = datetime(dt.year, month, 15).timetuple().tm_yday
-        day_15_next = datetime(dt.year, next_month, 15).timetuple().tm_yday
+    # Decide which two anchor months to use
+    if day >= 15:
+        # Interpolate between this month's 15th and next month's 15th
+        anchor_a = month
+        anchor_b = month + 1 if month < 12 else 1
+        year_a = dt.year
+        year_b = dt.year if month < 12 else dt.year + 1
     else:
-        day_15_this = datetime(dt.year, 12, 15).timetuple().tm_yday
-        day_15_next = datetime(dt.year + 1, 1, 15).timetuple().tm_yday
+        # Interpolate between previous month's 15th and this month's 15th
+        anchor_a = month - 1 if month > 1 else 12
+        anchor_b = month
+        year_a = dt.year if month > 1 else dt.year - 1
+        year_b = dt.year
 
+    hi_a, lo_a = table[anchor_a]
+    hi_b, lo_b = table[anchor_b]
+
+    day_15_a = datetime(year_a, anchor_a, 15).timetuple().tm_yday
+    day_15_b = datetime(year_b, anchor_b, 15).timetuple().tm_yday
     day_of_year = dt.timetuple().tm_yday
 
-    # Linear interpolation
-    if day_15_next > day_15_this:
-        frac = (day_of_year - day_15_this) / (day_15_next - day_15_this)
-    else:
-        # 跨越 year boundary
-        days_in_range = (365 - day_15_this) + day_15_next
+    # Handle year boundary for day-of-year arithmetic
+    if day_15_b < day_15_a:
+        days_in_range = (365 - day_15_a) + day_15_b
         frac = (
-            ((365 - day_15_this) + day_of_year) / days_in_range
-            if day_of_year < day_15_next
-            else 0.0
+            ((365 - day_15_a) + day_of_year) / days_in_range
+            if day_of_year < day_15_b
+            else (day_of_year - day_15_a) / (365 - day_15_a + day_15_b)
         )
+    else:
+        frac = (day_of_year - day_15_a) / (day_15_b - day_15_a)
 
     frac = max(0.0, min(1.0, frac))
-    hi = hi_15 + frac * (hi_next - hi_15)
-    lo = lo_15 + frac * (lo_next - lo_15)
+    hi = hi_a + frac * (hi_b - hi_a)
+    lo = lo_a + frac * (lo_b - lo_a)
 
     return hi, lo
 

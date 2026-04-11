@@ -29,16 +29,16 @@ VALID_TAGS = {
     "cyber",
 }
 VALID_TAG_LABELS = {
-    "War",
+    "Conflict",
+    "Politics",
+    "Economy",
     "AI",
-    "US",
+    "Technology",
     "Defense",
     "Space",
-    "Tech",
+    "Cyber",
     "Local",
     "Science",
-    "Econ",
-    "Cyber",
 }
 
 # HTML tags allowed in deep dive body fields after sanitization

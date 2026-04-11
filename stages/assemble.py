@@ -40,6 +40,8 @@ _TAG_LABELS = {
     "defense": "Defense",
     "space": "Space",
     "cyber": "Cyber",
+    "local": "Local",
+    "science": "Science",
 }
 
 

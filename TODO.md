@@ -13,6 +13,9 @@ _Last updated: 2026-04-10_
 - **`prepare_calendar.py` launch data keys wrong** — used `launch.get("net")` and `launch.get("mission")` but `sources/launches.py` returns `"date"` and `"mission_description"`. Fixed: keys now match.
 - **NWS forecast high/low parsing** — `sources/weather.py:269` used `existing.get("is_daytime")` (always the first period's value) instead of `p.get("isDaytime")` (current period). Night temps were overwriting highs. Fixed.
 - **`anomaly.py` source_absence false positives** — used exact URL matching while `analyze_domain.py` uses domain-level matching. Switched to `urlparse().netloc` comparison.
+- **`prepare_calendar` launch date parsing** — Added `"%Y-%m-%d %H:%MZ"` and `"%Y-%m-%d %H:%M"` to `_FORMATS`. Verified: `_parse_date("2026-04-15 14:30Z")` returns correct datetime.
+- **Tag vocabulary mismatch** — `local` and `science` added to `cross_domain._VALID_TAGS`, `_TAG_LABELS`, and `_TAG_KEYWORDS`. All three modules (`validate.py`, `cross_domain.py`, `assemble.py`) now share identical 10-tag vocabulary. Contract tests verify consistency.
+- **`cross_domain` prompt missing `why_it_matters`** — Added to deep_dives JSON schema in `_SYSTEM_PROMPT`. Template already renders it.
 
 ### UI / template improvements
 - **At-a-glance voice labels** — Added SOURCES / ANALYSIS / THREAD micro-labels to each context block with distinct colors and a left-border visual separator for Analysis and Thread blocks.
@@ -58,6 +61,13 @@ _Last updated: 2026-04-10_
 - **Economic calendar wired in** — `stages/collect.py` now calls `fetch_economic_calendar()` from `sources/economic_calendar.py`; `stages/prepare_calendar.py` consumes `economic_calendar` events into the Week Ahead section.
 - **Docker health check** — Added `HEALTHCHECK` to `Dockerfile` (checks `digest.log` recency within 25 hours).
 - **Ruff linter added** — `ruff>=0.4` in `requirements.txt`, `ruff.toml` config (pyflakes F + critical pycodestyle E/W rules), `tests/test_lint.py` runs ruff as part of the pytest suite. Fixed all 17 lint issues: 6 unused imports (`sanitize.py`, `markets.py`, `weather.py`, `analyze_domain.py`, `cross_domain.py`, `seams.py`), 1 unused variable (`weather.py`), 8 empty f-strings, 2 unused variables in test file. 119 tests passing.
+- **Contract tests added** — `tests/test_contracts.py` with 15 tests covering tag vocabulary consistency, launch date format round-trip, deep dive field contracts, `_empty_stage_output` coverage, and `_stage_artifact_key` coverage. All passing.
+
+### Bug fixes (2026-04-10)
+- **`llm.py` `_retry_loop` 4xx check before sleep** — Moved 4xx status code check BEFORE `time.sleep()` call. Bad API keys now fail immediately instead of wasting 10–20 seconds. Retry backoff only applies to 5xx/transient errors.
+- **Duplicate `"cyber"` keyword** — Removed redundant entry from `cross_domain._TAG_KEYWORDS` (was under both tech and cyber sections).
+- **Docker HEALTHCHECK false unhealthy reports** — Changed from log file recency check (1500 minutes) to process check (`pgrep -f entrypoint.py || pgrep -f pipeline.py`). Container no longer reports unhealthy between daily runs.
+- **Weather normal interpolation discontinuity** — Fixed `_interpolate_monthly()` to use previous month's 15th as anchor for dates before the 15th, eliminating ~1.3°F step at month boundaries.
 
 ---
 
@@ -65,46 +75,46 @@ _Last updated: 2026-04-10_
 
 ### Bugs
 
-#### 1. `prepare_calendar` can't parse launch dates — launches always sort last
-- **File**: `stages/prepare_calendar.py`, `_parse_date()` function (line ~25)
-- **Problem**: `sources/launches.py` outputs dates like `"2026-04-15 14:30Z"` (format `%Y-%m-%d %H:%MZ`). The `_FORMATS` list in `prepare_calendar.py` has no matching pattern. All launch dates fall through to `datetime.max` and sort to the bottom.
-- **Fix**: Add `"%Y-%m-%d %H:%MZ"` and `"%Y-%m-%d %H:%M"` to the `_FORMATS` list.
-- **Test**: Call `_parse_date("2026-04-15 14:30Z")` and confirm it returns a valid datetime, not `datetime.max`.
+#### 1. `entrypoint.py` uses fragile polling scheduler
+- **File**: `entrypoint.py` (entire file, 51 lines)
+- **Problems**:
+  - `time.sleep(30)` polling loop — if the process restarts between the scheduled time window, the digest for that day is silently skipped.
+  - No timezone handling — uses `datetime.now()` (system time) despite `config.yaml` specifying `timezone: "America/Denver"`.
+  - Naive cron parsing — only handles `"minute hour * * *"` format; ignores day-of-week/month fields.
+  - No error handling around `run()` — if the pipeline raises an unhandled exception, the loop continues silently with no alert.
+- **Fix**: Replace with APScheduler or a proper cron-based scheduler. At minimum, add a "last run date" guard with timezone-aware comparison and wrap `run()` in try/except with alerting.
+- **Impact**: High — this is the production entrypoint. A silent missed digest is a user-visible failure.
 
-#### 2. Tag vocabulary mismatch — `local` and `science` tags lost in cross_domain
-- **Files**: `stages/cross_domain.py` (`_VALID_TAGS`, line ~32) and `stages/cross_domain.py` (`_normalize_tag()`, line ~134)
-- **Problem**: `validate.py` and the CSS template recognize 10 tags: `{war, ai, domestic, defense, space, tech, local, science, econ, cyber}`. But `cross_domain._VALID_TAGS` only has 8 — missing `local` and `science`. The `_normalize_tag()` fallback maps unknown tags to `"domestic"`, so any item the LLM tags as `local` or `science` silently becomes `domestic` and gets the wrong CSS color and label.
-- **Fix**: Add `"local"` and `"science"` to `_VALID_TAGS` in `cross_domain.py`. Add corresponding entries to `_TAG_LABELS`: `"local": "Local"`, `"science": "Science"`. Also update `_TAG_KEYWORDS` with some science keywords (e.g., `"climate"`, `"research"`, `"study"`).
-- **Related**: `validate.py` `VALID_TAG_LABELS` uses short labels (`"US"`, `"Econ"`, `"War"`, `"Tech"`) while `cross_domain._TAG_LABELS` uses long labels (`"Politics"`, `"Economy"`, `"Conflict"`, `"Technology"`). The template renders `item.tag_label`, which comes from `cross_domain._TAG_LABELS` via `assemble._TAG_LABELS`. The `validate.py` labels are currently unused downstream — they should either be reconciled with the template labels or removed to avoid confusion.
+### Code quality
 
-#### 3. `cross_domain` prompt doesn't request `why_it_matters` for deep dives
-- **Files**: `stages/cross_domain.py` (`_SYSTEM_PROMPT`, the deep_dives JSON schema ~line 213), `templates/email_template.py` (lines 499-502)
-- **Problem**: The template renders `dive.why_it_matters` in a callout box (`{% if dive.why_it_matters %}`). The Phase 1 fallback path (`assemble._domain_item_to_deep_dive`) populates this from `deep_dive_rationale`. But the Phase 3 cross_domain prompt's JSON output schema for deep_dives has no `why_it_matters` field — only `headline`, `body`, `further_reading`, `source_depth`, and `domains_bridged`. So the callout box is always empty in Phase 3 mode.
-- **Fix**: Add `"why_it_matters": "1-2 sentence summary of why this story matters beyond the headline"` to the deep_dives schema in `_SYSTEM_PROMPT`. The template already handles it.
+#### 2. Duplicate `_collect_known_urls` in `validate.py` and `stages/seams.py`
+- **Files**: `validate.py:76`, `stages/seams.py:121`
+- **Problem**: The same function (build a set of known-good URLs from raw source data) exists in two modules with slightly different implementations. `seams.py` also includes URLs from domain analysis links, while `validate.py` does not.
+- **Fix**: Consolidate into a shared utility (e.g., `utils/urls.py`) and import from both modules. Or accept the difference if the seam detection genuinely needs a broader URL set — but document why.
+- **Impact**: Low — maintenance burden if the logic needs to change in the future.
 
-### Integration tests to add
+#### 3. `validate.py` `VALID_TAG_LABELS` is a set, not a dict
+- **File**: `validate.py:31-42`
+- **Problem**: `VALID_TAG_LABELS` is a `set` of label strings (`{"Conflict", "Politics", ...}`), not a dict mapping tags to labels. It cannot be used for tag→label lookups downstream. It's only consumed by `test_contracts.py` for consistency checking.
+- **Fix**: Either convert to a dict (`{"war": "Conflict", "domestic": "Politics", ...}`) to match `cross_domain._TAG_LABELS`, or remove it entirely and derive the set of valid labels from `_TAG_LABELS.values()` in the contract tests.
+- **Impact**: Low — works for its current purpose but is a maintenance trap (someone might try to use it as a mapping).
 
-These tests would have caught bugs #1–3 above and should prevent similar regressions. They don't require Docker — they just import modules and compare their constants/contracts.
+### Test coverage gaps
 
-#### 4. `tests/test_contracts.py` — cross-module contract tests
-Create a new test file with these checks:
+The following modules have zero dedicated test files:
+- `entrypoint.py`
+- `stages/send.py`
+- `stages/assemble.py`
+- `stages/cross_domain.py`
+- `stages/seams.py`
+- `stages/briefing_packet.py`
+- `stages/anomaly.py`
+- `sources/youtube.py`
+- `sources/markets.py`
+- `sources/rss_feeds.py`
+- `sources/come_follow_me.py`
+- `sources/holidays.py`
+- `sources/economic_calendar.py`
+- `sources/launches.py`
 
-- **Tag vocabulary consistency**: Import `VALID_TAGS` from `validate.py`, `_VALID_TAGS` from `stages/cross_domain.py`, `_TAG_LABELS` keys from `stages/assemble.py`. Assert all three sets are identical. Also parse the CSS in `templates/email_template.py` for `--tag-*-text:` patterns and assert the set of CSS tags matches `VALID_TAGS`. This catches bug #2.
-
-- **Launch date format round-trip**: Import `fetch_upcoming_launches` output schema (construct a sample dict matching the keys returned by `sources/launches.py`) and pass its `"date"` value through `stages/prepare_calendar._parse_date()`. Assert it does NOT return `datetime.max`. This catches bug #1.
-
-- **Deep dive field contract**: Import `_SYSTEM_PROMPT` from `stages/cross_domain.py` and parse the deep_dives JSON schema from it (or check for substring `"why_it_matters"`). Read `templates/email_template.py` source and extract all `dive.*` field references. Assert every template-referenced field appears in the prompt schema. This catches bug #3.
-
-- **`_empty_stage_output` coverage**: Import `_NON_CRITICAL_STAGES` and `_empty_stage_output` from `pipeline.py`. Assert every non-critical stage returns a non-empty dict (not the `{}` default fallback).
-
-- **`_stage_artifact_key` coverage**: Import `_stage_artifact_key` from `pipeline.py` and the stage names from `config.yaml`. Assert no stage falls through to the identity fallback (where key == stage name) unless that's intentional.
-
-- **Tag label consistency**: Assert that `validate.VALID_TAG_LABELS` matches the values of `stages/cross_domain._TAG_LABELS` (or remove `VALID_TAG_LABELS` from `validate.py` if it's not used downstream).
-
-### Minor / cosmetic
-
-#### 7. Weather normal interpolation has a discontinuity at the 15th of each month
-- **File**: `sources/weather.py`, `_interpolate_monthly()` (~line 553)
-- **Problem**: The function anchors on the 15th of the current month and interpolates toward the 15th of the *next* month. For dates *before* the 15th (e.g., Feb 1), `frac` goes negative and gets clamped to 0.0, so Feb 1–14 all get the same normal as Feb 15. Meanwhile Jan 31 interpolates between Jan and Feb. This creates a ~1°F discontinuity at the month boundary.
-- **Fix**: For dates before the 15th, interpolate between the *previous* month's 15th and the current month's 15th instead. Check if `day_of_year < day_15_this`; if so, use the previous month as the starting anchor.
-- **Impact**: Low — normals are approximate and the error is ~1-2°F. But it's a visible staircase in the SVG chart at month boundaries.
+Priority targets: `stages/assemble.py` (template rendering), `stages/send.py` (email delivery), `entrypoint.py` (scheduler), `sources/launches.py` (external API).

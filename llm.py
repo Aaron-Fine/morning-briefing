@@ -28,6 +28,7 @@ _anthropic_client_cache: dict = {}
 def _fireworks_client():
     if "client" not in _openai_client_cache:
         import openai
+
         _openai_client_cache["client"] = openai.OpenAI(
             api_key=os.environ["FIREWORKS_API_KEY"],
             base_url="https://api.fireworks.ai/inference/v1",
@@ -39,6 +40,7 @@ def _fireworks_client():
 def _anthropic_client():
     if "client" not in _anthropic_client_cache:
         import anthropic
+
         _anthropic_client_cache["client"] = anthropic.Anthropic(
             api_key=os.environ["ANTHROPIC_API_KEY"],
             timeout=120.0,  # 2-minute total timeout per request
@@ -73,9 +75,13 @@ def call_llm(
     provider = model_config.get("provider", "fireworks")
 
     if provider == "anthropic":
-        return _call_anthropic(system_prompt, user_content, model_config, max_retries, json_mode, stream)
+        return _call_anthropic(
+            system_prompt, user_content, model_config, max_retries, json_mode, stream
+        )
     else:
-        return _call_fireworks(system_prompt, user_content, model_config, max_retries, json_mode, stream)
+        return _call_fireworks(
+            system_prompt, user_content, model_config, max_retries, json_mode, stream
+        )
 
 
 def _call_fireworks(
@@ -109,7 +115,11 @@ def _call_fireworks(
     if json_mode:
         create_kwargs["response_format"] = {"type": "json_object"}
 
-    retryable = (openai.APIStatusError, openai.APIConnectionError, openai.APITimeoutError)
+    retryable = (
+        openai.APIStatusError,
+        openai.APIConnectionError,
+        openai.APITimeoutError,
+    )
     raw = _retry_loop(
         lambda: _fireworks_call(client, create_kwargs, stream),
         max_retries,
@@ -144,7 +154,9 @@ def _fireworks_call(client, create_kwargs: dict, stream: bool) -> str:
         if not text and reasoning_chunks:
             # Model exhausted token budget on thinking — surface reasoning as the response.
             # This should only happen when max_tokens is too low for the model to think + respond.
-            log.warning("Fireworks stream: no content chunks, using reasoning_content as fallback")
+            log.warning(
+                "Fireworks stream: no content chunks, using reasoning_content as fallback"
+            )
             text = "".join(reasoning_chunks).strip()
         return text
     else:
@@ -184,7 +196,11 @@ def _call_anthropic(
             resp = client.messages.create(**create_kwargs)
             return resp.content[0].text.strip()
 
-    retryable = (anthropic.APIStatusError, anthropic.APIConnectionError, anthropic.APITimeoutError)
+    retryable = (
+        anthropic.APIStatusError,
+        anthropic.APIConnectionError,
+        anthropic.APITimeoutError,
+    )
     raw = _retry_loop(
         _do_call,
         max_retries,
@@ -197,20 +213,21 @@ def _call_anthropic(
 def _retry_loop(fn, max_retries: int, retryable_errors: tuple, model: str) -> str:
     for attempt in range(max_retries + 1):
         try:
-            if attempt > 0:
-                wait = 2 ** attempt * 5  # 10s, 20s
-                log.info(f"Retrying in {wait}s (attempt {attempt + 1}/{max_retries + 1})...")
-                time.sleep(wait)
             log.info(f"Calling LLM ({model})...")
             return fn()
         except retryable_errors as e:
             log.warning(f"LLM error (attempt {attempt + 1}): {e}")
-            if attempt == max_retries:
-                raise
             # Don't retry on 4xx client errors (bad request, auth, etc.)
             status = getattr(e, "status_code", None)
             if status and 400 <= status < 500:
                 raise
+            if attempt == max_retries:
+                raise
+            wait = 2 ** (attempt + 1) * 5  # 10s, 20s
+            log.info(
+                f"Retrying in {wait}s (attempt {attempt + 2}/{max_retries + 1})..."
+            )
+            time.sleep(wait)
     # Unreachable: loop always returns or raises. Safety sentinel for type checkers.
     raise RuntimeError("Retry loop exhausted without returning")
 

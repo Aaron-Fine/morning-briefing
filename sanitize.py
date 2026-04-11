@@ -49,9 +49,9 @@ _INJECTION_SUBSTRINGS = (
 # is generating. We replace these with their Unicode equivalents so they are
 # preserved as readable text without structural ambiguity.
 _JSON_ESCAPE_MAP = {
-    '"}': '"\u007d',       # closing quote + brace → escaped brace
-    '}]': '\u007d]',       # closing brace + bracket → escaped brace
-    '}}': '\u007d\u007d',  # double closing brace
+    '"}': '"\ufffd',  # closing quote + brace → replaced with replacement char
+    "}]": "\ufffd]",  # closing brace + bracket → replaced
+    "}}": "\ufffd\ufffd",  # double closing brace → replaced
 }
 
 _MAX_RSS_SUMMARY_CHARS = 500
@@ -60,6 +60,7 @@ _MAX_TRANSCRIPT_CHARS = 8000  # ~1500 words; compress stage will further reduce
 
 class _StripTags(HTMLParser):
     """Minimal HTML-tag stripper."""
+
     def __init__(self):
         super().__init__()
         self._parts: list[str] = []
@@ -134,7 +135,9 @@ def sanitize_rss_item(item: dict) -> dict:
     """Sanitize the summary field of a single RSS item dict (in place copy)."""
     result = dict(item)
     if "summary" in result:
-        result["summary"] = sanitize_source_content(result["summary"], _MAX_RSS_SUMMARY_CHARS)
+        result["summary"] = sanitize_source_content(
+            result["summary"], _MAX_RSS_SUMMARY_CHARS
+        )
     if "title" in result:
         # Titles are short — strip injection patterns but don't truncate aggressively
         result["title"] = _strip_injection_lines(_strip_html(result["title"]))[:200]
@@ -157,7 +160,9 @@ def sanitize_all_sources(source_data: dict) -> dict:
         result["rss"] = [sanitize_rss_item(item) for item in result["rss"]]
 
     if "local_news" in result:
-        result["local_news"] = [sanitize_rss_item(item) for item in result["local_news"]]
+        result["local_news"] = [
+            sanitize_rss_item(item) for item in result["local_news"]
+        ]
 
     if "analysis_transcripts" in result:
         sanitized_transcripts = []

@@ -19,6 +19,8 @@ _FORMATS = [
     "%Y-%m-%dT%H:%M:%S%z",
     "%Y-%m-%dT%H:%M:%S",
     "%Y-%m-%d",
+    "%Y-%m-%d %H:%MZ",
+    "%Y-%m-%d %H:%M",
 ]
 
 
@@ -35,45 +37,55 @@ def _parse_date(s: str) -> datetime:
     return datetime.max
 
 
-def run(context: dict, config: dict, model_config: dict | None = None, **kwargs) -> dict:
+def run(
+    context: dict, config: dict, model_config: dict | None = None, **kwargs
+) -> dict:
     raw = context.get("raw_sources", {})
     events: list[dict] = []
 
     # US/Utah holidays
     for h in raw.get("holidays", []):
-        events.append({
-            "date": h.get("date", ""),
-            "event": h.get("event", ""),
-            "type": "holiday",
-        })
+        events.append(
+            {
+                "date": h.get("date", ""),
+                "event": h.get("event", ""),
+                "type": "holiday",
+            }
+        )
 
     # Church events (General Conference sessions, etc.)
     for e in raw.get("church_events", []):
-        events.append({
-            "date": e.get("date", ""),
-            "event": e.get("event", ""),
-            "description": e.get("description", ""),
-            "type": "church",
-        })
+        events.append(
+            {
+                "date": e.get("date", ""),
+                "event": e.get("event", ""),
+                "description": e.get("description", ""),
+                "type": "church",
+            }
+        )
 
     # Economic calendar events (Fed meetings, jobs reports, GDP, etc.)
     for ec in raw.get("economic_calendar", []):
-        events.append({
-            "date": ec.get("date", ""),
-            "event": ec.get("event", ""),
-            "type": "economic",
-            "impact": ec.get("impact", ""),
-        })
+        events.append(
+            {
+                "date": ec.get("date", ""),
+                "event": ec.get("event", ""),
+                "type": "economic",
+                "impact": ec.get("impact", ""),
+            }
+        )
 
     # Space launches
     for launch in raw.get("launches", []):
-        events.append({
-            "date": launch.get("date", ""),
-            "event": launch.get("name", "Unnamed launch"),
-            "description": launch.get("mission_description", ""),
-            "type": "launch",
-            "provider": launch.get("provider", ""),
-        })
+        events.append(
+            {
+                "date": launch.get("date", ""),
+                "event": launch.get("name", "Unnamed launch"),
+                "description": launch.get("mission_description", ""),
+                "type": "launch",
+                "provider": launch.get("provider", ""),
+            }
+        )
 
     # Sort by date
     events.sort(key=lambda e: _parse_date(e.get("date", "")))
