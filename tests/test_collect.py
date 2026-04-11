@@ -148,6 +148,7 @@ class TestCollectRun:
         mock_church.return_value = []
         mock_holidays.return_value = []
         mock_econ_cal.return_value = []
+        mock_lesson.return_value = {}  # Consistent with other tests
         mock_yt.return_value = []
         mock_rss.return_value = []
         mock_sanitize.return_value = {

@@ -17,8 +17,7 @@ class TestGetApiKey:
             assert _get_api_key() == "test_key_123"
 
     def test_raises_without_key(self):
-        with patch.dict(os.environ, {"FINNHUB_API_KEY": ""}, clear=False):
-            os.environ.pop("FINNHUB_API_KEY", None)
+        with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(ValueError):
                 _get_api_key()
 
@@ -34,9 +33,8 @@ class TestFetchMarkets:
         result = fetch_markets(config)
         assert result == []
 
-    @patch.dict(os.environ, {"FINNHUB_API_KEY": ""}, clear=False)
+    @patch.dict(os.environ, {}, clear=True)
     def test_returns_empty_without_api_key(self):
-        os.environ.pop("FINNHUB_API_KEY", None)
         config = {"markets": {"symbols": [{"symbol": "^GSPC", "label": "S&P 500"}]}}
         result = fetch_markets(config)
         assert result == []

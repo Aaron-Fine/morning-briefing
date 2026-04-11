@@ -25,8 +25,9 @@ class TestParseCron:
         assert minute == 0
 
     def test_invalid_too_few_fields(self):
+        # Only 1 field - should trigger length check, not int conversion error
         with pytest.raises(ValueError):
-            _parse_cron("0 * * *")
+            _parse_cron("0")
 
     def test_invalid_hour(self):
         with pytest.raises(ValueError):
@@ -97,7 +98,11 @@ class TestEntrypointMain:
     @patch("entrypoint.run")
     @patch("entrypoint.time.sleep")
     @patch("entrypoint.datetime")
-    def test_scheduler_mode_sleeps(self, mock_dt, mock_sleep, mock_run):
+    @patch("yaml.safe_load")
+    @patch("builtins.open")
+    def test_scheduler_mode_sleeps(
+        self, mock_open, mock_yaml_load, mock_dt, mock_sleep, mock_run
+    ):
         import sys
         from entrypoint import main
 
@@ -112,6 +117,10 @@ class TestEntrypointMain:
 
         mock_sleep.side_effect = fake_sleep
         mock_dt.now.return_value = datetime(2026, 4, 10, 12, 0, 0)
+        # Mock config to avoid reading real config.yaml
+        mock_yaml_load.return_value = {
+            "schedule": {"cron": "0 6 * * *", "timezone": "UTC"}
+        }
 
         with pytest.raises(KeyboardInterrupt):
             main()

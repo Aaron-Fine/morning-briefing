@@ -83,9 +83,37 @@ _Last updated: 2026-04-11_
 - **`tests/test_send.py`** — 22 tests covering `_send_digest`, `_send_failure_notification`, `send.run()`, credential validation, UTF-8 Q-encoding subjects, plain-text fallback, timestamp format.
 - **Total: 688 tests passing** across all test files.
 
+### Test coverage gaps — COMPLETE
+_All source modules now have dedicated test coverage. See test files list in the Test coverage section above._
+
 ---
 
 ## Open items
 
-### Test coverage gaps
-_All source modules now have dedicated test coverage in `tests/test_sources.py` (rss_feeds, come_follow_me, holidays, economic_calendar, launches). Additional coverage added in `tests/test_cross_domain.py`, `tests/test_seams.py`, `tests/test_youtube.py`, `tests/test_markets.py`, `tests/test_stages.py`, `tests/test_assemble.py` (template assembly, Phase 3/1/empty modes, Markup wrapping), `tests/test_send.py` (SMTP delivery, failure notification, credential validation), `tests/test_contracts.py`, `tests/test_prepare_local.py`, `tests/test_collect.py`, `tests/test_prepare_spiritual.py`, `tests/test_analyze_domain.py`, and `tests/test_prepare_calendar.py`._
+### Test quality issues (2026-04-11)
+
+#### Critical — FIXED (2026-04-11)
+- ~~**`test_send.py:215-221` — vacuous `assert True`**~~ — Fixed: now asserts on `caplog.text` to verify SMTP error is logged.
+- ~~**`test_cross_domain_models.py` — not a pytest test file**~~ — Fixed: moved to `scripts/cross_domain_model_comparison.py` (it's a standalone comparison tool, not a pytest test).
+- ~~**`test_validate.py:224-229` — tests a bug as correct behavior**~~ — Fixed: `_validate_at_a_glance` now skips non-dict items gracefully in the source distribution loop; test updated to verify proper handling.
+
+#### Important — FIXED (2026-04-11)
+- ~~**`test_entrypoint.py:97-120` — reads real `config.yaml` from disk**~~ — Fixed: now patches `builtins.open` and `yaml.safe_load` to mock config loading.
+- ~~**`test_entrypoint.py:27-29` — passes for the wrong reason**~~ — Fixed: changed test input to `"0"` (1 field) to genuinely trigger the length check (was testing 4 fields which triggered `int("*")` error, not the field-count check).
+- ~~**`test_markets.py:19-23` — environment leak via `os.environ.pop` inside `patch.dict`**~~ — Fixed: changed to `patch.dict(os.environ, {}, clear=True)` in both `test_raises_without_key` and `test_returns_empty_without_api_key`.
+
+#### Moderate — FIXED (2026-04-11)
+- ~~**`test_seams.py:213` — fragile string counting (`result.count("Source")`)**~~ — Fixed: Changed to count structural pattern `": T"` (from `Source{i}: T{i}`) instead of generic "Source" string that could appear in content.
+- ~~**`test_stages.py:108` — mock call_count assertion**~~ — Fixed: Changed from `assert mock_compress.call_count == 2` to `assert all(ct["compressed"] for ct in result["compressed_transcripts"])` — asserts on output, not implementation.
+- ~~**`test_send.py` — duplicated mock setup**~~ — Fixed: Added `_setup_mock_smtp()` helper method to eliminate 10+ repetitions of `mock_server = MagicMock(); mock_smtp_cls.return_value.__enter__.return_value = mock_server`.
+- ~~**`test_analyze_domain.py:106` — hardcoded date assertion**~~ — Fixed: Now derives expected date from `test_date` variable instead of hardcoded `"2026-04-10"`.
+- ~~**`test_prepare_calendar.py` — multiple hardcoded date assertions**~~ — Fixed: All tests now derive expected dates from input test data variables instead of duplicating date strings in assertions.
+- ~~**`test_contracts.py` — hardcoded date in launch date format tests**~~ — Fixed: Now extracts expected values from test input strings rather than hardcoding in assertions.
+- ~~**`test_llm_advanced.py:61-106` — unrealistic 4xx test scenarios**~~ — Fixed: Updated test docstrings to acknowledge these test internal safety behavior (4xx detection inside `_retry_loop`) rather than realistic caller scenarios.
+- ~~**`test_weather_integration.py:157-162` — fragile day-label assertions**~~ — Fixed: Now derives expected day labels from fixture data (`weather["forecast"]`) instead of hardcoding `["TUE", "WED", ...]`.
+- ~~**`test_weather_integration.py:222-257` — string `"X"` occurrence counting**~~ — Fixed: Changed marker from `"X"` to `"EXTRA"` (unique, won't appear elsewhere) and improved assertion message.
+- ~~**`test_collect.py:130-163` — missing mock_lesson return_value**~~ — Fixed: Added `mock_lesson.return_value = {}` for consistency with other tests.
+
+#### Moderate — Remaining
+- **`test_collect.py` — ~200 lines of duplicated mock setup** — Every test in `TestCollectRun` repeats the same 10-level `@patch` stack. A shared fixture would cut boilerplate significantly.
+- **`test_collect.py:217-251` — asserts on `mock_rss.call_count` instead of output** — Coupled to implementation dispatch. Should assert on `result["raw_sources"]["local_news"]` content instead.

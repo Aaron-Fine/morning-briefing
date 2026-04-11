@@ -158,7 +158,9 @@ class TestRenderWeatherHtmlIntegration:
         weather = _load_fixture("weather_clear.json")
         config = _make_config()
         html = render_weather_html(weather, config)
-        for day in ["TUE", "WED", "THU", "FRI", "SAT", "SUN", "MON"]:
+        # Derive expected day labels from fixture data (uppercase)
+        expected_days = [day["day_name"].upper() for day in weather["forecast"]]
+        for day in expected_days:
             assert day in html, f"Missing day label: {day}"
 
     def test_precip_chance_labels(self):
@@ -222,12 +224,13 @@ class TestRenderWeatherHtmlIntegration:
     def test_max_7_days(self):
         """Ensure only 7 days are rendered even if more provided."""
         weather = _load_fixture("weather_clear.json")
-        # Add extra days
+        # Add extra days with unique marker that won't appear elsewhere in HTML
+        extra_day_marker = "EXTRA"
         for i in range(3):
             weather["forecast"].append(
                 {
                     "date": f"2026-04-{15 + i:02d}",
-                    "day_name": "X",
+                    "day_name": extra_day_marker,
                     "high_f": 70,
                     "low_f": 50,
                     "precip_chance": 0,
@@ -252,6 +255,6 @@ class TestRenderWeatherHtmlIntegration:
         )
         config = _make_config()
         html = render_weather_html(weather, config)
-        # Count day labels - should be exactly 7
-        day_count = html.count("X")
-        assert day_count == 0  # extra days not rendered
+        # Count occurrences of unique marker - should be 0 (extra days not rendered)
+        marker_count = html.count(extra_day_marker.upper())
+        assert marker_count == 0, f"Found {marker_count} extra day markers in HTML"

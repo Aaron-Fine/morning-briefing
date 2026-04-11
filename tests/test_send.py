@@ -2,6 +2,7 @@
 
 import sys
 import os
+import logging
 import smtplib
 from datetime import datetime
 from unittest.mock import patch, MagicMock
@@ -25,13 +26,18 @@ class TestSendDigest:
             }
         }
 
+    def _setup_mock_smtp(self, mock_smtp_cls):
+        """Helper to setup mock SMTP server for successful sends."""
+        mock_server = MagicMock()
+        mock_smtp_cls.return_value.__enter__.return_value = mock_server
+        return mock_server
+
     @patch.dict(
         os.environ, {"SMTP_USER": "user@example.com", "SMTP_PASSWORD": "secret"}
     )
     @patch("stages.send.smtplib.SMTP")
     def test_successful_send(self, mock_smtp_cls):
-        mock_server = MagicMock()
-        mock_smtp_cls.return_value.__enter__.return_value = mock_server
+        mock_server = self._setup_mock_smtp(mock_smtp_cls)
 
         result = _send_digest("<html>test</html>", self._make_config())
 
@@ -80,8 +86,7 @@ class TestSendDigest:
     )
     @patch("stages.send.smtplib.SMTP")
     def test_subject_contains_date(self, mock_smtp_cls):
-        mock_server = MagicMock()
-        mock_smtp_cls.return_value.__enter__.return_value = mock_server
+        mock_server = self._setup_mock_smtp(mock_smtp_cls)
 
         _send_digest("<html>test</html>", self._make_config())
 
@@ -94,8 +99,7 @@ class TestSendDigest:
     )
     @patch("stages.send.smtplib.SMTP")
     def test_from_header_contains_from_name(self, mock_smtp_cls):
-        mock_server = MagicMock()
-        mock_smtp_cls.return_value.__enter__.return_value = mock_server
+        mock_server = self._setup_mock_smtp(mock_smtp_cls)
 
         _send_digest("<html>test</html>", self._make_config())
 
@@ -107,8 +111,7 @@ class TestSendDigest:
     )
     @patch("stages.send.smtplib.SMTP")
     def test_to_header_contains_recipient(self, mock_smtp_cls):
-        mock_server = MagicMock()
-        mock_smtp_cls.return_value.__enter__.return_value = mock_server
+        mock_server = self._setup_mock_smtp(mock_smtp_cls)
 
         _send_digest("<html>test</html>", self._make_config())
 
@@ -120,8 +123,7 @@ class TestSendDigest:
     )
     @patch("stages.send.smtplib.SMTP")
     def test_email_has_plain_text_fallback(self, mock_smtp_cls):
-        mock_server = MagicMock()
-        mock_smtp_cls.return_value.__enter__.return_value = mock_server
+        mock_server = self._setup_mock_smtp(mock_smtp_cls)
 
         _send_digest("<html>test</html>", self._make_config())
 
@@ -133,8 +135,7 @@ class TestSendDigest:
     )
     @patch("stages.send.smtplib.SMTP")
     def test_email_has_html_content(self, mock_smtp_cls):
-        mock_server = MagicMock()
-        mock_smtp_cls.return_value.__enter__.return_value = mock_server
+        mock_server = self._setup_mock_smtp(mock_smtp_cls)
         html_content = "<html><body><h1>Test Digest</h1></body></html>"
 
         _send_digest(html_content, self._make_config())
@@ -153,13 +154,18 @@ class TestSendFailureNotification:
             }
         }
 
+    def _setup_mock_smtp(self, mock_smtp_cls):
+        """Helper to setup mock SMTP server for successful sends."""
+        mock_server = MagicMock()
+        mock_smtp_cls.return_value.__enter__.return_value = mock_server
+        return mock_server
+
     @patch.dict(
         os.environ, {"SMTP_USER": "user@example.com", "SMTP_PASSWORD": "secret"}
     )
     @patch("stages.send.smtplib.SMTP")
     def test_sends_failure_notification(self, mock_smtp_cls):
-        mock_server = MagicMock()
-        mock_smtp_cls.return_value.__enter__.return_value = mock_server
+        mock_server = self._setup_mock_smtp(mock_smtp_cls)
 
         _send_failure_notification(self._make_config())
 
@@ -185,8 +191,7 @@ class TestSendFailureNotification:
     )
     @patch("stages.send.smtplib.SMTP")
     def test_failure_notification_has_correct_subject(self, mock_smtp_cls):
-        mock_server = MagicMock()
-        mock_smtp_cls.return_value.__enter__.return_value = mock_server
+        mock_server = self._setup_mock_smtp(mock_smtp_cls)
 
         _send_failure_notification(self._make_config())
 
@@ -199,8 +204,7 @@ class TestSendFailureNotification:
     )
     @patch("stages.send.smtplib.SMTP")
     def test_failure_notification_has_body_with_date(self, mock_smtp_cls):
-        mock_server = MagicMock()
-        mock_smtp_cls.return_value.__enter__.return_value = mock_server
+        mock_server = self._setup_mock_smtp(mock_smtp_cls)
 
         _send_failure_notification(self._make_config())
 
@@ -212,13 +216,14 @@ class TestSendFailureNotification:
         os.environ, {"SMTP_USER": "user@example.com", "SMTP_PASSWORD": "secret"}
     )
     @patch("stages.send.smtplib.SMTP")
-    def test_failure_notification_handles_smtp_error(self, mock_smtp_cls):
+    def test_failure_notification_handles_smtp_error(self, mock_smtp_cls, caplog):
         mock_smtp_cls.side_effect = smtplib.SMTPException("server down")
 
-        _send_failure_notification(self._make_config())
+        with caplog.at_level(logging.ERROR):
+            _send_failure_notification(self._make_config())
 
         # Should not raise, just logs the error
-        assert True
+        assert "smtp" in caplog.text.lower() or "notification" in caplog.text.lower()
 
 
 class TestSendRun:

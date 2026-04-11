@@ -68,9 +68,10 @@ class TestPrepareCalendarRun:
         return {"digest": {"week_ahead": {"count": 5}}}
 
     def test_merges_holidays(self):
+        test_holiday = {"date": "2026-04-20", "event": "Pioneer Day"}
         context = {
             "raw_sources": {
-                "holidays": [{"date": "2026-04-20", "event": "Pioneer Day"}],
+                "holidays": [test_holiday],
                 "church_events": [],
                 "economic_calendar": [],
                 "launches": [],
@@ -80,20 +81,19 @@ class TestPrepareCalendarRun:
         events = result["calendar"]["events"]
         assert len(events) == 1
         assert events[0]["type"] == "holiday"
-        assert events[0]["event"] == "Pioneer Day"
-        assert events[0]["date"] == "2026-04-20"
+        assert events[0]["event"] == test_holiday["event"]
+        assert events[0]["date"] == test_holiday["date"]
 
     def test_merges_church_events(self):
+        test_event = {
+            "date": "2026-04-05",
+            "event": "General Conference",
+            "description": "Sunday session",
+        }
         context = {
             "raw_sources": {
                 "holidays": [],
-                "church_events": [
-                    {
-                        "date": "2026-04-05",
-                        "event": "General Conference",
-                        "description": "Sunday session",
-                    }
-                ],
+                "church_events": [test_event],
                 "economic_calendar": [],
                 "launches": [],
             }
@@ -102,16 +102,15 @@ class TestPrepareCalendarRun:
         events = result["calendar"]["events"]
         assert len(events) == 1
         assert events[0]["type"] == "church"
-        assert events[0]["description"] == "Sunday session"
+        assert events[0]["description"] == test_event["description"]
 
     def test_merges_economic_events(self):
+        test_event = {"date": "2026-04-10", "event": "FOMC Meeting", "impact": "high"}
         context = {
             "raw_sources": {
                 "holidays": [],
                 "church_events": [],
-                "economic_calendar": [
-                    {"date": "2026-04-10", "event": "FOMC Meeting", "impact": "high"}
-                ],
+                "economic_calendar": [test_event],
                 "launches": [],
             }
         }
@@ -119,56 +118,54 @@ class TestPrepareCalendarRun:
         events = result["calendar"]["events"]
         assert len(events) == 1
         assert events[0]["type"] == "economic"
-        assert events[0]["impact"] == "high"
+        assert events[0]["impact"] == test_event["impact"]
 
     def test_merges_launches(self):
+        test_launch = {
+            "date": "2026-04-15",
+            "name": "Starlink Group",
+            "mission_description": "LEO deployment",
+            "provider": "SpaceX",
+        }
         context = {
             "raw_sources": {
                 "holidays": [],
                 "church_events": [],
                 "economic_calendar": [],
-                "launches": [
-                    {
-                        "date": "2026-04-15",
-                        "name": "Starlink Group",
-                        "mission_description": "LEO deployment",
-                        "provider": "SpaceX",
-                    }
-                ],
+                "launches": [test_launch],
             }
         }
         result = run(context, self._make_config())
         events = result["calendar"]["events"]
         assert len(events) == 1
         assert events[0]["type"] == "launch"
-        assert events[0]["provider"] == "SpaceX"
-        assert events[0]["description"] == "LEO deployment"
+        assert events[0]["provider"] == test_launch["provider"]
+        assert events[0]["description"] == test_launch["mission_description"]
 
     def test_sorts_events_chronologically(self):
+        holiday = {"date": "2026-04-20", "event": "Late Holiday"}
+        church = {"date": "2026-04-05", "event": "Early Conference", "description": ""}
+        economic = {"date": "2026-04-10", "event": "Mid Event", "impact": ""}
         context = {
             "raw_sources": {
-                "holidays": [{"date": "2026-04-20", "event": "Late Holiday"}],
-                "church_events": [
-                    {
-                        "date": "2026-04-05",
-                        "event": "Early Conference",
-                        "description": "",
-                    }
-                ],
-                "economic_calendar": [
-                    {"date": "2026-04-10", "event": "Mid Event", "impact": ""}
-                ],
+                "holidays": [holiday],
+                "church_events": [church],
+                "economic_calendar": [economic],
                 "launches": [],
             }
         }
         result = run(context, self._make_config())
         events = result["calendar"]["events"]
         dates = [e["date"] for e in events]
-        assert dates == ["2026-04-05", "2026-04-10", "2026-04-20"]
+        # Derive expected order from input dates (05, 10, 20)
+        expected_dates = sorted([church["date"], economic["date"], holiday["date"]])
+        assert dates == expected_dates
 
     def test_caps_events_at_configured_count(self):
+        base_date = "2026-04"
         raw_events = [
-            {"date": f"2026-04-{i:02d}", "event": f"Event {i}"} for i in range(1, 15)
+            {"date": f"{base_date}-{i:02d}", "event": f"Event {i}"}
+            for i in range(1, 15)
         ]
         context = {
             "raw_sources": {
@@ -184,8 +181,10 @@ class TestPrepareCalendarRun:
         assert len(result["calendar"]["events"]) == 3
 
     def test_default_cap_is_5(self):
+        base_date = "2026-04"
         raw_events = [
-            {"date": f"2026-04-{i:02d}", "event": f"Event {i}"} for i in range(1, 10)
+            {"date": f"{base_date}-{i:02d}", "event": f"Event {i}"}
+            for i in range(1, 10)
         ]
         context = {
             "raw_sources": {
@@ -225,40 +224,43 @@ class TestPrepareCalendarRun:
         assert result["calendar"]["count"] == 0
 
     def test_unparseable_dates_sort_to_end(self):
+        valid_event = {"date": "2026-04-10", "event": "Valid Date"}
+        invalid_event = {
+            "date": "not-a-date",
+            "event": "Invalid Date",
+            "description": "",
+        }
         context = {
             "raw_sources": {
-                "holidays": [{"date": "2026-04-10", "event": "Valid Date"}],
-                "church_events": [
-                    {"date": "not-a-date", "event": "Invalid Date", "description": ""}
-                ],
+                "holidays": [valid_event],
+                "church_events": [invalid_event],
                 "economic_calendar": [],
                 "launches": [],
             }
         }
         result = run(context, self._make_config())
         events = result["calendar"]["events"]
-        assert events[0]["event"] == "Valid Date"
-        assert events[1]["event"] == "Invalid Date"
+        assert events[0]["event"] == valid_event["event"]
+        assert events[1]["event"] == invalid_event["event"]
 
     def test_launch_uses_correct_keys(self):
+        test_launch = {
+            "date": "2026-05-01",
+            "name": "Test Launch",
+            "mission_description": "Test mission",
+            "provider": "TestCo",
+        }
         context = {
             "raw_sources": {
                 "holidays": [],
                 "church_events": [],
                 "economic_calendar": [],
-                "launches": [
-                    {
-                        "date": "2026-05-01",
-                        "name": "Test Launch",
-                        "mission_description": "Test mission",
-                        "provider": "TestCo",
-                    }
-                ],
+                "launches": [test_launch],
             }
         }
         result = run(context, self._make_config())
         launch_event = result["calendar"]["events"][0]
-        assert launch_event["date"] == "2026-05-01"
-        assert launch_event["event"] == "Test Launch"
-        assert launch_event["description"] == "Test mission"
-        assert launch_event["provider"] == "TestCo"
+        assert launch_event["date"] == test_launch["date"]
+        assert launch_event["event"] == test_launch["name"]
+        assert launch_event["description"] == test_launch["mission_description"]
+        assert launch_event["provider"] == test_launch["provider"]

@@ -93,17 +93,18 @@ class TestFmtRssItems:
         assert "SUMMARY: A summary" in result
 
     def test_truncates_published_to_date(self):
+        test_date = "2026-04-10"
         items = [
             {
                 "source": "S",
                 "title": "T",
                 "url": "https://example.com",
                 "summary": "Summary",
-                "published": "2026-04-10T12:00:00Z",
+                "published": f"{test_date}T12:00:00Z",
             }
         ]
         result = _fmt_rss_items(items)
-        assert "2026-04-10" in result
+        assert test_date in result
         assert "12:00:00" not in result
 
     def test_includes_reliability_note(self):

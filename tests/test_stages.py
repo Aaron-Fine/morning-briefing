@@ -104,8 +104,9 @@ class TestCompressRun:
             }
         }
         result = compress_run(context, {})
+        # Assert on output, not implementation detail (call_count)
         assert len(result["compressed_transcripts"]) == 2
-        assert mock_compress.call_count == 2
+        assert all(ct["compressed"] for ct in result["compressed_transcripts"])
 
 
 class TestBriefingPacketHelpers:

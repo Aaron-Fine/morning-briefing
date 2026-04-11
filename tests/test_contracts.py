@@ -84,31 +84,30 @@ class TestLaunchDateFormatRoundTrip:
     """Launch date format from sources/launches.py must be parseable by prepare_calendar."""
 
     def test_parse_date_with_z_suffix(self):
-        dt = _parse_date("2026-04-15 14:30Z")
+        test_input = "2026-04-15 14:30Z"
+        expected = (2026, 4, 15, 14, 30)  # year, month, day, hour, minute
+        dt = _parse_date(test_input)
         assert dt != datetime.max, (
-            "_parse_date returned datetime.max for '2026-04-15 14:30Z'"
+            f"_parse_date returned datetime.max for '{test_input}'"
         )
-        assert dt.year == 2026
-        assert dt.month == 4
-        assert dt.day == 15
-        assert dt.hour == 14
-        assert dt.minute == 30
+        assert (dt.year, dt.month, dt.day, dt.hour, dt.minute) == expected
 
     def test_parse_date_without_z_suffix(self):
-        dt = _parse_date("2026-04-15 14:30")
+        test_input = "2026-04-15 14:30"
+        expected = (2026, 4, 15, 14, 30)
+        dt = _parse_date(test_input)
         assert dt != datetime.max, (
-            "_parse_date returned datetime.max for '2026-04-15 14:30'"
+            f"_parse_date returned datetime.max for '{test_input}'"
         )
-        assert dt.year == 2026
-        assert dt.month == 4
-        assert dt.day == 15
-        assert dt.hour == 14
-        assert dt.minute == 30
+        assert (dt.year, dt.month, dt.day, dt.hour, dt.minute) == expected
 
     def test_parse_date_iso_format_still_works(self):
-        dt = _parse_date("2026-04-15T14:30:00Z")
+        test_input = "2026-04-15T14:30:00Z"
+        dt = _parse_date(test_input)
         assert dt != datetime.max
-        assert dt.year == 2026
+        # Extract year from input to avoid hardcoding in assertion
+        expected_year = int(test_input.split("-")[0])
+        assert dt.year == expected_year
 
     def test_parse_date_empty_string_returns_max(self):
         assert _parse_date("") == datetime.max

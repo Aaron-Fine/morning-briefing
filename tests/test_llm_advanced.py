@@ -23,7 +23,9 @@ class TestRetryLoop:
             call_count[0] += 1
             return "success"
 
-        result = _retry_loop(fn, max_retries=2, retryable_errors=(ValueError,), model="test")
+        result = _retry_loop(
+            fn, max_retries=2, retryable_errors=(ValueError,), model="test"
+        )
         assert result == "success"
         assert call_count[0] == 1
 
@@ -36,7 +38,9 @@ class TestRetryLoop:
                 raise ValueError("transient error")
             return "success"
 
-        result = _retry_loop(fn, max_retries=3, retryable_errors=(ValueError,), model="test")
+        result = _retry_loop(
+            fn, max_retries=3, retryable_errors=(ValueError,), model="test"
+        )
         assert result == "success"
         assert call_count[0] == 3
 
@@ -58,8 +62,9 @@ class TestRetryLoop:
             _retry_loop(fn, max_retries=2, retryable_errors=(ValueError,), model="test")
         assert call_count[0] == 1
 
-    def test_4xx_client_error_not_retried(self):
-        """4xx errors should not be retried (client error, not transient)."""
+    def test_4xx_client_error_not_retried_even_in_retryable_list(self):
+        """Internal safety: 4xx errors are not retried even if caller mistakenly
+        includes them in retryable_errors (real callers should never do this)."""
         call_count = [0]
 
         class Fake4xxError(Exception):
@@ -70,11 +75,13 @@ class TestRetryLoop:
             raise Fake4xxError("bad request")
 
         with pytest.raises(Fake4xxError):
-            _retry_loop(fn, max_retries=2, retryable_errors=(Fake4xxError,), model="test")
-        assert call_count[0] == 1  # No retry
+            _retry_loop(
+                fn, max_retries=2, retryable_errors=(Fake4xxError,), model="test"
+            )
+        assert call_count[0] == 1  # No retry despite being in retryable_errors
 
     def test_5xx_server_error_is_retried(self):
-        """5xx errors should be retried (server error, likely transient)."""
+        """5xx errors are retried (server-side transient errors)."""
         call_count = [0]
 
         class Fake5xxError(Exception):
@@ -86,12 +93,14 @@ class TestRetryLoop:
                 raise Fake5xxError("server error")
             return "success"
 
-        result = _retry_loop(fn, max_retries=2, retryable_errors=(Fake5xxError,), model="test")
+        result = _retry_loop(
+            fn, max_retries=2, retryable_errors=(Fake5xxError,), model="test"
+        )
         assert result == "success"
         assert call_count[0] == 2
 
     def test_401_auth_error_not_retried(self):
-        """401 Unauthorized should not be retried."""
+        """401 errors are not retried (client auth failure, not transient)."""
         call_count = [0]
 
         class FakeAuthError(Exception):
@@ -102,7 +111,9 @@ class TestRetryLoop:
             raise FakeAuthError("unauthorized")
 
         with pytest.raises(FakeAuthError):
-            _retry_loop(fn, max_retries=2, retryable_errors=(FakeAuthError,), model="test")
+            _retry_loop(
+                fn, max_retries=2, retryable_errors=(FakeAuthError,), model="test"
+            )
         assert call_count[0] == 1
 
     def test_error_without_status_code_is_retried(self):
@@ -115,7 +126,9 @@ class TestRetryLoop:
                 raise RuntimeError("no status code")
             return "success"
 
-        result = _retry_loop(fn, max_retries=2, retryable_errors=(RuntimeError,), model="test")
+        result = _retry_loop(
+            fn, max_retries=2, retryable_errors=(RuntimeError,), model="test"
+        )
         assert result == "success"
         assert call_count[0] == 2
 
@@ -129,7 +142,6 @@ class TestRetryLoop:
             if call_count[0] < 3:
                 raise ValueError("error")
             return "done"
-
 
         def mock_sleep(seconds):
             wait_times.append(seconds)
@@ -150,7 +162,9 @@ class TestRetryLoop:
             call_count[0] += 1
             return "ok"
 
-        result = _retry_loop(fn, max_retries=0, retryable_errors=(ValueError,), model="test")
+        result = _retry_loop(
+            fn, max_retries=0, retryable_errors=(ValueError,), model="test"
+        )
         assert result == "ok"
         assert call_count[0] == 1
 
@@ -170,17 +184,17 @@ class TestParseResponseAdvanced:
     """Additional edge cases for _parse_response."""
 
     def test_markdown_fence_with_language(self):
-        text = "```json\n{\"key\": \"value\"}\n```"
+        text = '```json\n{"key": "value"}\n```'
         result = _parse_response(text, json_mode=True, model="test")
         assert result == {"key": "value"}
 
     def test_markdown_fence_without_language(self):
-        text = "```\n{\"key\": \"value\"}\n```"
+        text = '```\n{"key": "value"}\n```'
         result = _parse_response(text, json_mode=True, model="test")
         assert result == {"key": "value"}
 
     def test_markdown_fence_without_closing(self):
-        text = "```json\n{\"key\": \"value\"}"
+        text = '```json\n{"key": "value"}'
         result = _parse_response(text, json_mode=True, model="test")
         assert result == {"key": "value"}
 

@@ -209,8 +209,10 @@ class TestBuildRawSourceSummary:
             ]
         }
         result = _build_raw_source_summary(raw_sources)
-        # Should cap at 12 per category
-        assert result.count("Source") <= 12
+        # Should cap at 12 per category - count actual source entries in output
+        # Each entry appears as "Source{i}: T{i}"
+        entry_count = result.count(": T")  # Each entry has ": T" from "Source{i}: T{i}"
+        assert entry_count <= 12, f"Expected <=12 entries, got {entry_count}"
 
 
 class TestBuildTranscriptSummary:
