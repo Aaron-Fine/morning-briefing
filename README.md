@@ -12,8 +12,10 @@ Every morning at 6:00 AM MT, this container:
    - YouTube analysis channels (yt-dlp — transcripts from configured channels, no API key)
    - RSS feeds (25+ categorized feeds: non-western press, defense/military, geopolitics, AI/tech, economics, cybersecurity, and more)
    - Local news RSS (Cache Valley Daily, Herald Journal)
-    - NWS weather (primary) with Open-Meteo fallback, AirNow AQI, NOAA normals/records
+   - NWS weather (primary) with Open-Meteo fallback, AirNow AQI, NOAA normals/records
    - Finnhub market quotes (SPY, DIA, XAR, XLE)
+   - Space launch schedule (Launch Library 2)
+   - Holidays and church events
    - Come Follow Me lesson schedule (LDS)
 
 2. **Processes** sources through a staged AI pipeline (`pipeline.py`):
@@ -287,6 +289,8 @@ The weather module renders an inline SVG forecast display in the email with five
 4. **Precipitation Bars** — Type-specific gradients (rain, snow, thunderstorm, mix, freezing rain) with probability labels and emoji markers.
 5. **Day Labels** — Day abbreviations and shortened condition summaries.
 
+All SVG colors use CSS custom properties (`--wx-*`) with hardcoded fallbacks, so the chart adapts to light/dark mode while remaining compatible with email clients that don't support CSS variables.
+
 ```yaml
 weather:
   enabled: true
@@ -402,14 +406,17 @@ morning-digest/
 │   └── send.py              # Email delivery stage
 ├── sources/
 │   ├── youtube.py           # yt-dlp transcript fetcher
-│   ├── weather.py           # Open-Meteo (free, no key)
+│   ├── weather.py           # NWS (primary) + Open-Meteo (fallback) + AirNow AQI
 │   ├── markets.py           # Finnhub quotes
 │   ├── rss_feeds.py         # Direct RSS + FreshRSS
-│   └── come_follow_me.py    # LDS lesson schedule
+│   ├── come_follow_me.py    # LDS lesson schedule
+│   ├── launches.py          # Space launch schedule (Launch Library 2)
+│   ├── holidays.py          # Holiday calendar
+│   └── economic_calendar.py # Economic events
 ├── modules/
-│   └── weather_display.py   # SVG weather chart renderer
+│   └── weather_display.py   # SVG weather chart renderer (CSS-variable themed)
 ├── templates/
-│   └── email_template.py    # Jinja2 HTML email template (dark mode support)
+│   └── email_template.py    # Jinja2 HTML email template (light/dark mode)
 ├── output/                  # Generated at runtime (volume-mounted in Docker)
 │   ├── last_digest.html     # Most recent rendered digest
 │   ├── latest_briefing_packet.json
@@ -420,7 +427,9 @@ morning-digest/
 │   ├── fixtures/            # JSON test fixtures (weather scenarios)
 │   ├── test_weather_classify.py
 │   ├── test_weather_display.py
-│   └── test_weather_integration.py
+│   ├── test_weather_integration.py
+│   ├── test_prepare_local.py
+│   └── test_cross_domain_models.py
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
