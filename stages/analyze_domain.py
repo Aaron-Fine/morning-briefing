@@ -334,6 +334,14 @@ def _fmt_markets(markets: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _empty_domain_result(domain_key: str) -> dict:
+    """Return a safe empty result for a domain pass."""
+    result = {"items": []}
+    if domain_key == "econ":
+        result["market_context"] = ""
+    return result
+
+
 def _run_domain_pass(
     domain_key: str,
     cfg: dict,
@@ -349,10 +357,7 @@ def _run_domain_pass(
         log.warning(
             f"  analyze_domain[{domain_key}]: no source items — returning empty"
         )
-        empty = {"items": []}
-        if domain_key == "econ":
-            empty["market_context"] = ""
-        return empty
+        return _empty_domain_result(domain_key)
 
     schema = _ECON_OUTPUT_SCHEMA if domain_key == "econ" else _OUTPUT_SCHEMA
 
@@ -393,10 +398,7 @@ def _run_domain_pass(
         )
     except Exception as e:
         log.error(f"  analyze_domain[{domain_key}]: LLM call failed: {e}")
-        empty = {"items": []}
-        if domain_key == "econ":
-            empty["market_context"] = ""
-        return empty
+        return _empty_domain_result(domain_key)
 
     # Normalize result
     if isinstance(result, list):

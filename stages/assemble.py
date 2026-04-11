@@ -71,11 +71,6 @@ def _item_to_glance(item: dict) -> dict:
     }
 
 
-# Keep aliases so any future code that references the old names doesn't break silently.
-_cross_domain_item_to_glance = _item_to_glance
-_domain_item_to_glance = _item_to_glance
-
-
 def _domain_item_to_deep_dive(item: dict) -> dict:
     """Convert a deep_dive_candidate domain item to deep_dives format."""
     facts = item.get("facts", "")
@@ -126,7 +121,7 @@ def _build_from_domain_analysis(context: dict, config: dict) -> tuple[list, list
     normal_items = digest_cfg.get("normal_items", 10)
     cap = min(max_items, max(normal_items, len(all_items)))
 
-    at_a_glance = [_domain_item_to_glance(i) for i in all_items[:cap]]
+    at_a_glance = [_item_to_glance(i) for i in all_items[:cap]]
 
     # Select up to 3 deep dives from candidates
     max_dives = config.get("digest", {}).get("deep_dives", {}).get("count", 2)
@@ -134,6 +129,24 @@ def _build_from_domain_analysis(context: dict, config: dict) -> tuple[list, list
     deep_dives = [_domain_item_to_deep_dive(i) for i in selected_dives]
 
     return at_a_glance, deep_dives, market_context
+
+
+def _extract_peripheral_data(context: dict, raw_sources: dict) -> dict:
+    """Extract spiritual, weather, calendar, and local data from context with raw_sources fallback."""
+    spiritual = context.get("spiritual")
+    if not spiritual:
+        cfm = raw_sources.get("come_follow_me", {})
+        spiritual = (
+            {**cfm, "reflection": cfm.get("scripture_text", "")} if cfm else None
+        )
+    calendar = context.get("calendar", {})
+    return {
+        "spiritual": spiritual,
+        "weather": context.get("weather") or raw_sources.get("weather", {}),
+        "weather_html": context.get("weather_html", ""),
+        "week_ahead": calendar.get("events", []),
+        "local_items": context.get("local_items") or raw_sources.get("local_news", []),
+    }
 
 
 def run(
@@ -147,47 +160,19 @@ def run(
 
     # --- Select pipeline mode ---
     if context.get("cross_domain_output"):
-        # Phase 3+: use editor-in-chief cross-domain synthesis output
         log.info("assemble: using cross_domain_output (Phase 3 mode)")
         xd = context["cross_domain_output"]
-        at_a_glance = [
-            _cross_domain_item_to_glance(i) for i in xd.get("at_a_glance", [])
-        ]
+        at_a_glance = [_item_to_glance(i) for i in xd.get("at_a_glance", [])]
         deep_dives_raw = xd.get("deep_dives", [])
         market_context = xd.get("market_context", "")
         worth_reading = xd.get("worth_reading", [])
 
-        spiritual = context.get("spiritual")
-        if not spiritual:
-            cfm = raw_sources.get("come_follow_me", {})
-            spiritual = (
-                {**cfm, "reflection": cfm.get("scripture_text", "")} if cfm else None
-            )
-        weather = context.get("weather") or raw_sources.get("weather", {})
-        weather_html = context.get("weather_html", "")
-        calendar = context.get("calendar", {})
-        week_ahead = calendar.get("events", [])
-        local_items = context.get("local_items") or raw_sources.get("local_news", [])
-
     elif context.get("domain_analysis"):
-        # Phase 1: build from domain artifacts (no cross-domain synthesis)
         log.info("assemble: using domain_analysis artifacts (Phase 1 mode)")
         at_a_glance, deep_dives_raw, market_context = _build_from_domain_analysis(
             context, config
         )
         worth_reading = []
-
-        spiritual = context.get("spiritual")
-        if not spiritual:
-            cfm = raw_sources.get("come_follow_me", {})
-            spiritual = (
-                {**cfm, "reflection": cfm.get("scripture_text", "")} if cfm else None
-            )
-        weather = context.get("weather") or raw_sources.get("weather", {})
-        weather_html = context.get("weather_html", "")
-        calendar = context.get("calendar", {})
-        week_ahead = calendar.get("events", [])
-        local_items = context.get("local_items") or raw_sources.get("local_news", [])
 
     else:
         log.error(
@@ -197,12 +182,13 @@ def run(
         deep_dives_raw = []
         market_context = ""
         worth_reading = []
-        week_ahead = []
-        local_items = []
-        spiritual = None
-        weather = raw_sources.get("weather", {})
-        weather_html = ""
 
+    peripheral = _extract_peripheral_data(context, raw_sources)
+    spiritual = peripheral["spiritual"]
+    weather = peripheral["weather"]
+    weather_html = peripheral["weather_html"]
+    week_ahead = peripheral["week_ahead"]
+    local_items = peripheral["local_items"]
     markets = raw_sources.get("markets", [])
 
     # Build source name lists for footer

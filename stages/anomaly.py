@@ -278,32 +278,20 @@ def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
     deep_dives = cross_domain_output.get("deep_dives", [])
     total_items = len(at_a_glance) + len(deep_dives)
 
+    checks = [
+        ("category_skew", lambda: _check_category_skew(at_a_glance)),
+        ("source_absence", lambda: _check_source_absence(raw_sources, domain_analysis)),
+        ("unusual_deep_dives", lambda: _check_unusual_deep_dives(deep_dives, domain_analysis)),
+        ("digest_length", lambda: _check_digest_length(total_items)),
+        ("repeated_phrases", lambda: _check_repeated_phrases(cross_domain_output, seam_data)),
+    ]
+
     all_anomalies = []
-
-    try:
-        all_anomalies.extend(_check_category_skew(at_a_glance))
-    except Exception as e:
-        log.warning(f"anomaly: check_category_skew failed: {e}")
-
-    try:
-        all_anomalies.extend(_check_source_absence(raw_sources, domain_analysis))
-    except Exception as e:
-        log.warning(f"anomaly: check_source_absence failed: {e}")
-
-    try:
-        all_anomalies.extend(_check_unusual_deep_dives(deep_dives, domain_analysis))
-    except Exception as e:
-        log.warning(f"anomaly: check_unusual_deep_dives failed: {e}")
-
-    try:
-        all_anomalies.extend(_check_digest_length(total_items))
-    except Exception as e:
-        log.warning(f"anomaly: check_digest_length failed: {e}")
-
-    try:
-        all_anomalies.extend(_check_repeated_phrases(cross_domain_output, seam_data))
-    except Exception as e:
-        log.warning(f"anomaly: check_repeated_phrases failed: {e}")
+    for name, check in checks:
+        try:
+            all_anomalies.extend(check())
+        except Exception as e:
+            log.warning(f"anomaly: {name} failed: {e}")
 
     report = {
         "anomalies": all_anomalies,

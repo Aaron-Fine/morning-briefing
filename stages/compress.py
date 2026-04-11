@@ -64,8 +64,7 @@ def _compress_one(video: dict, model_config: dict) -> dict:
 
     if not compressed.strip():
         log.warning(f"  Using raw fallback for {video['title']}")
-        fallback_words = _target_words(word_count)
-        words = transcript.split()[:fallback_words]
+        words = transcript.split()[:target]
         compressed = " ".join(words)
     else:
         compressed_words = len(compressed.split())
