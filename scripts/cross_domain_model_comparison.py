@@ -26,8 +26,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from stages.cross_domain import run as cross_domain_run
-from stages.cross_domain import _SYSTEM_PROMPT, _build_input
-from llm import call_llm
+
+# Note: _SYSTEM_PROMPT, _build_input (from stages.cross_domain) and call_llm
+# (from llm) are available for interactive debugging but not used in the
+# automated comparison report
 
 log = logging.getLogger(__name__)
 
