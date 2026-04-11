@@ -112,6 +112,8 @@ def _validate_at_a_glance(items: list, known_urls: set[str], source_data: dict) 
     # Source distribution check
     source_counts: dict[str, int] = {}
     for item in items:
+        if not isinstance(item, dict):
+            continue
         for link in item.get("links", []):
             label = link.get("label", "")
             # Extract outlet name (format: "Source: Title" or just label)

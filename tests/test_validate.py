@@ -166,7 +166,9 @@ class TestValidateUrls:
         with caplog.at_level(logging.WARNING):
             result = validate_urls(data, known)
         assert result["url"] == ""
-        assert "hallucinated" in caplog.text.lower() or "stripped" in caplog.text.lower()
+        assert (
+            "hallucinated" in caplog.text.lower() or "stripped" in caplog.text.lower()
+        )
 
     def test_handles_empty_url_string(self):
         known = {"https://example.com"}
@@ -221,12 +223,16 @@ class TestValidateAtAGlance:
         assert result == []
         assert "not a list" in caplog.text
 
-    def test_non_dict_item_raises_in_source_loop(self):
-        """Source distribution loop runs before per-item isinstance check,
-        so non-dict items cause AttributeError."""
+    def test_non_dict_item_skipped_in_source_loop(self, caplog):
+        """Non-dict items are now skipped gracefully in the source distribution loop."""
         items = [{"tag": "war", "headline": "Good", "links": []}, "bad item"]
-        with pytest.raises(AttributeError):
-            _validate_at_a_glance(items, set(), {})
+        with caplog.at_level(logging.WARNING):
+            result = _validate_at_a_glance(items, set(), {})
+        # Valid dict item should be processed, non-dict skipped
+        assert len(result) == 1
+        assert result[0]["headline"] == "Good"
+        # The non-dict item gets logged as skipped in the cleaning loop
+        assert "not a dict" in caplog.text.lower()
 
     def test_all_dict_items_with_non_dict_skipped_in_cleaning_loop(self):
         """When all items are dicts, non-dict-like items are skipped in the
@@ -245,7 +251,9 @@ class TestValidateAtAGlance:
         assert result[0]["tag"] == "uncategorized"
 
     def test_valid_tag_preserved(self):
-        items = [{"tag": "ai", "headline": "AI news", "context": "Some context", "links": []}]
+        items = [
+            {"tag": "ai", "headline": "AI news", "context": "Some context", "links": []}
+        ]
         result = _validate_at_a_glance(items, set(), {})
         assert result[0]["tag"] == "ai"
 
@@ -458,7 +466,12 @@ class TestValidateStageOutput:
     def test_at_a_glance_validated(self):
         output = {
             "at_a_glance": [
-                {"tag": "war", "headline": "War news", "context": "Background", "links": []}
+                {
+                    "tag": "war",
+                    "headline": "War news",
+                    "context": "Background",
+                    "links": [],
+                }
             ]
         }
         result = validate_stage_output(output, {}, "test_stage")
@@ -581,7 +594,10 @@ class TestValidateStageOutput:
         source_data = {
             "rss": [
                 {"url": "https://tech.example.com/ai", "title": "AI Article"},
-                {"url": "https://news.example.com/conflict", "title": "Conflict Article"},
+                {
+                    "url": "https://news.example.com/conflict",
+                    "title": "Conflict Article",
+                },
             ],
             "local_news": [],
             "analysis_transcripts": [],
