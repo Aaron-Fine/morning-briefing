@@ -68,32 +68,21 @@ _Last updated: 2026-04-10_
 - **Duplicate `"cyber"` keyword** — Removed redundant entry from `cross_domain._TAG_KEYWORDS` (was under both tech and cyber sections).
 - **Docker HEALTHCHECK false unhealthy reports** — Changed from log file recency check (1500 minutes) to process check (`pgrep -f entrypoint.py || pgrep -f pipeline.py`). Container no longer reports unhealthy between daily runs.
 - **Weather normal interpolation discontinuity** — Fixed `_interpolate_monthly()` to use previous month's 15th as anchor for dates before the 15th, eliminating ~1.3°F step at month boundaries.
+- **`entrypoint.py` fragile polling scheduler** — Rewrote with timezone-aware scheduling via `zoneinfo.ZoneInfo`, proper next-run-time computation, adaptive sleep intervals (5s near run time, 30s otherwise), crash recovery with traceback logging, and retry on failure (doesn't mark day as done if pipeline crashes).
 
 ---
 
 ## Open items
 
-### Bugs
-
-#### 1. `entrypoint.py` uses fragile polling scheduler
-- **File**: `entrypoint.py` (entire file, 51 lines)
-- **Problems**:
-  - `time.sleep(30)` polling loop — if the process restarts between the scheduled time window, the digest for that day is silently skipped.
-  - No timezone handling — uses `datetime.now()` (system time) despite `config.yaml` specifying `timezone: "America/Denver"`.
-  - Naive cron parsing — only handles `"minute hour * * *"` format; ignores day-of-week/month fields.
-  - No error handling around `run()` — if the pipeline raises an unhandled exception, the loop continues silently with no alert.
-- **Fix**: Replace with APScheduler or a proper cron-based scheduler. At minimum, add a "last run date" guard with timezone-aware comparison and wrap `run()` in try/except with alerting.
-- **Impact**: High — this is the production entrypoint. A silent missed digest is a user-visible failure.
-
 ### Code quality
 
-#### 2. Duplicate `_collect_known_urls` in `validate.py` and `stages/seams.py`
+#### 1. Duplicate `_collect_known_urls` in `validate.py` and `stages/seams.py`
 - **Files**: `validate.py:76`, `stages/seams.py:121`
 - **Problem**: The same function (build a set of known-good URLs from raw source data) exists in two modules with slightly different implementations. `seams.py` also includes URLs from domain analysis links, while `validate.py` does not.
 - **Fix**: Consolidate into a shared utility (e.g., `utils/urls.py`) and import from both modules. Or accept the difference if the seam detection genuinely needs a broader URL set — but document why.
 - **Impact**: Low — maintenance burden if the logic needs to change in the future.
 
-#### 3. `validate.py` `VALID_TAG_LABELS` is a set, not a dict
+#### 2. `validate.py` `VALID_TAG_LABELS` is a set, not a dict
 - **File**: `validate.py:31-42`
 - **Problem**: `VALID_TAG_LABELS` is a `set` of label strings (`{"Conflict", "Politics", ...}`), not a dict mapping tags to labels. It cannot be used for tag→label lookups downstream. It's only consumed by `test_contracts.py` for consistency checking.
 - **Fix**: Either convert to a dict (`{"war": "Conflict", "domestic": "Politics", ...}`) to match `cross_domain._TAG_LABELS`, or remove it entirely and derive the set of valid labels from `_TAG_LABELS.values()` in the contract tests.
