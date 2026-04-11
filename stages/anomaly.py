@@ -14,6 +14,7 @@ import json
 import logging
 import re
 from pathlib import Path
+from urllib.parse import urlparse
 
 log = logging.getLogger(__name__)
 
@@ -63,30 +64,31 @@ def _check_source_absence(raw_sources: dict, domain_analysis: dict) -> list:
         if cat:
             raw_by_category[cat] = raw_by_category.get(cat, 0) + 1
 
-    # Collect categories referenced in domain analysis
-    covered_sources: set[str] = set()
+    # Collect domains referenced in domain analysis (domain-level matching
+    # to stay consistent with analyze_domain.py's URL validation)
+    covered_domains: set[str] = set()
     for domain_result in domain_analysis.values():
         if not isinstance(domain_result, dict):
             continue
         for item in domain_result.get("items", []):
             for link in item.get("links", []):
-                url = link.get("url", "")
-                if url:
-                    covered_sources.add(url)
+                netloc = urlparse(link.get("url", "")).netloc
+                if netloc:
+                    covered_domains.add(netloc)
 
-    # Find raw URLs by category to check coverage
-    raw_urls_by_category: dict[str, set] = {}
+    # Find raw source domains by category to check coverage
+    raw_domains_by_category: dict[str, set] = {}
     for item in raw_sources.get("rss", []):
         cat = item.get("category", "")
-        url = item.get("url", "")
-        if cat and url:
-            raw_urls_by_category.setdefault(cat, set()).add(url)
+        netloc = urlparse(item.get("url", "")).netloc
+        if cat and netloc:
+            raw_domains_by_category.setdefault(cat, set()).add(netloc)
 
     for cat, count in raw_by_category.items():
         if count < 3:
             continue
-        cat_urls = raw_urls_by_category.get(cat, set())
-        if not cat_urls & covered_sources:
+        cat_domains = raw_domains_by_category.get(cat, set())
+        if not cat_domains & covered_domains:
             anomalies.append({
                 "check": "source_absence",
                 "severity": "warning",

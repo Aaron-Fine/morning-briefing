@@ -14,6 +14,7 @@ from sources.launches import fetch_upcoming_launches
 from sources.rss_feeds import fetch_rss
 from sources.come_follow_me import get_current_lesson, get_upcoming_church_events
 from sources.holidays import get_upcoming_holidays
+from sources.economic_calendar import fetch_economic_calendar
 
 log = logging.getLogger(__name__)
 
@@ -36,9 +37,12 @@ def run(context: dict, config: dict, model_config: dict | None = None) -> dict:
     log.info("  → Space launches")
     data["launches"] = fetch_upcoming_launches()
 
-    # Church events + holidays
+    # Church events + holidays + economic calendar
     data["church_events"] = get_upcoming_church_events()
     data["holidays"] = get_upcoming_holidays(days=10)
+
+    log.info("  → Economic calendar")
+    data["economic_calendar"] = fetch_economic_calendar(config)
 
     # Come Follow Me
     if config.get("digest", {}).get("spiritual", {}).get("enabled", True):

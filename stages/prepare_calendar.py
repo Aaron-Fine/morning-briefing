@@ -56,13 +56,21 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
             "type": "church",
         })
 
+    # Economic calendar events (Fed meetings, jobs reports, GDP, etc.)
+    for ec in raw.get("economic_calendar", []):
+        events.append({
+            "date": ec.get("date", ""),
+            "event": ec.get("event", ""),
+            "type": "economic",
+            "impact": ec.get("impact", ""),
+        })
+
     # Space launches
     for launch in raw.get("launches", []):
-        net = launch.get("net", "")
         events.append({
-            "date": net,
+            "date": launch.get("date", ""),
             "event": launch.get("name", "Unnamed launch"),
-            "description": launch.get("mission", ""),
+            "description": launch.get("mission_description", ""),
             "type": "launch",
             "provider": launch.get("provider", ""),
         })

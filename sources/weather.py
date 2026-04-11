@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -265,7 +265,7 @@ def _parse_nws_forecast(raw: dict) -> list[dict]:
         existing = days[date_str]
         temp_f = p.get("temperature")
         if temp_f is not None:
-            if existing.get("is_daytime"):
+            if p.get("isDaytime"):
                 existing["high_f"] = round(temp_f)
             else:
                 existing["low_f"] = round(temp_f)
@@ -556,7 +556,6 @@ def _interpolate_monthly(table: dict, dt: datetime) -> tuple[float, float]:
     Uses the 15th of each month as anchor points.
     """
     month = dt.month
-    day = dt.day
 
     # Value for the 15th of this month
     hi_15, lo_15 = table[month]
