@@ -31,28 +31,15 @@ _AQI_OPACITIES = {
     "Hazardous": 0.60,
 }
 
-# --- Precip gradient definitions ---
-_PRECIP_GRADIENTS = {
-    "rain": ("#5b9bd5", "rgba(91,155,213,0.2)"),
-    "thunderstorm": ("#5b9bd5", "#8f3f97", "#c8a44a"),
-    "snow": ("#a0d4f0", "rgba(160,212,240,0.3)"),
-    "mix": ("#5b9bd5", "#a0d4f0"),
-    "freezing_rain": ("#5b9bd5", "#e06040"),
-}
-
-# --- SVG dimensions ---
-SVG_WIDTH = 640
-SVG_HEIGHT = 230
-ZONE2_TOP = 8
-ZONE2_BOTTOM = 128
-ZONE3_Y = 133
-ZONE3_HEIGHT = 10
-ZONE4_BASELINE = 190
-ZONE4_MAX_HEIGHT = 45
-ZONE5_Y = 194
+# --- Chart layout ---
 DAY_COUNT = 7
-DAY_SPACING = (SVG_WIDTH - 60) / DAY_COUNT  # 60px left margin for labels
-DAY_START_X = 50
+AQI_SCALE_MAX = 200
+
+# --- Precip bar colors by type ---
+_PRECIP_COLORS = {
+    "snow": "#a0d4f0",
+}
+_PRECIP_DEFAULT_COLOR = "#5b9bd5"
 
 
 def render_weather_html(weather: dict, config: dict) -> str:
@@ -72,12 +59,11 @@ def render_weather_html(weather: dict, config: dict) -> str:
     show_normals = display_config.get("normal_band", True)
 
     try:
-        svg = _build_svg(weather, show_aqi, show_records, show_normals)
         header = _build_header_html(weather)
         legend = _build_legend_html(weather, show_aqi, show_records)
-        return f"{header}{legend}{svg}"
+        return f"{header}{legend}"
     except Exception as e:
-        log.error(f"weather_display: SVG render failed: {e}")
+        log.error(f"weather_display: render failed: {e}")
         return _build_text_fallback(weather)
 
 
@@ -175,353 +161,6 @@ def _build_legend_html(weather: dict, show_aqi: bool, show_records: bool) -> str
     return "".join(parts)
 
 
-def _build_svg(
-    weather: dict, show_aqi: bool, show_records: bool, show_normals: bool
-) -> str:
-    """Build the complete SVG display."""
-    forecast = weather.get("forecast", [])[:DAY_COUNT]
-    aqi_forecast = weather.get("aqi_forecast", {})
-    normals = weather.get("normals", [])
-
-    # Determine temperature range for Y-axis
-    all_temps = []
-    for day in forecast:
-        if day.get("high_f") is not None:
-            all_temps.append(day["high_f"])
-        if day.get("low_f") is not None:
-            all_temps.append(day["low_f"])
-    for nr in normals:
-        if show_records:
-            all_temps.append(nr.get("record_hi", 0))
-            all_temps.append(nr.get("record_lo", 0))
-        if show_normals:
-            all_temps.append(nr.get("normal_hi", 0))
-            all_temps.append(nr.get("normal_lo", 0))
-
-    if not all_temps:
-        temp_min, temp_max = 0, 100
-    else:
-        temp_min = min(all_temps) - 5
-        temp_max = max(all_temps) + 5
-
-    # Build SVG sections
-    defs = _render_defs()
-    gridlines = _render_zone2_gridlines(temp_min, temp_max)
-    bands = _render_zone2_bands(
-        forecast, normals, temp_min, temp_max, show_records, show_normals
-    )
-    lines = _render_zone2_lines(forecast, normals, temp_min, temp_max)
-    aqi_strip = _render_zone3_aqi(forecast, aqi_forecast) if show_aqi else ""
-    precip_bars = _render_zone4_precip(forecast)
-    day_labels = _render_zone5_labels(forecast)
-
-    return (
-        f'<svg viewBox="0 0 {SVG_WIDTH} {SVG_HEIGHT}" xmlns="http://www.w3.org/2000/svg" '
-        f'style="width:100%;max-width:{SVG_WIDTH}px;font-family:JetBrains Mono,monospace;">'
-        f"{defs}"
-        f"{gridlines}"
-        f"{bands}"
-        f"{lines}"
-        f"{aqi_strip}"
-        f"{precip_bars}"
-        f"{day_labels}"
-        f"</svg>"
-    )
-
-
-def _render_defs() -> str:
-    """SVG <defs> with linear gradients for precipitation types."""
-    gradients = []
-    for ptype, colors in _PRECIP_GRADIENTS.items():
-        if len(colors) == 2:
-            c1, c2 = colors
-            gradients.append(
-                f'<linearGradient id="grad-{ptype}" x1="0" y1="1" x2="0" y2="0">'
-                f'<stop offset="0%" stop-color="{c1}"/>'
-                f'<stop offset="100%" stop-color="{c2}"/>'
-                f"</linearGradient>"
-            )
-        elif len(colors) == 3:
-            c1, c2, stroke = colors
-            gradients.append(
-                f'<linearGradient id="grad-{ptype}" x1="0" y1="1" x2="0" y2="0">'
-                f'<stop offset="0%" stop-color="{c1}"/>'
-                f'<stop offset="50%" stop-color="{c2}"/>'
-                f'<stop offset="100%" stop-color="{c1}"/>'
-                f"</linearGradient>"
-            )
-    return "<defs>" + "".join(gradients) + "</defs>"
-
-
-def _render_zone2_gridlines(temp_min: float, temp_max: float) -> str:
-    """Horizontal gridlines with Y-axis temperature labels."""
-    lines = []
-    step = _nice_step(temp_min, temp_max, target_lines=5)
-    start = int(temp_min / step) * step
-    end = int(temp_max / step) * step + step
-
-    for t in range(int(start), int(end) + 1, int(step)):
-        y = _temp_to_y(t, temp_min, temp_max)
-        if ZONE2_TOP <= y <= ZONE2_BOTTOM:
-            lines.append(
-                f'<line x1="40" y1="{y}" x2="{SVG_WIDTH - 10}" y2="{y}" '
-                f'style="stroke:var(--wx-grid, #333);stroke-width:0.5;"/>'
-                f'<text x="35" y="{y + 3}" text-anchor="end" '
-                f'font-size="7" style="fill:var(--wx-label-dim, #888582);">{t}°</text>'
-            )
-
-    return "".join(lines)
-
-
-def _render_zone2_bands(
-    forecast: list,
-    normals: list,
-    temp_min: float,
-    temp_max: float,
-    show_records: bool,
-    show_normals: bool,
-) -> str:
-    """Background bands: record range, normal range, forecast fill."""
-    bands = []
-    for i, day in enumerate(forecast):
-        x = DAY_START_X + i * DAY_SPACING
-        w = DAY_SPACING * 0.8
-
-        if show_records and i < len(normals):
-            nr = normals[i]
-            rec_hi = nr.get("record_hi", temp_max)
-            rec_lo = nr.get("record_lo", temp_min)
-            y_hi = _temp_to_y(rec_hi, temp_min, temp_max)
-            y_lo = _temp_to_y(rec_lo, temp_min, temp_max)
-            bands.append(
-                f'<rect x="{x}" y="{y_hi}" width="{w}" height="{y_lo - y_hi}" '
-                f'style="fill:var(--wx-record, rgba(255,255,255,0.04));" rx="1"/>'
-            )
-
-        if show_normals and i < len(normals):
-            nr = normals[i]
-            norm_hi = nr.get("normal_hi", 0)
-            norm_lo = nr.get("normal_lo", 0)
-            y_hi = _temp_to_y(norm_hi, temp_min, temp_max)
-            y_lo = _temp_to_y(norm_lo, temp_min, temp_max)
-            bands.append(
-                f'<rect x="{x}" y="{y_hi}" width="{w}" height="{y_lo - y_hi}" '
-                f'style="fill:var(--wx-normal, rgba(100,160,100,0.18));" rx="1"/>'
-            )
-
-        # Forecast band (between high and low)
-        hi = day.get("high_f")
-        lo = day.get("low_f")
-        if hi is not None and lo is not None:
-            y_hi = _temp_to_y(hi, temp_min, temp_max)
-            y_lo = _temp_to_y(lo, temp_min, temp_max)
-            bands.append(
-                f'<rect x="{x}" y="{y_hi}" width="{w}" height="{y_lo - y_hi}" '
-                f'fill="rgba(208,144,80,0.10)" rx="2"/>'
-            )
-
-    return "".join(bands)
-
-
-def _render_zone2_lines(
-    forecast: list,
-    normals: list,
-    temp_min: float,
-    temp_max: float,
-) -> str:
-    """High line (solid amber) and low line (dashed blue) with dots and labels."""
-    elements = []
-    high_points = []
-    low_points = []
-
-    for i, day in enumerate(forecast):
-        x = DAY_START_X + i * DAY_SPACING + DAY_SPACING / 2
-        hi = day.get("high_f")
-        lo = day.get("low_f")
-
-        if hi is not None:
-            y = _temp_to_y(hi, temp_min, temp_max)
-            high_points.append((x, y, hi))
-
-        if lo is not None:
-            y = _temp_to_y(lo, temp_min, temp_max)
-            low_points.append((x, y, lo))
-
-    # High line
-    if len(high_points) >= 2:
-        path_d = " ".join(
-            f"M{p[0]},{p[1]}" if idx == 0 else f"L{p[0]},{p[1]}"
-            for idx, p in enumerate(high_points)
-        )
-        elements.append(
-            f'<path d="{path_d}" fill="none" '
-            f'style="stroke:var(--wx-hi, #d09050);stroke-width:2;"/>'
-        )
-
-    # Low line
-    if len(low_points) >= 2:
-        path_d = " ".join(
-            f"M{p[0]},{p[1]}" if idx == 0 else f"L{p[0]},{p[1]}"
-            for idx, p in enumerate(low_points)
-        )
-        elements.append(
-            f'<path d="{path_d}" fill="none" '
-            f'style="stroke:var(--wx-lo, #5a7aa0);stroke-width:1.5;stroke-dasharray:4,2;"/>'
-        )
-
-    # Dots and labels
-    for x, y, temp in high_points:
-        # Check if near record
-        near_record = False
-        for i, day in enumerate(forecast):
-            day_x = DAY_START_X + i * DAY_SPACING + DAY_SPACING / 2
-            if abs(day_x - x) < 1 and i < len(normals):
-                nr = normals[i]
-                if abs(temp - nr.get("record_hi", 999)) <= 2:
-                    near_record = True
-                    break
-
-        r = 4 if near_record else 2.5
-        elements.append(
-            f'<circle cx="{x}" cy="{y}" r="{r}" style="fill:var(--wx-hi, #d09050);"/>'
-        )
-        elements.append(
-            f'<text x="{x}" y="{y - 6}" text-anchor="middle" '
-            f'font-size="7" style="fill:var(--wx-hi, #d09050);">{round(temp)}°</text>'
-        )
-
-    for x, y, temp in low_points:
-        elements.append(
-            f'<circle cx="{x}" cy="{y}" r="2.5" style="fill:var(--wx-lo, #5a7aa0);"/>'
-        )
-        elements.append(
-            f'<text x="{x}" y="{y + 12}" text-anchor="middle" '
-            f'font-size="7" style="fill:var(--wx-lo, #5a7aa0);">{round(temp)}°</text>'
-        )
-
-    return "".join(elements)
-
-
-def _render_zone3_aqi(forecast: list, aqi_forecast: dict) -> str:
-    """AQI strip: one colored rect per day."""
-    rects = []
-    max_aqi = max(
-        (d.get("aqi", 0) for d in aqi_forecast.values() if d.get("aqi") is not None),
-        default=0,
-    )
-    strip_height = 10 if max_aqi > 50 else 6
-
-    for i, day in enumerate(forecast):
-        x = DAY_START_X + i * DAY_SPACING
-        w = DAY_SPACING * 0.8
-        date_str = day.get("date", "")
-        aqi_data = aqi_forecast.get(date_str, {})
-        aqi = aqi_data.get("aqi")
-
-        if aqi is not None:
-            label = aqi_data.get("aqi_label", "Moderate")
-            color = _AQI_COLORS.get(label, "#888")
-            opacity = _AQI_OPACITIES.get(label, 0.3)
-            rects.append(
-                f'<rect x="{x}" y="{ZONE3_Y}" width="{w}" height="{strip_height}" '
-                f'fill="{color}" opacity="{opacity}" rx="1"/>'
-                f'<text x="{x + w / 2}" y="{ZONE3_Y + strip_height - 1}" '
-                f'text-anchor="middle" font-size="6" fill="{color}">{aqi}</text>'
-            )
-        else:
-            rects.append(
-                f'<rect x="{x}" y="{ZONE3_Y}" width="{w}" height="2" '
-                f'fill="#666" opacity="0.2" rx="1"/>'
-                f'<text x="{x + w / 2}" y="{ZONE3_Y + 8}" '
-                f'text-anchor="middle" font-size="6" '
-                f'style="fill:var(--wx-label-dim, #888582);">--</text>'
-            )
-
-    # Left label
-    rects.insert(
-        0,
-        f'<text x="35" y="{ZONE3_Y + strip_height / 2 + 3}" '
-        f'font-size="7" style="fill:var(--wx-label-dim, #888582);">AQI</text>',
-    )
-
-    return "".join(rects)
-
-
-def _render_zone4_precip(forecast: list) -> str:
-    """Precipitation bars with type-specific gradients and markers."""
-    bars = []
-    for i, day in enumerate(forecast):
-        x = DAY_START_X + i * DAY_SPACING
-        w = DAY_SPACING * 0.8
-        precip_pct = day.get("precip_chance", 0) or 0
-        precip_type = day.get("precip_type", "none")
-        precip_timing = day.get("precip_timing", "")
-
-        if precip_pct <= 0 or precip_type == "none":
-            continue
-
-        height = _precip_to_height(precip_pct)
-        y = ZONE4_BASELINE - height
-
-        # Gradient fill
-        if precip_type in _PRECIP_GRADIENTS:
-            grad_id = f"grad-{precip_type}"
-            bars.append(
-                f'<rect x="{x}" y="{y}" width="{w}" height="{height}" '
-                f'fill="url(#{grad_id})" rx="1"/>'
-            )
-        else:
-            bars.append(
-                f'<rect x="{x}" y="{y}" width="{w}" height="{height}" '
-                f'style="fill:var(--wx-precip, #5b9bd5);opacity:0.6;" rx="1"/>'
-            )
-
-        # Probability label above bar
-        bars.append(
-            f'<text x="{x + w / 2}" y="{y - 2}" text-anchor="middle" '
-            f'font-size="6" style="fill:var(--wx-label-dim, #888582);">{precip_pct}%</text>'
-        )
-
-        # Type marker below bar
-        marker = _precip_marker(precip_type)
-        if marker:
-            bars.append(
-                f'<text x="{x + w / 2}" y="{ZONE4_BASELINE + 10}" text-anchor="middle" '
-                f'font-size="7" style="fill:var(--wx-label, #b0ada8);">{marker}</text>'
-            )
-
-        # Timing label
-        if precip_timing:
-            bars.append(
-                f'<text x="{x + w / 2}" y="{ZONE4_BASELINE + 18}" text-anchor="middle" '
-                f'font-size="6" style="fill:var(--wx-label-dim, #888582);">{precip_timing}</text>'
-            )
-
-    return "".join(bars)
-
-
-def _render_zone5_labels(forecast: list) -> str:
-    """Day abbreviation and condition summary."""
-    labels = []
-    for i, day in enumerate(forecast):
-        x = DAY_START_X + i * DAY_SPACING + DAY_SPACING / 2
-        day_name = day.get("day_name", "???")
-        condition = day.get("condition", day.get("short_forecast", ""))
-
-        # Shorten condition for display
-        short_cond = _shorten_condition(condition)
-
-        labels.append(
-            f'<text x="{x}" y="{ZONE5_Y}" text-anchor="middle" '
-            f'font-size="8" font-weight="600" '
-            f'style="fill:var(--wx-label, #b0ada8);">{day_name.upper()}</text>'
-            f'<text x="{x}" y="{ZONE5_Y + 12}" text-anchor="middle" '
-            f'font-size="7" style="fill:var(--wx-label-dim, #888582);">{short_cond}</text>'
-        )
-
-    return "".join(labels)
-
-
 def _build_text_fallback(weather: dict) -> str:
     """Simple text fallback when SVG rendering fails."""
     city = weather.get("city", "Logan")
@@ -545,37 +184,41 @@ def _build_text_fallback(weather: dict) -> str:
 # ====================================================================
 
 
-def _temp_to_y(temp: float, temp_min: float, temp_max: float) -> float:
-    """Map temperature to SVG Y coordinate. Higher temp = lower Y."""
+def _temp_to_pct(temp: float, temp_min: float, temp_max: float) -> float:
+    """Map temperature to percentage position (0-100) on the bar. Clamps to bounds."""
     if temp_max == temp_min:
-        return (ZONE2_TOP + ZONE2_BOTTOM) / 2
-    return ZONE2_TOP + (temp_max - temp) * (ZONE2_BOTTOM - ZONE2_TOP) / (
-        temp_max - temp_min
-    )
+        return 50.0
+    pct = (temp - temp_min) / (temp_max - temp_min) * 100.0
+    return max(0.0, min(100.0, pct))
 
 
-def _precip_to_height(
-    probability_pct: float, max_height: float = ZONE4_MAX_HEIGHT
-) -> float:
-    """Map precipitation probability to bar height."""
-    return probability_pct / 100.0 * max_height
+def _aqi_position_pct(aqi: int) -> float:
+    """Map AQI value to percentage on 0-200 scale. Values above 200 pin to 100%."""
+    if aqi is None:
+        return 0.0
+    return min(aqi / AQI_SCALE_MAX * 100.0, 100.0)
 
 
-def _nice_step(data_min: float, data_max: float, target_lines: int = 5) -> float:
-    """Calculate a nice round step for gridlines."""
-    import math
+def _aqi_color(aqi: int | None) -> str:
+    """Return display color for an AQI value using EPA breakpoints."""
+    if aqi is None:
+        return "#888582"
+    if aqi <= 50:
+        return "#00e400"
+    if aqi <= 100:
+        return "#cccc00"
+    if aqi <= 150:
+        return "#ff7e00"
+    if aqi <= 200:
+        return "#ff0000"
+    if aqi <= 300:
+        return "#8f3f97"
+    return "#7e0023"
 
-    range_val = data_max - data_min
-    if range_val <= 0:
-        return 10
-    rough_step = range_val / target_lines
-    magnitude = 10 ** math.floor(math.log10(rough_step))
-    candidates = [1, 2, 5, 10, 20, 50]
-    for c in candidates:
-        step = c * magnitude
-        if step >= rough_step:
-            return step
-    return candidates[-1] * magnitude
+
+def _precip_color(precip_type: str) -> str:
+    """Return bar color for precipitation type."""
+    return _PRECIP_COLORS.get(precip_type, _PRECIP_DEFAULT_COLOR)
 
 
 def _precip_marker(precip_type: str) -> str:

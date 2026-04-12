@@ -9,20 +9,8 @@ from modules.weather_display import (
     _build_header_html,
     _build_legend_html,
     _build_text_fallback,
-    _temp_to_y,
-    _precip_to_height,
-    _nice_step,
     _precip_marker,
     _shorten_condition,
-    SVG_WIDTH,
-    SVG_HEIGHT,
-    ZONE2_TOP,
-    ZONE2_BOTTOM,
-    ZONE3_Y,
-    ZONE4_BASELINE,
-    ZONE5_Y,
-    DAY_START_X,
-    DAY_SPACING,
 )
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
@@ -379,3 +367,106 @@ class TestRenderWeatherHtml:
         html = render_weather_html(weather, _make_config())
         # Should not raise, should return something
         assert isinstance(html, str)
+
+
+# ---------------------------------------------------------------------------
+# New HTML chart helper tests
+# ---------------------------------------------------------------------------
+
+from modules.weather_display import (
+    _temp_to_pct,
+    _aqi_position_pct,
+    _aqi_color,
+    _precip_color,
+)
+
+
+class TestTempToPct:
+    """Temperature to percentage position on the bar."""
+
+    def test_at_min(self):
+        assert _temp_to_pct(30, 30, 80) == 0.0
+
+    def test_at_max(self):
+        assert _temp_to_pct(80, 30, 80) == 100.0
+
+    def test_midpoint(self):
+        assert _temp_to_pct(55, 30, 80) == 50.0
+
+    def test_equal_range(self):
+        assert _temp_to_pct(50, 50, 50) == 50.0
+
+    def test_below_min(self):
+        """Below min should clamp to 0."""
+        assert _temp_to_pct(20, 30, 80) == 0.0
+
+    def test_above_max(self):
+        """Above max should clamp to 100."""
+        assert _temp_to_pct(90, 30, 80) == 100.0
+
+
+class TestAqiPositionPct:
+    """AQI value to percentage on 0-200 scale."""
+
+    def test_zero(self):
+        assert _aqi_position_pct(0) == 0.0
+
+    def test_hundred(self):
+        assert _aqi_position_pct(100) == 50.0
+
+    def test_two_hundred(self):
+        assert _aqi_position_pct(200) == 100.0
+
+    def test_above_200_pins(self):
+        """Values above 200 pin to 100%."""
+        assert _aqi_position_pct(300) == 100.0
+
+    def test_moderate(self):
+        assert _aqi_position_pct(57) == pytest.approx(28.5)
+
+
+class TestAqiColor:
+    """AQI value to display color."""
+
+    def test_good(self):
+        assert _aqi_color(26) == "#00e400"
+
+    def test_moderate(self):
+        assert _aqi_color(57) == "#cccc00"
+
+    def test_usg(self):
+        assert _aqi_color(120) == "#ff7e00"
+
+    def test_unhealthy(self):
+        assert _aqi_color(175) == "#ff0000"
+
+    def test_very_unhealthy(self):
+        assert _aqi_color(220) == "#8f3f97"
+
+    def test_hazardous(self):
+        assert _aqi_color(350) == "#7e0023"
+
+    def test_none(self):
+        assert _aqi_color(None) == "#888582"
+
+
+class TestPrecipColor:
+    """Precipitation type to bar color."""
+
+    def test_rain(self):
+        assert _precip_color("rain") == "#5b9bd5"
+
+    def test_snow(self):
+        assert _precip_color("snow") == "#a0d4f0"
+
+    def test_thunderstorm(self):
+        assert _precip_color("thunderstorm") == "#5b9bd5"
+
+    def test_mix(self):
+        assert _precip_color("mix") == "#5b9bd5"
+
+    def test_freezing_rain(self):
+        assert _precip_color("freezing_rain") == "#5b9bd5"
+
+    def test_none(self):
+        assert _precip_color("none") == "#5b9bd5"
