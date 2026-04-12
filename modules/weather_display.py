@@ -1,10 +1,11 @@
-"""Weather display module — SVG renderer with adaptive CSS variables.
+"""Weather display module — HTML table chart for email embedding.
 
 Public API:
     render_weather_html(weather: dict, config: dict) -> str
 
-Returns a complete HTML block (header + SVG + legend) for embedding
-in the Morning Digest email template.
+Returns a complete HTML block (header + legend + chart) for embedding
+in the Morning Digest email template.  Uses only <table>/<div>/<span>
+with inline styles so the output survives Gmail's HTML sanitiser.
 """
 
 import logging
@@ -59,11 +60,12 @@ def render_weather_html(weather: dict, config: dict) -> str:
     show_normals = display_config.get("normal_band", True)
 
     try:
+        chart = _build_chart_html(weather, show_records, show_normals)
         header = _build_header_html(weather)
         legend = _build_legend_html(weather, show_aqi, show_records)
-        return f"{header}{legend}"
+        return f"{header}{legend}{chart}"
     except Exception as e:
-        log.error(f"weather_display: render failed: {e}")
+        log.error(f"weather_display: chart render failed: {e}")
         return _build_text_fallback(weather)
 
 
@@ -116,45 +118,54 @@ def _build_header_html(weather: dict) -> str:
 def _build_legend_html(weather: dict, show_aqi: bool, show_records: bool) -> str:
     """Legend row with colored swatches."""
     parts = [
-        '<div style="font-size:10px;color:var(--wx-label-dim, #888582);margin-bottom:6px;display:flex;gap:12px;flex-wrap:wrap;">'
+        '<div style="font-size:10px;color:#888582;margin-bottom:6px;'
+        'display:flex;gap:12px;flex-wrap:wrap;">'
     ]
 
     parts.append(
         '<span style="display:inline-flex;align-items:center;gap:3px;">'
-        '<span style="width:8px;height:8px;background:var(--wx-hi, #d09050);border-radius:50%;display:inline-block;"></span>'
+        '<span style="width:8px;height:8px;background:#d09050;'
+        'border-radius:50%;display:inline-block;"></span>'
         "Forecast Hi</span>"
     )
 
     parts.append(
         '<span style="display:inline-flex;align-items:center;gap:3px;">'
-        '<span style="width:8px;height:1px;border-top:1px dashed var(--wx-lo, #5a7aa0);display:inline-block;"></span>'
+        '<span style="width:8px;height:1px;border-top:1px dashed #5a7aa0;'
+        'display:inline-block;"></span>'
         "Forecast Lo</span>"
     )
 
     parts.append(
         '<span style="display:inline-flex;align-items:center;gap:3px;">'
-        '<span style="width:8px;height:8px;background:var(--wx-normal, rgba(100,160,100,0.18));border-radius:1px;display:inline-block;"></span>'
+        '<span style="width:2px;height:10px;background:rgba(100,160,100,0.45);'
+        'border-radius:1px;display:inline-block;"></span>'
         "Normal</span>"
     )
 
     if show_records:
         parts.append(
             '<span style="display:inline-flex;align-items:center;gap:3px;">'
-            '<span style="width:8px;height:8px;background:var(--wx-record, rgba(255,255,255,0.06));border-radius:1px;display:inline-block;"></span>'
+            '<span style="width:2px;height:10px;background:rgba(211,47,47,0.45);'
+            'border-radius:1px;display:inline-block;"></span>'
             "Record</span>"
         )
 
     parts.append(
         '<span style="display:inline-flex;align-items:center;gap:3px;">'
-        '<span style="width:8px;height:8px;background:var(--wx-precip, #5b9bd5);border-radius:1px;display:inline-block;"></span>'
+        '<span style="width:8px;height:3px;background:#5b9bd5;'
+        'border-radius:1px;display:inline-block;"></span>'
         "Precip</span>"
     )
 
     if show_aqi:
         parts.append(
             '<span style="display:inline-flex;align-items:center;gap:3px;">'
-            '<span style="width:8px;height:8px;background:#00e400;border-radius:1px;display:inline-block;"></span>'
-            "AQI Good</span>"
+            "AQI "
+            '<span style="color:#00e400;font-weight:600;font-size:8px;">##</span>'
+            '<span style="color:#cccc00;font-weight:600;font-size:8px;">##</span>'
+            '<span style="color:#ff0000;font-weight:600;font-size:8px;">##</span>'
+            " on bar</span>"
         )
 
     parts.append("</div>")

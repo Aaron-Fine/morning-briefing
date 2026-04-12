@@ -242,12 +242,12 @@ class TestBuildLegendHtml:
         assert "Normal" in html
         assert "Record" in html
         assert "Precip" in html
-        assert "AQI Good" in html
+        assert "AQI" in html
 
     def test_hide_aqi(self):
         weather = {}
         html = _build_legend_html(weather, show_aqi=False, show_records=True)
-        assert "AQI Good" not in html
+        assert "AQI" not in html
 
     def test_hide_records(self):
         weather = {}
@@ -563,3 +563,23 @@ class TestBuildChartHtml:
         html = _build_chart_html(weather, show_records=True, show_normals=True)
         assert "<table" in html
         assert "FRI" in html
+
+
+class TestBuildLegendHtmlUpdated:
+    """Legend should include Record swatch."""
+
+    def test_has_record_swatch(self):
+        weather = {"aqi": 26}
+        html = _build_legend_html(weather, show_aqi=True, show_records=True)
+        assert "Record" in html
+        assert "211,47,47" in html  # red color for record
+
+    def test_no_record_when_disabled(self):
+        weather = {}
+        html = _build_legend_html(weather, show_aqi=True, show_records=False)
+        assert "Record" not in html
+
+    def test_has_precip_swatch(self):
+        weather = {}
+        html = _build_legend_html(weather, show_aqi=True, show_records=True)
+        assert "Precip" in html
