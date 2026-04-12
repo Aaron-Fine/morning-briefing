@@ -179,6 +179,196 @@ def _build_text_fallback(weather: dict) -> str:
     return "<p>" + "<br>".join(lines) + "</p>"
 
 
+def _build_chart_html(
+    weather: dict, show_records: bool, show_normals: bool
+) -> str:
+    """Build the HTML table chart — horizontal day rows with temp range bars."""
+    forecast = weather.get("forecast", [])[:DAY_COUNT]
+    normals = weather.get("normals", [])
+    aqi_forecast = weather.get("aqi_forecast", {})
+
+    if not forecast:
+        return ""
+
+    # Determine temperature scale from all data points
+    all_temps = []
+    for day in forecast:
+        if day.get("high_f") is not None:
+            all_temps.append(day["high_f"])
+        if day.get("low_f") is not None:
+            all_temps.append(day["low_f"])
+    for nr in normals:
+        if show_records:
+            if nr.get("record_hi") is not None:
+                all_temps.append(nr["record_hi"])
+            if nr.get("record_lo") is not None:
+                all_temps.append(nr["record_lo"])
+        if show_normals:
+            if nr.get("normal_hi") is not None:
+                all_temps.append(nr["normal_hi"])
+            if nr.get("normal_lo") is not None:
+                all_temps.append(nr["normal_lo"])
+
+    if not all_temps:
+        temp_min, temp_max = 0, 100
+    else:
+        temp_min = min(all_temps) - 5
+        temp_max = max(all_temps) + 5
+
+    rows = []
+    for i, day in enumerate(forecast):
+        hi = day.get("high_f")
+        lo = day.get("low_f")
+        day_name = day.get("day_name", "???")
+        date_str = day.get("date", "")
+        condition = day.get("condition", day.get("short_forecast", ""))
+        precip_pct = day.get("precip_chance", 0) or 0
+        precip_type = day.get("precip_type", "none")
+
+        # Temperature bar positions
+        lo_pct = _temp_to_pct(lo, temp_min, temp_max) if lo is not None else 0
+        hi_pct = _temp_to_pct(hi, temp_min, temp_max) if hi is not None else 100
+        bar_width = max(hi_pct - lo_pct, 1)
+
+        # Normal ticks
+        normal_lo_tick = ""
+        normal_hi_tick = ""
+        if show_normals and i < len(normals):
+            nr = normals[i]
+            if nr.get("normal_lo") is not None:
+                nlo_pct = _temp_to_pct(nr["normal_lo"], temp_min, temp_max)
+                normal_lo_tick = (
+                    f'<div style="position:absolute;left:{nlo_pct:.1f}%;top:0;'
+                    f'width:2px;height:100%;background:rgba(100,160,100,0.45);'
+                    f'border-radius:1px;"></div>'
+                )
+            if nr.get("normal_hi") is not None:
+                nhi_pct = _temp_to_pct(nr["normal_hi"], temp_min, temp_max)
+                normal_hi_tick = (
+                    f'<div style="position:absolute;left:{nhi_pct:.1f}%;top:0;'
+                    f'width:2px;height:100%;background:rgba(100,160,100,0.45);'
+                    f'border-radius:1px;"></div>'
+                )
+
+        # Record ticks
+        record_lo_tick = ""
+        record_hi_tick = ""
+        if show_records and i < len(normals):
+            nr = normals[i]
+            if nr.get("record_lo") is not None:
+                rlo_pct = _temp_to_pct(nr["record_lo"], temp_min, temp_max)
+                record_lo_tick = (
+                    f'<div style="position:absolute;left:{rlo_pct:.1f}%;top:0;'
+                    f'width:2px;height:100%;background:rgba(211,47,47,0.35);'
+                    f'border-radius:1px;"></div>'
+                )
+            if nr.get("record_hi") is not None:
+                rhi_pct = _temp_to_pct(nr["record_hi"], temp_min, temp_max)
+                record_hi_tick = (
+                    f'<div style="position:absolute;left:{rhi_pct:.1f}%;top:0;'
+                    f'width:2px;height:100%;background:rgba(211,47,47,0.35);'
+                    f'border-radius:1px;"></div>'
+                )
+
+        # AQI number on bar
+        aqi_data = aqi_forecast.get(date_str, {})
+        aqi_val = aqi_data.get("aqi")
+        aqi_html = ""
+        if aqi_val is not None:
+            aqi_pct = _aqi_position_pct(aqi_val)
+            color = _aqi_color(aqi_val)
+            if aqi_val > AQI_SCALE_MAX:
+                # Pin to right edge
+                aqi_html = (
+                    f'<div style="position:absolute;right:2px;top:0;height:100%;'
+                    f'display:flex;align-items:center;">'
+                    f'<span style="font-size:7px;color:{color};font-weight:600;">'
+                    f'{aqi_val}</span></div>'
+                )
+            else:
+                aqi_html = (
+                    f'<div style="position:absolute;left:{aqi_pct:.1f}%;top:0;'
+                    f'height:100%;display:flex;align-items:center;">'
+                    f'<span style="font-size:7px;color:{color};font-weight:600;'
+                    f'margin-left:-6px;">{aqi_val}</span></div>'
+                )
+
+        # Precip underline bar
+        precip_bar_html = ""
+        if precip_pct > 0 and precip_type != "none":
+            p_color = _precip_color(precip_type)
+            opacity = 0.5 + (precip_pct / 100.0) * 0.3
+            precip_bar_html = (
+                f'<div style="position:relative;height:3px;background:#1e1e1e;'
+                f'border-radius:2px;">'
+                f'<div style="position:absolute;left:0;width:{precip_pct}%;'
+                f'height:100%;background:{p_color};opacity:{opacity:.2f};'
+                f'border-radius:2px;"></div></div>'
+            )
+
+        # Condition/precip right column
+        short_cond = _shorten_condition(condition)
+        marker = _precip_marker(precip_type)
+        if precip_pct > 0 and precip_type != "none":
+            p_color = _precip_color(precip_type)
+            bold = " font-weight:600;" if precip_pct >= 40 else ""
+            marker_str = f" {marker}" if marker else ""
+            right_col = (
+                f'<span style="color:{p_color};{bold}">'
+                f'{precip_pct}%</span>{marker_str}'
+            )
+        else:
+            right_col = short_cond
+
+        lo_str = f"{round(lo)}&deg;" if lo is not None else "&mdash;"
+        hi_str = f"{round(hi)}&deg;" if hi is not None else "&mdash;"
+        border = 'border-bottom:1px solid #2a2a2a;' if i < len(forecast) - 1 else ''
+
+        # Temperature row
+        rows.append(
+            f'<tr>'
+            f'<td style="width:32px;font-size:9px;font-weight:600;color:#b0ada8;'
+            f'padding:5px 6px 0 0;vertical-align:top;">{day_name.upper()}</td>'
+            f'<td style="width:28px;font-size:8px;color:#5a7aa0;text-align:right;'
+            f'padding:6px 5px 0 0;vertical-align:top;">{lo_str}</td>'
+            f'<td style="padding:5px 4px 0;vertical-align:top;">'
+            f'<div style="position:relative;height:14px;background:#252525;'
+            f'border-radius:6px;">'
+            f'{record_lo_tick}{record_hi_tick}'
+            f'{normal_lo_tick}{normal_hi_tick}'
+            f'<div style="position:absolute;left:{lo_pct:.1f}%;'
+            f'width:{bar_width:.1f}%;height:100%;background:linear-gradient('
+            f'to right,rgba(90,122,160,0.35),rgba(208,144,80,0.40));'
+            f'border-radius:6px;"></div>'
+            f'{aqi_html}'
+            f'</div>'
+            f'</td>'
+            f'<td style="width:28px;font-size:8px;color:#d09050;'
+            f'padding:6px 0 0 5px;vertical-align:top;">{hi_str}</td>'
+            f'<td style="width:50px;font-size:7px;color:#888582;text-align:right;'
+            f'padding:6px 0 0 4px;vertical-align:top;">{right_col}</td>'
+            f'</tr>'
+        )
+
+        # Precip underline + separator row
+        rows.append(
+            f'<tr style="{border}">'
+            f'<td></td><td></td>'
+            f'<td style="padding:1px 4px 5px;">'
+            f'{precip_bar_html if precip_bar_html else "<div style=\"height:3px;\"></div>"}'
+            f'</td>'
+            f'<td colspan="2"></td>'
+            f'</tr>'
+        )
+
+    return (
+        '<table cellspacing="0" cellpadding="0" border="0" '
+        'style="width:100%;border-collapse:collapse;margin-top:8px;">'
+        + "".join(rows)
+        + "</table>"
+    )
+
+
 # ====================================================================
 # Helpers
 # ====================================================================

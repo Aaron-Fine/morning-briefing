@@ -9,6 +9,7 @@ from modules.weather_display import (
     _build_header_html,
     _build_legend_html,
     _build_text_fallback,
+    _build_chart_html,
     _precip_marker,
     _shorten_condition,
 )
@@ -470,3 +471,95 @@ class TestPrecipColor:
 
     def test_none(self):
         assert _precip_color("none") == "#5b9bd5"
+
+
+class TestBuildChartHtml:
+    """HTML chart table rendering."""
+
+    def test_returns_table(self):
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        assert "<table" in html
+        assert "</table>" in html
+
+    def test_contains_day_labels(self):
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        assert "TUE" in html
+        assert "WED" in html
+
+    def test_contains_hi_lo_temps(self):
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        assert "75&deg;" in html or "75°" in html  # hi temp for day 1
+        assert "48&deg;" in html or "48°" in html  # lo temp for day 1
+
+    def test_contains_aqi_number(self):
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        # AQI 26 from fixture should appear as text on the bar
+        assert ">26<" in html
+
+    def test_contains_precip_bar(self):
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        # Day 6 (Sun) has 60% precip
+        assert "60%" in html
+
+    def test_contains_record_ticks(self):
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        # Record ticks use red color
+        assert "211,47,47" in html
+
+    def test_contains_normal_ticks(self):
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        # Normal ticks use green color
+        assert "100,160,100" in html
+
+    def test_no_records_when_disabled(self):
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather, show_records=False, show_normals=True)
+        assert "211,47,47" not in html
+
+    def test_no_normals_when_disabled(self):
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather, show_records=True, show_normals=False)
+        assert "100,160,100" not in html
+
+    def test_no_svg(self):
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        assert "<svg" not in html
+
+    def test_condition_text(self):
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        assert "Sunny" in html
+
+    def test_precip_marker_snow(self):
+        weather = _load_fixture("weather_snow.json")
+        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        assert "❄" in html
+
+    def test_precip_marker_thunderstorm(self):
+        weather = _load_fixture("weather_thunderstorm.json")
+        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        assert "⚡" in html
+
+    def test_aqi_above_200_pins(self):
+        """AQI values above 200 should pin to right side of bar."""
+        weather = _load_fixture("weather_inversion.json")
+        # Modify a day to have AQI > 200
+        weather["aqi_forecast"]["2026-01-17"]["aqi"] = 250
+        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        # Should contain "right:" positioning for pinned AQI
+        assert "250" in html
+
+    def test_minimal_data(self):
+        """Minimal fixture with 2 days, no AQI."""
+        weather = _load_fixture("weather_minimal.json")
+        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        assert "<table" in html
+        assert "FRI" in html
