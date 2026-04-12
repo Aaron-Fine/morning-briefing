@@ -1,4 +1,4 @@
-"""Tests for weather display SVG rendering and helpers."""
+"""Tests for weather display HTML chart rendering and helpers."""
 
 import json
 import os
@@ -8,10 +8,16 @@ from modules.weather_display import (
     render_weather_html,
     _build_header_html,
     _build_legend_html,
-    _build_text_fallback,
     _build_chart_html,
+    _build_text_fallback,
+    _temp_to_pct,
+    _aqi_position_pct,
+    _aqi_color,
+    _precip_color,
     _precip_marker,
     _shorten_condition,
+    DAY_COUNT,
+    AQI_SCALE_MAX,
 )
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
@@ -33,66 +39,6 @@ def _make_config(**overrides):
     config["weather"].update(overrides)
     return config
 
-
-class TestTempToY:
-    """Temperature to SVG Y coordinate mapping."""
-
-    def test_higher_temp_lower_y(self):
-        """Higher temperatures should map to lower Y values."""
-        y_high = _temp_to_y(80, 20, 100)
-        y_low = _temp_to_y(20, 20, 100)
-        assert y_high < y_low
-
-    def test_midpoint(self):
-        """Middle temp should map to middle Y."""
-        y = _temp_to_y(60, 20, 100)
-        expected = (ZONE2_TOP + ZONE2_BOTTOM) / 2
-        assert y == pytest.approx(expected, abs=0.01)
-
-    def test_equal_range(self):
-        """When min==max, should return center."""
-        y = _temp_to_y(50, 50, 50)
-        assert y == (ZONE2_TOP + ZONE2_BOTTOM) / 2
-
-    def test_bounds(self):
-        """All Y values should be within zone2 range."""
-        for t in [20, 60, 100]:
-            y = _temp_to_y(t, 20, 100)
-            assert ZONE2_TOP <= y <= ZONE2_BOTTOM
-
-
-class TestPrecipToHeight:
-    """Precipitation probability to bar height mapping."""
-
-    def test_zero_pct(self):
-        assert _precip_to_height(0) == 0
-
-    def test_hundred_pct(self):
-        assert _precip_to_height(100) == 45
-
-    def test_fifty_pct(self):
-        assert _precip_to_height(50) == pytest.approx(22.5)
-
-    def test_custom_max(self):
-        assert _precip_to_height(100, max_height=20) == 20
-
-
-class TestNiceStep:
-    """Gridline step calculation."""
-
-    def test_range_100_target_5(self):
-        step = _nice_step(0, 100, 5)
-        assert step == 20
-
-    def test_range_50_target_5(self):
-        step = _nice_step(20, 70, 5)
-        assert step == 10
-
-    def test_zero_range(self):
-        assert _nice_step(50, 50) == 10
-
-    def test_negative_range(self):
-        assert _nice_step(100, 50) > 0
 
 
 class TestPrecipMarker:
@@ -293,93 +239,78 @@ class TestRenderWeatherHtml:
     def test_clear_skies_fixture(self):
         weather = _load_fixture("weather_clear.json")
         html = render_weather_html(weather, _make_config())
-        assert "<svg" in html
+        assert "<table" in html
         assert "Logan, UT" in html
         assert "AQI 26" in html
-        assert "</svg>" in html
 
     def test_inversion_fixture(self):
         weather = _load_fixture("weather_inversion.json")
         html = render_weather_html(weather, _make_config())
-        assert "<svg" in html
-        assert "Action Day" in html  # AQI 151-190
+        assert "<table" in html
+        assert "Action Day" in html
 
     def test_snow_fixture(self):
         weather = _load_fixture("weather_snow.json")
         html = render_weather_html(weather, _make_config())
-        assert "<svg" in html
+        assert "<table" in html
         assert "❄" in html
 
     def test_thunderstorm_fixture(self):
         weather = _load_fixture("weather_thunderstorm.json")
         html = render_weather_html(weather, _make_config())
-        assert "<svg" in html
+        assert "<table" in html
         assert "⚡" in html
 
     def test_mixed_fixture(self):
         weather = _load_fixture("weather_mixed.json")
         html = render_weather_html(weather, _make_config())
-        assert "<svg" in html
-        assert "🌨" in html  # mix marker
+        assert "<table" in html
+        assert "🌨" in html
 
     def test_minimal_fixture(self):
         weather = _load_fixture("weather_minimal.json")
         html = render_weather_html(weather, _make_config())
-        assert "<svg" in html
+        assert "<table" in html
         assert "Logan, UT" in html
 
     def test_missing_aqi_fixture(self):
         weather = _load_fixture("weather_missing_aqi.json")
         html = render_weather_html(weather, _make_config())
-        assert "<svg" in html
-        assert "--" in html  # missing AQI bars
+        assert "<table" in html
 
-    def test_svg_contains_gradients(self):
+    def test_no_svg_in_output(self):
         weather = _load_fixture("weather_clear.json")
         html = render_weather_html(weather, _make_config())
-        assert 'id="grad-rain"' in html
-
-    def test_svg_dimensions(self):
-        weather = _load_fixture("weather_clear.json")
-        html = render_weather_html(weather, _make_config())
-        assert f'viewBox="0 0 {SVG_WIDTH} {SVG_HEIGHT}"' in html
+        assert "<svg" not in html
+        assert "viewBox" not in html
 
     def test_aqi_strip_disabled(self):
         weather = _load_fixture("weather_clear.json")
         html = render_weather_html(weather, _make_config(aqi_strip=False))
-        # AQI strip (Zone 3) should not be in SVG, but header may still mention AQI
-        svg_part = html.split("</svg>")[0]
-        assert "AQI</text>" not in svg_part  # no AQI strip labels in SVG
+        # AQI numbers should still appear on bar (aqi_strip only controls legend)
+        assert "<table" in html
 
     def test_record_band_disabled(self):
         weather = _load_fixture("weather_clear.json")
         html = render_weather_html(weather, _make_config(record_band=False))
-        # Should still render normals but not record rects
-        assert "<svg" in html
+        assert "<table" in html
+        # Record ticks removed from chart; legend hides Record swatch too
+        chart_html = _build_chart_html(weather, show_records=False, show_normals=True)
+        assert "211,47,47" not in chart_html
 
     def test_normal_band_disabled(self):
         weather = _load_fixture("weather_clear.json")
         html = render_weather_html(weather, _make_config(normal_band=False))
-        assert "<svg" in html
+        assert "<table" in html
+        # Normal ticks removed from chart; legend swatch still present
+        chart_html = _build_chart_html(weather, show_records=True, show_normals=False)
+        assert "100,160,100" not in chart_html
 
     def test_exception_falls_back_to_text(self):
         """Force an exception by passing bad data."""
         weather = {"forecast": [{"high_f": "not_a_number"}]}
         html = render_weather_html(weather, _make_config())
-        # Should not raise, should return something
         assert isinstance(html, str)
-
-
-# ---------------------------------------------------------------------------
-# New HTML chart helper tests
-# ---------------------------------------------------------------------------
-
-from modules.weather_display import (
-    _temp_to_pct,
-    _aqi_position_pct,
-    _aqi_color,
-    _precip_color,
-)
 
 
 class TestTempToPct:
