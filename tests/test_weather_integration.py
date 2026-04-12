@@ -54,7 +54,7 @@ class TestPrepareWeatherStage:
         assert "weather" in result
         assert "weather_html" in result
         assert result["weather"] == weather
-        assert "<svg" in result["weather_html"]
+        assert "<table" in result["weather_html"]
 
     def test_empty_weather_returns_empty(self):
         config = _make_config()
@@ -70,8 +70,8 @@ class TestPrepareWeatherStage:
         assert result["weather"] == {}
         assert result["weather_html"] == ""
 
-    def test_all_fixtures_produce_svg(self):
-        """Every fixture should produce valid SVG output."""
+    def test_all_fixtures_produce_html(self):
+        """Every fixture should produce valid HTML table output."""
         fixtures = [
             "weather_clear.json",
             "weather_inversion.json",
@@ -86,20 +86,19 @@ class TestPrepareWeatherStage:
             weather = _load_fixture(fname)
             context = {"raw_sources": {"weather": weather}}
             result = run_prepare_weather(context, config)
-            assert "<svg" in result["weather_html"], f"Failed for {fname}"
+            assert "<table" in result["weather_html"], f"Failed for {fname}"
 
 
 class TestRenderWeatherHtmlIntegration:
     """End-to-end rendering tests with all fixtures."""
 
-    def test_clear_skies_has_all_zones(self):
+    def test_clear_skies_has_all_sections(self):
         weather = _load_fixture("weather_clear.json")
         config = _make_config()
         html = render_weather_html(weather, config)
         assert "Logan, UT" in html  # header
-        assert "<svg" in html  # chart
-        assert "AQI" in html  # AQI strip
-        assert "grad-rain" in html  # precip gradient defs
+        assert "<table" in html  # chart
+        assert "AQI" in html  # legend/AQI numbers
 
     def test_inversion_has_aqi_alert(self):
         weather = _load_fixture("weather_inversion.json")
@@ -130,15 +129,14 @@ class TestRenderWeatherHtmlIntegration:
         weather = _load_fixture("weather_minimal.json")
         config = _make_config()
         html = render_weather_html(weather, config)
-        assert "<svg" in html
+        assert "<table" in html
         assert "Logan, UT" in html
 
-    def test_missing_aqi_shows_dashes(self):
+    def test_missing_aqi_renders(self):
         weather = _load_fixture("weather_missing_aqi.json")
         config = _make_config()
         html = render_weather_html(weather, config)
-        assert "<svg" in html
-        assert "--" in html  # missing AQI indicator
+        assert "<table" in html
 
     def test_normals_rendered(self):
         weather = _load_fixture("weather_clear.json")
@@ -151,8 +149,8 @@ class TestRenderWeatherHtmlIntegration:
         weather = _load_fixture("weather_clear.json")
         config = _make_config()
         html = render_weather_html(weather, config)
-        # Records show as subtle bands via CSS var with fallback
-        assert "--wx-record" in html
+        # Records show as red tick marks
+        assert "211,47,47" in html
 
     def test_day_labels_present(self):
         weather = _load_fixture("weather_clear.json")
@@ -169,17 +167,12 @@ class TestRenderWeatherHtmlIntegration:
         html = render_weather_html(weather, config)
         assert "%" in html  # precipitation chance labels
 
-    def test_svg_namespace(self):
+    def test_no_svg_in_output(self):
         weather = _load_fixture("weather_clear.json")
         config = _make_config()
         html = render_weather_html(weather, config)
-        assert 'xmlns="http://www.w3.org/2000/svg"' in html
-
-    def test_viewbox_dimensions(self):
-        weather = _load_fixture("weather_clear.json")
-        config = _make_config()
-        html = render_weather_html(weather, config)
-        assert 'viewBox="0 0 640 230"' in html
+        assert "<svg" not in html
+        assert "viewBox" not in html
 
     def test_header_date_format(self):
         weather = _load_fixture("weather_clear.json")
@@ -195,23 +188,20 @@ class TestRenderWeatherHtmlIntegration:
         weather = _load_fixture("weather_clear.json")
         config = _make_config(aqi_strip=False)
         html = render_weather_html(weather, config)
-        # AQI strip (Zone 3) should not be in SVG
-        svg_part = html.split("</svg>")[0]
-        assert "AQI</text>" not in svg_part
+        # AQI legend entry hidden; numbers still on bars
+        assert "<table" in html
 
     def test_record_band_disabled(self):
         weather = _load_fixture("weather_clear.json")
         config = _make_config(record_band=False)
         html = render_weather_html(weather, config)
-        assert "--wx-record" not in html
+        assert "<table" in html
 
     def test_normal_band_disabled(self):
         weather = _load_fixture("weather_clear.json")
         config = _make_config(normal_band=False)
         html = render_weather_html(weather, config)
-        # Normals band should not appear in SVG
-        svg_part = html.split("</svg>")[0]
-        assert "rgba(100,160,100,0.12)" not in svg_part
+        assert "<table" in html
 
     def test_fallback_on_exception(self):
         """Force exception path by passing malformed data."""
