@@ -106,10 +106,10 @@ def _build_header_html(weather: dict) -> str:
 
     return (
         f'<div style="font-family:JetBrains Mono,monospace;font-size:13px;'
-        f'color:var(--wx-label, #b0ada8);'
+        f'color:var(--wx-label, #555);'
         f'margin-bottom:4px;display:flex;justify-content:space-between;align-items:baseline;">'
         f"<span>{header_text}</span>"
-        f'<span style="color:var(--wx-label-dim, #888582);font-size:11px;">{date_str}</span>'
+        f'<span style="color:var(--wx-label-dim, #888);font-size:11px;">{date_str}</span>'
         f"</div>"
         f"{aqi_alert}"
     )
@@ -119,17 +119,19 @@ def _build_legend_html(weather: dict, show_aqi: bool, show_records: bool) -> str
     """Legend row with colored swatches."""
     items = [
         _legend_item(
-            '<span style="width:8px;height:8px;background:#d09050;'
+            '<span style="width:8px;height:8px;background:var(--wx-hi, #c07830);'
             'border-radius:50%;display:inline-block;"></span>',
             "Forecast Hi",
         ),
         _legend_item(
-            '<span style="width:8px;height:1px;border-top:1px dashed #5a7aa0;'
+            '<span style="width:8px;height:1px;'
+            'border-top:1px dashed var(--wx-lo, #4a6a90);'
             'display:inline-block;"></span>',
             "Forecast Lo",
         ),
         _legend_item(
-            '<span style="width:2px;height:10px;background:rgba(100,160,100,0.45);'
+            '<span style="width:2px;height:10px;'
+            'background:var(--wx-normal, rgba(80,140,80,0.45));'
             'border-radius:1px;display:inline-block;"></span>',
             "Normal",
         ),
@@ -137,14 +139,16 @@ def _build_legend_html(weather: dict, show_aqi: bool, show_records: bool) -> str
     if show_records:
         items.append(
             _legend_item(
-                '<span style="width:2px;height:10px;background:rgba(211,47,47,0.45);'
+                '<span style="width:2px;height:10px;'
+                'background:var(--wx-record, rgba(192,57,43,0.35));'
                 'border-radius:1px;display:inline-block;"></span>',
                 "Record",
             )
         )
     items.append(
         _legend_item(
-            '<span style="width:8px;height:3px;background:#5b9bd5;'
+            '<span style="width:8px;height:3px;'
+            'background:var(--wx-precip, #5b9bd5);'
             'border-radius:1px;display:inline-block;"></span>',
             "Precip",
         )
@@ -159,8 +163,8 @@ def _build_legend_html(weather: dict, show_aqi: bool, show_records: bool) -> str
         items.append(_legend_item(aqi_swatch, " on bar"))
 
     return (
-        '<div style="font-size:10px;color:#888582;margin-bottom:6px;'
-        'display:flex;gap:12px;flex-wrap:wrap;">'
+        '<div style="font-size:10px;color:var(--wx-label-dim, #888);'
+        'margin-bottom:6px;display:flex;gap:12px;flex-wrap:wrap;">'
         + "".join(items)
         + "</div>"
     )
@@ -246,23 +250,23 @@ def _build_chart_html(
                 if nr.get("normal_lo") is not None:
                     normal_lo_tick = _tick_html(
                         _temp_to_pct(nr["normal_lo"], temp_min, temp_max),
-                        "rgba(100,160,100,0.45)",
+                        "var(--wx-normal, rgba(80,140,80,0.45))",
                     )
                 if nr.get("normal_hi") is not None:
                     normal_hi_tick = _tick_html(
                         _temp_to_pct(nr["normal_hi"], temp_min, temp_max),
-                        "rgba(100,160,100,0.45)",
+                        "var(--wx-normal, rgba(80,140,80,0.45))",
                     )
             if show_records:
                 if nr.get("record_lo") is not None:
                     record_lo_tick = _tick_html(
                         _temp_to_pct(nr["record_lo"], temp_min, temp_max),
-                        "rgba(211,47,47,0.35)",
+                        "var(--wx-record, rgba(192,57,43,0.35))",
                     )
                 if nr.get("record_hi") is not None:
                     record_hi_tick = _tick_html(
                         _temp_to_pct(nr["record_hi"], temp_min, temp_max),
-                        "rgba(211,47,47,0.35)",
+                        "var(--wx-record, rgba(192,57,43,0.35))",
                     )
 
         # AQI number on bar
@@ -294,7 +298,8 @@ def _build_chart_html(
             p_color = _precip_color(precip_type)
             opacity = 0.5 + (precip_pct / 100.0) * 0.3
             precip_bar_html = (
-                f'<div style="position:relative;height:3px;background:#1e1e1e;'
+                f'<div style="position:relative;height:3px;'
+                f'background:var(--wx-grid, #d8d5d0);'
                 f'border-radius:2px;">'
                 f'<div style="position:absolute;left:0;width:{precip_pct}%;'
                 f'height:100%;background:{p_color};opacity:{opacity:.2f};'
@@ -317,17 +322,24 @@ def _build_chart_html(
 
         lo_str = f"{round(lo)}&deg;" if lo is not None else "&mdash;"
         hi_str = f"{round(hi)}&deg;" if hi is not None else "&mdash;"
-        border = 'border-bottom:1px solid #2a2a2a;' if i < len(forecast) - 1 else ''
+        border = (
+            'border-bottom:1px solid var(--border, #e5e2dd);'
+            if i < len(forecast) - 1
+            else ''
+        )
 
         # Temperature row
         rows.append(
             f'<tr>'
-            f'<td style="width:32px;font-size:9px;font-weight:600;color:#b0ada8;'
+            f'<td style="width:32px;font-size:9px;font-weight:600;'
+            f'color:var(--wx-label, #555);'
             f'padding:5px 6px 0 0;vertical-align:top;">{day_name.upper()}</td>'
-            f'<td style="width:28px;font-size:8px;color:#5a7aa0;text-align:right;'
+            f'<td style="width:28px;font-size:8px;'
+            f'color:var(--wx-lo, #4a6a90);text-align:right;'
             f'padding:6px 5px 0 0;vertical-align:top;">{lo_str}</td>'
             f'<td style="padding:5px 4px 0;vertical-align:top;">'
-            f'<div style="position:relative;height:14px;background:#252525;'
+            f'<div style="position:relative;height:14px;'
+            f'background:var(--wx-grid, #d8d5d0);'
             f'border-radius:6px;">'
             f'{record_lo_tick}{record_hi_tick}'
             f'{normal_lo_tick}{normal_hi_tick}'
@@ -338,9 +350,10 @@ def _build_chart_html(
             f'{aqi_html}'
             f'</div>'
             f'</td>'
-            f'<td style="width:28px;font-size:8px;color:#d09050;'
+            f'<td style="width:28px;font-size:8px;color:var(--wx-hi, #c07830);'
             f'padding:6px 0 0 5px;vertical-align:top;">{hi_str}</td>'
-            f'<td style="width:50px;font-size:7px;color:#888582;text-align:right;'
+            f'<td style="width:50px;font-size:7px;'
+            f'color:var(--wx-label-dim, #888);text-align:right;'
             f'padding:6px 0 0 4px;vertical-align:top;">{right_col}</td>'
             f'</tr>'
         )
