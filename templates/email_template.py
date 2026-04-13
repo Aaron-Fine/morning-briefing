@@ -1,9 +1,7 @@
 """HTML email template for the Morning Digest.
 
 Uses Jinja2 for rendering. The template is designed for Gmail/Proton Mail compatibility:
-- CSS custom properties for theming (supported in modern email clients)
-- @media (prefers-color-scheme: dark) for automatic dark mode in Proton Mail / Apple Mail
-- JS-injected toggle for the browser dry-run HTML; stripped by email clients so no dead button
+- CSS custom properties in :root drive all theming (supported in modern email clients)
 - System fonts with web-safe fallbacks
 """
 
@@ -20,11 +18,6 @@ EMAIL_TEMPLATE = _env.from_string("""\
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<!-- Flash prevention: read localStorage before first paint so browser never flashes wrong theme -->
-<script>
-(function(){try{var t=localStorage.getItem('md-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
-</script>
 
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@400;500;600&display=swap');
@@ -407,53 +400,6 @@ EMAIL_TEMPLATE = _env.from_string("""\
   </div>
 
   </div><!-- /.wrapper -->
-
-<!-- Browser-only toggle: injected by JS so it never appears as a dead button in email clients -->
-<script>
-(function() {
-  // Inject the toggle bar inside the wrapper (respects max-width alignment)
-  var wrapper = document.querySelector('.wrapper');
-  var bar = document.createElement('div');
-  bar.className = 'theme-bar';
-  var btn = document.createElement('button');
-  btn.className = 'theme-btn';
-  btn.id = 'theme-toggle';
-  btn.setAttribute('aria-label', 'Toggle colour theme');
-  bar.appendChild(btn);
-  if (wrapper) {
-    wrapper.insertBefore(bar, wrapper.firstChild);
-  } else {
-    document.body.insertBefore(bar, document.body.firstChild);
-  }
-
-  var html = document.documentElement;
-
-  function systemTheme() {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  }
-
-  function activeTheme() {
-    return html.getAttribute('data-theme') || systemTheme();
-  }
-
-  function updateBtn() {
-    btn.textContent = activeTheme() === 'dark' ? '\u2600 Light' : '\u263e Dark';
-  }
-
-  updateBtn();
-
-  btn.addEventListener('click', function() {
-    var next = activeTheme() === 'dark' ? 'light' : 'dark';
-    html.setAttribute('data-theme', next);
-    try { localStorage.setItem('md-theme', next); } catch(e) {}
-    updateBtn();
-  });
-
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
-    try { if (!localStorage.getItem('md-theme')) updateBtn(); } catch(e) { updateBtn(); }
-  });
-})();
-</script>
 
 </body>
 </html>
