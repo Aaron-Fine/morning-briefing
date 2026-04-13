@@ -117,59 +117,53 @@ def _build_header_html(weather: dict) -> str:
 
 def _build_legend_html(weather: dict, show_aqi: bool, show_records: bool) -> str:
     """Legend row with colored swatches."""
-    parts = [
-        '<div style="font-size:10px;color:#888582;margin-bottom:6px;'
-        'display:flex;gap:12px;flex-wrap:wrap;">'
+    items = [
+        _legend_item(
+            '<span style="width:8px;height:8px;background:#d09050;'
+            'border-radius:50%;display:inline-block;"></span>',
+            "Forecast Hi",
+        ),
+        _legend_item(
+            '<span style="width:8px;height:1px;border-top:1px dashed #5a7aa0;'
+            'display:inline-block;"></span>',
+            "Forecast Lo",
+        ),
+        _legend_item(
+            '<span style="width:2px;height:10px;background:rgba(100,160,100,0.45);'
+            'border-radius:1px;display:inline-block;"></span>',
+            "Normal",
+        ),
     ]
-
-    parts.append(
-        '<span style="display:inline-flex;align-items:center;gap:3px;">'
-        '<span style="width:8px;height:8px;background:#d09050;'
-        'border-radius:50%;display:inline-block;"></span>'
-        "Forecast Hi</span>"
-    )
-
-    parts.append(
-        '<span style="display:inline-flex;align-items:center;gap:3px;">'
-        '<span style="width:8px;height:1px;border-top:1px dashed #5a7aa0;'
-        'display:inline-block;"></span>'
-        "Forecast Lo</span>"
-    )
-
-    parts.append(
-        '<span style="display:inline-flex;align-items:center;gap:3px;">'
-        '<span style="width:2px;height:10px;background:rgba(100,160,100,0.45);'
-        'border-radius:1px;display:inline-block;"></span>'
-        "Normal</span>"
-    )
-
     if show_records:
-        parts.append(
-            '<span style="display:inline-flex;align-items:center;gap:3px;">'
-            '<span style="width:2px;height:10px;background:rgba(211,47,47,0.45);'
-            'border-radius:1px;display:inline-block;"></span>'
-            "Record</span>"
+        items.append(
+            _legend_item(
+                '<span style="width:2px;height:10px;background:rgba(211,47,47,0.45);'
+                'border-radius:1px;display:inline-block;"></span>',
+                "Record",
+            )
         )
-
-    parts.append(
-        '<span style="display:inline-flex;align-items:center;gap:3px;">'
-        '<span style="width:8px;height:3px;background:#5b9bd5;'
-        'border-radius:1px;display:inline-block;"></span>'
-        "Precip</span>"
+    items.append(
+        _legend_item(
+            '<span style="width:8px;height:3px;background:#5b9bd5;'
+            'border-radius:1px;display:inline-block;"></span>',
+            "Precip",
+        )
     )
-
     if show_aqi:
-        parts.append(
-            '<span style="display:inline-flex;align-items:center;gap:3px;">'
+        aqi_swatch = (
             "AQI "
             '<span style="color:#00e400;font-weight:600;font-size:8px;">##</span>'
             '<span style="color:#cccc00;font-weight:600;font-size:8px;">##</span>'
             '<span style="color:#ff0000;font-weight:600;font-size:8px;">##</span>'
-            " on bar</span>"
         )
+        items.append(_legend_item(aqi_swatch, " on bar"))
 
-    parts.append("</div>")
-    return "".join(parts)
+    return (
+        '<div style="font-size:10px;color:#888582;margin-bottom:6px;'
+        'display:flex;gap:12px;flex-wrap:wrap;">'
+        + "".join(items)
+        + "</div>"
+    )
 
 
 def _build_text_fallback(weather: dict) -> str:
@@ -388,6 +382,14 @@ def _tick_html(pct: float, color: str) -> str:
     return (
         f'<div style="position:absolute;left:{pct:.1f}%;top:0;'
         f'width:2px;height:100%;background:{color};border-radius:1px;"></div>'
+    )
+
+
+def _legend_item(swatch_html: str, label: str) -> str:
+    """Wrap a legend swatch + label in the standard inline-flex span."""
+    return (
+        f'<span style="display:inline-flex;align-items:center;gap:3px;">'
+        f"{swatch_html}{label}</span>"
     )
 
 

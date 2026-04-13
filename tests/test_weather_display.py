@@ -541,4 +541,27 @@ class TestTickHtml:
     def test_one_decimal_rounding(self):
         html = _tick_html(33.3333, "#000")
         assert "left:33.3%" in html
+
+
+from modules.weather_display import _legend_item
+
+
+class TestLegendItem:
+    """Legend entry wrapper: swatch + label."""
+
+    def test_wraps_swatch_and_label(self):
+        html = _legend_item('<span class="sw"></span>', "Forecast Hi")
+        assert '<span class="sw"></span>' in html
+        assert "Forecast Hi" in html
+
+    def test_uses_inline_flex(self):
+        html = _legend_item("", "x")
+        assert "display:inline-flex" in html
+        assert "align-items:center" in html
+        assert "gap:3px" in html
+
+    def test_opens_and_closes_span(self):
+        html = _legend_item("swatch", "label")
+        assert html.startswith("<span")
+        assert html.endswith("</span>")
         assert "33.33%" not in html
