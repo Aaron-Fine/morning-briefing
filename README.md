@@ -30,7 +30,7 @@ Every morning at 6:00 AM MT, this container:
    - **briefing_packet** — Builds compressed JSON context for follow-up chat (writes `output/latest_briefing_packet.json`)
    - **send** — SMTP delivery
 
-3. **Renders** the output into a polished HTML email with dark mode support
+3. **Renders** the output into a polished HTML email
 
 4. **Delivers** the email to your inbox via SMTP
 
@@ -289,7 +289,7 @@ The weather module renders an inline SVG forecast display in the email with five
 4. **Precipitation Bars** — Type-specific gradients (rain, snow, thunderstorm, mix, freezing rain) with probability labels and emoji markers.
 5. **Day Labels** — Day abbreviations and shortened condition summaries.
 
-All SVG colors use CSS custom properties (`--wx-*`) with hardcoded fallbacks, so the chart adapts to light/dark mode while remaining compatible with email clients that don't support CSS variables.
+All chart colors use CSS custom properties (`--wx-*`) with hardcoded light fallbacks, so email clients that don't support CSS variables still render a correct light-mode chart.
 
 ```yaml
 weather:
@@ -341,17 +341,6 @@ rss:
 ```
 
 Falls back to direct RSS fetching if the FreshRSS API is unreachable.
-
----
-
-## Dark Mode
-
-The digest supports automatic dark mode:
-
-- **In email** (Proton Mail, Apple Mail): Follows your system's `prefers-color-scheme` setting automatically — no interaction needed.
-- **In browser** (dry-run HTML): A toggle button appears in the top-right corner. Your preference is saved in `localStorage`.
-
-Gmail and Outlook do not support `prefers-color-scheme` and will always render in light mode.
 
 ---
 
@@ -416,7 +405,7 @@ morning-digest/
 ├── modules/
 │   └── weather_display.py   # SVG weather chart renderer (CSS-variable themed)
 ├── templates/
-│   └── email_template.py    # Jinja2 HTML email template (light/dark mode)
+│   └── email_template.py    # Jinja2 HTML email template
 ├── output/                  # Generated at runtime (volume-mounted in Docker)
 │   ├── last_digest.html     # Most recent rendered digest
 │   ├── latest_briefing_packet.json
