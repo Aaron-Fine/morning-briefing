@@ -241,45 +241,35 @@ def _build_chart_html(
         hi_pct = _temp_to_pct(hi, temp_min, temp_max) if hi is not None else 100
         bar_width = max(hi_pct - lo_pct, 1)
 
-        # Normal ticks
+        # Normal + record ticks
         normal_lo_tick = ""
         normal_hi_tick = ""
-        if show_normals and i < len(normals):
-            nr = normals[i]
-            if nr.get("normal_lo") is not None:
-                nlo_pct = _temp_to_pct(nr["normal_lo"], temp_min, temp_max)
-                normal_lo_tick = (
-                    f'<div style="position:absolute;left:{nlo_pct:.1f}%;top:0;'
-                    f'width:2px;height:100%;background:rgba(100,160,100,0.45);'
-                    f'border-radius:1px;"></div>'
-                )
-            if nr.get("normal_hi") is not None:
-                nhi_pct = _temp_to_pct(nr["normal_hi"], temp_min, temp_max)
-                normal_hi_tick = (
-                    f'<div style="position:absolute;left:{nhi_pct:.1f}%;top:0;'
-                    f'width:2px;height:100%;background:rgba(100,160,100,0.45);'
-                    f'border-radius:1px;"></div>'
-                )
-
-        # Record ticks
         record_lo_tick = ""
         record_hi_tick = ""
-        if show_records and i < len(normals):
+        if i < len(normals):
             nr = normals[i]
-            if nr.get("record_lo") is not None:
-                rlo_pct = _temp_to_pct(nr["record_lo"], temp_min, temp_max)
-                record_lo_tick = (
-                    f'<div style="position:absolute;left:{rlo_pct:.1f}%;top:0;'
-                    f'width:2px;height:100%;background:rgba(211,47,47,0.35);'
-                    f'border-radius:1px;"></div>'
-                )
-            if nr.get("record_hi") is not None:
-                rhi_pct = _temp_to_pct(nr["record_hi"], temp_min, temp_max)
-                record_hi_tick = (
-                    f'<div style="position:absolute;left:{rhi_pct:.1f}%;top:0;'
-                    f'width:2px;height:100%;background:rgba(211,47,47,0.35);'
-                    f'border-radius:1px;"></div>'
-                )
+            if show_normals:
+                if nr.get("normal_lo") is not None:
+                    normal_lo_tick = _tick_html(
+                        _temp_to_pct(nr["normal_lo"], temp_min, temp_max),
+                        "rgba(100,160,100,0.45)",
+                    )
+                if nr.get("normal_hi") is not None:
+                    normal_hi_tick = _tick_html(
+                        _temp_to_pct(nr["normal_hi"], temp_min, temp_max),
+                        "rgba(100,160,100,0.45)",
+                    )
+            if show_records:
+                if nr.get("record_lo") is not None:
+                    record_lo_tick = _tick_html(
+                        _temp_to_pct(nr["record_lo"], temp_min, temp_max),
+                        "rgba(211,47,47,0.35)",
+                    )
+                if nr.get("record_hi") is not None:
+                    record_hi_tick = _tick_html(
+                        _temp_to_pct(nr["record_hi"], temp_min, temp_max),
+                        "rgba(211,47,47,0.35)",
+                    )
 
         # AQI number on bar
         aqi_data = aqi_forecast.get(date_str, {})
@@ -391,6 +381,14 @@ def _temp_to_pct(temp: float, temp_min: float, temp_max: float) -> float:
         return 50.0
     pct = (temp - temp_min) / (temp_max - temp_min) * 100.0
     return max(0.0, min(100.0, pct))
+
+
+def _tick_html(pct: float, color: str) -> str:
+    """Absolute-positioned 2px tick div for normal/record temperature markers."""
+    return (
+        f'<div style="position:absolute;left:{pct:.1f}%;top:0;'
+        f'width:2px;height:100%;background:{color};border-radius:1px;"></div>'
+    )
 
 
 def _aqi_position_pct(aqi: int) -> float:

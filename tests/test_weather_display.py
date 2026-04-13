@@ -514,3 +514,31 @@ class TestBuildLegendHtmlUpdated:
         weather = {}
         html = _build_legend_html(weather, show_aqi=True, show_records=True)
         assert "Precip" in html
+
+
+from modules.weather_display import _tick_html
+
+
+class TestTickHtml:
+    """Absolute-positioned tick div for normals/records on the temperature bar."""
+
+    def test_contains_percentage_position(self):
+        html = _tick_html(42.5, "rgba(80,140,80,0.45)")
+        assert "left:42.5%" in html
+
+    def test_contains_color(self):
+        html = _tick_html(10.0, "rgba(192,57,43,0.35)")
+        assert "background:rgba(192,57,43,0.35)" in html
+
+    def test_standard_structure(self):
+        html = _tick_html(50.0, "#000")
+        assert "position:absolute" in html
+        assert "top:0" in html
+        assert "width:2px" in html
+        assert "height:100%" in html
+        assert "border-radius:1px" in html
+
+    def test_one_decimal_rounding(self):
+        html = _tick_html(33.3333, "#000")
+        assert "left:33.3%" in html
+        assert "33.33%" not in html
