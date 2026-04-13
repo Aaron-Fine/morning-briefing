@@ -441,23 +441,23 @@ class TestBuildChartHtml:
         weather = _load_fixture("weather_clear.json")
         html = _build_chart_html(weather, show_records=True, show_normals=True)
         # Record ticks use red color
-        assert "211,47,47" in html
+        assert "192,57,43" in html
 
     def test_contains_normal_ticks(self):
         weather = _load_fixture("weather_clear.json")
         html = _build_chart_html(weather, show_records=True, show_normals=True)
         # Normal ticks use green color
-        assert "100,160,100" in html
+        assert "80,140,80" in html
 
     def test_no_records_when_disabled(self):
         weather = _load_fixture("weather_clear.json")
         html = _build_chart_html(weather, show_records=False, show_normals=True)
-        assert "211,47,47" not in html
+        assert "192,57,43" not in html
 
     def test_no_normals_when_disabled(self):
         weather = _load_fixture("weather_clear.json")
         html = _build_chart_html(weather, show_records=True, show_normals=False)
-        assert "100,160,100" not in html
+        assert "80,140,80" not in html
 
     def test_no_svg(self):
         weather = _load_fixture("weather_clear.json")
@@ -503,7 +503,7 @@ class TestBuildLegendHtmlUpdated:
         weather = {"aqi": 26}
         html = _build_legend_html(weather, show_aqi=True, show_records=True)
         assert "Record" in html
-        assert "211,47,47" in html  # red color for record
+        assert "192,57,43" in html  # red color for record
 
     def test_no_record_when_disabled(self):
         weather = {}
