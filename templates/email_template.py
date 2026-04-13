@@ -76,8 +76,8 @@ EMAIL_TEMPLATE = _env.from_string("""\
     --wx-bg:         #f7f5f0;
     --wx-hi:         #c07830;
     --wx-lo:         #4a6a90;
-    --wx-normal:     rgba(80,140,80,0.18);
-    --wx-record:     rgba(0,0,0,0.04);
+    --wx-normal:     rgba(80,140,80,0.45);
+    --wx-record:     rgba(192,57,43,0.35);
     --wx-precip:     #5b9bd5;
     --wx-snow:       #a0d4f0;
     --wx-thunder:    #8f3f97;
