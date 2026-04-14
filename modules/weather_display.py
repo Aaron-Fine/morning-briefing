@@ -239,59 +239,6 @@ def _build_chart_html(
         hi_pct = _temp_to_pct(hi, temp_min, temp_max) if hi is not None else 100
         bar_width = max(hi_pct - lo_pct, 1)
 
-        # Normal + record ticks
-        normal_lo_tick = ""
-        normal_hi_tick = ""
-        record_lo_tick = ""
-        record_hi_tick = ""
-        if i < len(normals):
-            nr = normals[i]
-            if show_normals:
-                if nr.get("normal_lo") is not None:
-                    normal_lo_tick = _tick_html(
-                        _temp_to_pct(nr["normal_lo"], temp_min, temp_max),
-                        "var(--wx-normal, rgba(80,140,80,0.45))",
-                    )
-                if nr.get("normal_hi") is not None:
-                    normal_hi_tick = _tick_html(
-                        _temp_to_pct(nr["normal_hi"], temp_min, temp_max),
-                        "var(--wx-normal, rgba(80,140,80,0.45))",
-                    )
-            if show_records:
-                if nr.get("record_lo") is not None:
-                    record_lo_tick = _tick_html(
-                        _temp_to_pct(nr["record_lo"], temp_min, temp_max),
-                        "var(--wx-record, rgba(192,57,43,0.35))",
-                    )
-                if nr.get("record_hi") is not None:
-                    record_hi_tick = _tick_html(
-                        _temp_to_pct(nr["record_hi"], temp_min, temp_max),
-                        "var(--wx-record, rgba(192,57,43,0.35))",
-                    )
-
-        # AQI number on bar
-        aqi_data = aqi_forecast.get(date_str, {})
-        aqi_val = aqi_data.get("aqi")
-        aqi_html = ""
-        if aqi_val is not None:
-            aqi_pct = _aqi_position_pct(aqi_val)
-            color = _aqi_color(aqi_val)
-            if aqi_val > AQI_SCALE_MAX:
-                # Pin to right edge
-                aqi_html = (
-                    f'<div style="position:absolute;right:2px;top:0;height:100%;'
-                    f'display:flex;align-items:center;">'
-                    f'<span style="font-size:7px;color:{color};font-weight:600;">'
-                    f'{aqi_val}</span></div>'
-                )
-            else:
-                aqi_html = (
-                    f'<div style="position:absolute;left:{aqi_pct:.1f}%;top:0;'
-                    f'height:100%;display:flex;align-items:center;">'
-                    f'<span style="font-size:7px;color:{color};font-weight:600;'
-                    f'margin-left:-6px;">{aqi_val}</span></div>'
-                )
-
         # Precip underline bar
         precip_bar_html = ""
         if precip_pct > 0 and precip_type != "none":
@@ -299,7 +246,7 @@ def _build_chart_html(
             opacity = 0.5 + (precip_pct / 100.0) * 0.3
             precip_bar_html = (
                 f'<div style="position:relative;height:3px;'
-                f'background:var(--wx-grid, #d8d5d0);'
+                f'background:#d8d5d0;'
                 f'border-radius:2px;">'
                 f'<div style="position:absolute;left:0;width:{precip_pct}%;'
                 f'height:100%;background:{p_color};opacity:{opacity:.2f};'
@@ -323,37 +270,38 @@ def _build_chart_html(
         lo_str = f"{round(lo)}&deg;" if lo is not None else "&mdash;"
         hi_str = f"{round(hi)}&deg;" if hi is not None else "&mdash;"
         border = (
-            'border-bottom:1px solid var(--border, #e5e2dd);'
+            'border-bottom:1px solid #e5e2dd;'
             if i < len(forecast) - 1
             else ''
         )
 
-        # Temperature row
+        # Temperature row — bar uses inner table so position:absolute is not needed
+        # (Gmail strips position:relative from divs, breaking absolute-child offsets)
         rows.append(
             f'<tr>'
             f'<td style="width:32px;font-size:9px;font-weight:600;'
-            f'color:var(--wx-label, #555);'
+            f'color:#555555;'
             f'padding:5px 6px 0 0;vertical-align:top;">{day_name.upper()}</td>'
             f'<td style="width:28px;font-size:8px;'
-            f'color:var(--wx-lo, #4a6a90);text-align:right;'
+            f'color:#4a6a90;text-align:right;'
             f'padding:6px 5px 0 0;vertical-align:top;">{lo_str}</td>'
             f'<td style="padding:5px 4px 0;vertical-align:top;">'
-            f'<div style="position:relative;height:14px;'
-            f'background:var(--wx-grid, #d8d5d0);'
-            f'border-radius:6px;">'
-            f'{record_lo_tick}{record_hi_tick}'
-            f'{normal_lo_tick}{normal_hi_tick}'
-            f'<div style="position:absolute;left:{lo_pct:.1f}%;'
-            f'width:{bar_width:.1f}%;height:100%;background:linear-gradient('
-            f'to right,rgba(90,122,160,0.35),rgba(208,144,80,0.40));'
-            f'border-radius:6px;"></div>'
-            f'{aqi_html}'
-            f'</div>'
+            f'<table cellspacing="0" cellpadding="0" border="0" '
+            f'style="width:100%;border-collapse:collapse;height:14px;'
+            f'background:#d8d5d0;border-radius:6px;">'
+            f'<tr style="height:14px;">'
+            f'<td style="width:{lo_pct:.1f}%;height:14px;padding:0;font-size:0;line-height:0;"></td>'
+            f'<td style="width:{bar_width:.1f}%;height:14px;padding:0;font-size:0;line-height:0;'
+            f'background:linear-gradient(to right,rgba(90,122,160,0.35),rgba(208,144,80,0.40));'
+            f'border-radius:6px;"></td>'
+            f'<td style="height:14px;padding:0;font-size:0;line-height:0;"></td>'
+            f'</tr>'
+            f'</table>'
             f'</td>'
-            f'<td style="width:28px;font-size:8px;color:var(--wx-hi, #c07830);'
+            f'<td style="width:28px;font-size:8px;color:#c07830;'
             f'padding:6px 0 0 5px;vertical-align:top;">{hi_str}</td>'
             f'<td style="width:50px;font-size:7px;'
-            f'color:var(--wx-label-dim, #888);text-align:right;'
+            f'color:#888888;text-align:right;'
             f'padding:6px 0 0 4px;vertical-align:top;">{right_col}</td>'
             f'</tr>'
         )
@@ -390,27 +338,12 @@ def _temp_to_pct(temp: float, temp_min: float, temp_max: float) -> float:
     return max(0.0, min(100.0, pct))
 
 
-def _tick_html(pct: float, color: str) -> str:
-    """Absolute-positioned 2px tick div for normal/record temperature markers."""
-    return (
-        f'<div style="position:absolute;left:{pct:.1f}%;top:0;'
-        f'width:2px;height:100%;background:{color};border-radius:1px;"></div>'
-    )
-
-
 def _legend_item(swatch_html: str, label: str) -> str:
     """Wrap a legend swatch + label in the standard inline-flex span."""
     return (
         f'<span style="display:inline-flex;align-items:center;gap:3px;">'
         f"{swatch_html}{label}</span>"
     )
-
-
-def _aqi_position_pct(aqi: int) -> float:
-    """Map AQI value to percentage on 0-200 scale. Values above 200 pin to 100%."""
-    if aqi is None:
-        return 0.0
-    return min(aqi / AQI_SCALE_MAX * 100.0, 100.0)
 
 
 def _aqi_color(aqi: int | None) -> str:

@@ -11,13 +11,11 @@ from modules.weather_display import (
     _build_chart_html,
     _build_text_fallback,
     _temp_to_pct,
-    _aqi_position_pct,
     _aqi_color,
     _precip_color,
     _precip_marker,
     _shorten_condition,
     DAY_COUNT,
-    AQI_SCALE_MAX,
 )
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
@@ -337,26 +335,6 @@ class TestTempToPct:
         assert _temp_to_pct(90, 30, 80) == 100.0
 
 
-class TestAqiPositionPct:
-    """AQI value to percentage on 0-200 scale."""
-
-    def test_zero(self):
-        assert _aqi_position_pct(0) == 0.0
-
-    def test_hundred(self):
-        assert _aqi_position_pct(100) == 50.0
-
-    def test_two_hundred(self):
-        assert _aqi_position_pct(200) == 100.0
-
-    def test_above_200_pins(self):
-        """Values above 200 pin to 100%."""
-        assert _aqi_position_pct(300) == 100.0
-
-    def test_moderate(self):
-        assert _aqi_position_pct(57) == pytest.approx(28.5)
-
-
 class TestAqiColor:
     """AQI value to display color."""
 
@@ -425,39 +403,11 @@ class TestBuildChartHtml:
         assert "75&deg;" in html or "75°" in html  # hi temp for day 1
         assert "48&deg;" in html or "48°" in html  # lo temp for day 1
 
-    def test_contains_aqi_number(self):
-        weather = _load_fixture("weather_clear.json")
-        html = _build_chart_html(weather, show_records=True, show_normals=True)
-        # AQI 26 from fixture should appear as text on the bar
-        assert ">26<" in html
-
     def test_contains_precip_bar(self):
         weather = _load_fixture("weather_clear.json")
         html = _build_chart_html(weather, show_records=True, show_normals=True)
         # Day 6 (Sun) has 60% precip
         assert "60%" in html
-
-    def test_contains_record_ticks(self):
-        weather = _load_fixture("weather_clear.json")
-        html = _build_chart_html(weather, show_records=True, show_normals=True)
-        # Record ticks use red color
-        assert "192,57,43" in html
-
-    def test_contains_normal_ticks(self):
-        weather = _load_fixture("weather_clear.json")
-        html = _build_chart_html(weather, show_records=True, show_normals=True)
-        # Normal ticks use green color
-        assert "80,140,80" in html
-
-    def test_no_records_when_disabled(self):
-        weather = _load_fixture("weather_clear.json")
-        html = _build_chart_html(weather, show_records=False, show_normals=True)
-        assert "192,57,43" not in html
-
-    def test_no_normals_when_disabled(self):
-        weather = _load_fixture("weather_clear.json")
-        html = _build_chart_html(weather, show_records=True, show_normals=False)
-        assert "80,140,80" not in html
 
     def test_no_svg(self):
         weather = _load_fixture("weather_clear.json")
@@ -478,15 +428,6 @@ class TestBuildChartHtml:
         weather = _load_fixture("weather_thunderstorm.json")
         html = _build_chart_html(weather, show_records=True, show_normals=True)
         assert "⚡" in html
-
-    def test_aqi_above_200_pins(self):
-        """AQI values above 200 should pin to right side of bar."""
-        weather = _load_fixture("weather_inversion.json")
-        # Modify a day to have AQI > 200
-        weather["aqi_forecast"]["2026-01-17"]["aqi"] = 250
-        html = _build_chart_html(weather, show_records=True, show_normals=True)
-        # Should contain "right:" positioning for pinned AQI
-        assert "250" in html
 
     def test_minimal_data(self):
         """Minimal fixture with 2 days, no AQI."""
@@ -514,33 +455,6 @@ class TestBuildLegendHtmlUpdated:
         weather = {}
         html = _build_legend_html(weather, show_aqi=True, show_records=True)
         assert "Precip" in html
-
-
-from modules.weather_display import _tick_html
-
-
-class TestTickHtml:
-    """Absolute-positioned tick div for normals/records on the temperature bar."""
-
-    def test_contains_percentage_position(self):
-        html = _tick_html(42.5, "rgba(80,140,80,0.45)")
-        assert "left:42.5%" in html
-
-    def test_contains_color(self):
-        html = _tick_html(10.0, "rgba(192,57,43,0.35)")
-        assert "background:rgba(192,57,43,0.35)" in html
-
-    def test_standard_structure(self):
-        html = _tick_html(50.0, "#000")
-        assert "position:absolute" in html
-        assert "top:0" in html
-        assert "width:2px" in html
-        assert "height:100%" in html
-        assert "border-radius:1px" in html
-
-    def test_one_decimal_rounding(self):
-        html = _tick_html(33.3333, "#000")
-        assert "left:33.3%" in html
 
 
 from modules.weather_display import _legend_item
