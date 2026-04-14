@@ -106,10 +106,10 @@ def _build_header_html(weather: dict) -> str:
 
     return (
         f'<div style="font-family:JetBrains Mono,monospace;font-size:13px;'
-        f'color:var(--wx-label, #b0ada8);'
+        f'color:var(--wx-label, #555);'
         f'margin-bottom:4px;display:flex;justify-content:space-between;align-items:baseline;">'
         f"<span>{header_text}</span>"
-        f'<span style="color:var(--wx-label-dim, #888582);font-size:11px;">{date_str}</span>'
+        f'<span style="color:var(--wx-label-dim, #888);font-size:11px;">{date_str}</span>'
         f"</div>"
         f"{aqi_alert}"
     )
@@ -117,59 +117,57 @@ def _build_header_html(weather: dict) -> str:
 
 def _build_legend_html(weather: dict, show_aqi: bool, show_records: bool) -> str:
     """Legend row with colored swatches."""
-    parts = [
-        '<div style="font-size:10px;color:#888582;margin-bottom:6px;'
-        'display:flex;gap:12px;flex-wrap:wrap;">'
+    items = [
+        _legend_item(
+            '<span style="width:8px;height:8px;background:var(--wx-hi, #c07830);'
+            'border-radius:50%;display:inline-block;"></span>',
+            "Forecast Hi",
+        ),
+        _legend_item(
+            '<span style="width:8px;height:1px;'
+            'border-top:1px dashed var(--wx-lo, #4a6a90);'
+            'display:inline-block;"></span>',
+            "Forecast Lo",
+        ),
+        _legend_item(
+            '<span style="width:2px;height:10px;'
+            'background:var(--wx-normal, rgba(80,140,80,0.45));'
+            'border-radius:1px;display:inline-block;"></span>',
+            "Normal",
+        ),
     ]
-
-    parts.append(
-        '<span style="display:inline-flex;align-items:center;gap:3px;">'
-        '<span style="width:8px;height:8px;background:#d09050;'
-        'border-radius:50%;display:inline-block;"></span>'
-        "Forecast Hi</span>"
-    )
-
-    parts.append(
-        '<span style="display:inline-flex;align-items:center;gap:3px;">'
-        '<span style="width:8px;height:1px;border-top:1px dashed #5a7aa0;'
-        'display:inline-block;"></span>'
-        "Forecast Lo</span>"
-    )
-
-    parts.append(
-        '<span style="display:inline-flex;align-items:center;gap:3px;">'
-        '<span style="width:2px;height:10px;background:rgba(100,160,100,0.45);'
-        'border-radius:1px;display:inline-block;"></span>'
-        "Normal</span>"
-    )
-
     if show_records:
-        parts.append(
-            '<span style="display:inline-flex;align-items:center;gap:3px;">'
-            '<span style="width:2px;height:10px;background:rgba(211,47,47,0.45);'
-            'border-radius:1px;display:inline-block;"></span>'
-            "Record</span>"
+        items.append(
+            _legend_item(
+                '<span style="width:2px;height:10px;'
+                'background:var(--wx-record, rgba(192,57,43,0.35));'
+                'border-radius:1px;display:inline-block;"></span>',
+                "Record",
+            )
         )
-
-    parts.append(
-        '<span style="display:inline-flex;align-items:center;gap:3px;">'
-        '<span style="width:8px;height:3px;background:#5b9bd5;'
-        'border-radius:1px;display:inline-block;"></span>'
-        "Precip</span>"
+    items.append(
+        _legend_item(
+            '<span style="width:8px;height:3px;'
+            'background:var(--wx-precip, #5b9bd5);'
+            'border-radius:1px;display:inline-block;"></span>',
+            "Precip",
+        )
     )
-
     if show_aqi:
-        parts.append(
-            '<span style="display:inline-flex;align-items:center;gap:3px;">'
+        aqi_swatch = (
             "AQI "
             '<span style="color:#00e400;font-weight:600;font-size:8px;">##</span>'
             '<span style="color:#cccc00;font-weight:600;font-size:8px;">##</span>'
             '<span style="color:#ff0000;font-weight:600;font-size:8px;">##</span>'
-            " on bar</span>"
         )
+        items.append(_legend_item(aqi_swatch, " on bar"))
 
-    parts.append("</div>")
-    return "".join(parts)
+    return (
+        '<div style="font-size:10px;color:var(--wx-label-dim, #888);'
+        'margin-bottom:6px;display:flex;gap:12px;flex-wrap:wrap;">'
+        + "".join(items)
+        + "</div>"
+    )
 
 
 def _build_text_fallback(weather: dict) -> str:
@@ -241,45 +239,35 @@ def _build_chart_html(
         hi_pct = _temp_to_pct(hi, temp_min, temp_max) if hi is not None else 100
         bar_width = max(hi_pct - lo_pct, 1)
 
-        # Normal ticks
+        # Normal + record ticks
         normal_lo_tick = ""
         normal_hi_tick = ""
-        if show_normals and i < len(normals):
-            nr = normals[i]
-            if nr.get("normal_lo") is not None:
-                nlo_pct = _temp_to_pct(nr["normal_lo"], temp_min, temp_max)
-                normal_lo_tick = (
-                    f'<div style="position:absolute;left:{nlo_pct:.1f}%;top:0;'
-                    f'width:2px;height:100%;background:rgba(100,160,100,0.45);'
-                    f'border-radius:1px;"></div>'
-                )
-            if nr.get("normal_hi") is not None:
-                nhi_pct = _temp_to_pct(nr["normal_hi"], temp_min, temp_max)
-                normal_hi_tick = (
-                    f'<div style="position:absolute;left:{nhi_pct:.1f}%;top:0;'
-                    f'width:2px;height:100%;background:rgba(100,160,100,0.45);'
-                    f'border-radius:1px;"></div>'
-                )
-
-        # Record ticks
         record_lo_tick = ""
         record_hi_tick = ""
-        if show_records and i < len(normals):
+        if i < len(normals):
             nr = normals[i]
-            if nr.get("record_lo") is not None:
-                rlo_pct = _temp_to_pct(nr["record_lo"], temp_min, temp_max)
-                record_lo_tick = (
-                    f'<div style="position:absolute;left:{rlo_pct:.1f}%;top:0;'
-                    f'width:2px;height:100%;background:rgba(211,47,47,0.35);'
-                    f'border-radius:1px;"></div>'
-                )
-            if nr.get("record_hi") is not None:
-                rhi_pct = _temp_to_pct(nr["record_hi"], temp_min, temp_max)
-                record_hi_tick = (
-                    f'<div style="position:absolute;left:{rhi_pct:.1f}%;top:0;'
-                    f'width:2px;height:100%;background:rgba(211,47,47,0.35);'
-                    f'border-radius:1px;"></div>'
-                )
+            if show_normals:
+                if nr.get("normal_lo") is not None:
+                    normal_lo_tick = _tick_html(
+                        _temp_to_pct(nr["normal_lo"], temp_min, temp_max),
+                        "var(--wx-normal, rgba(80,140,80,0.45))",
+                    )
+                if nr.get("normal_hi") is not None:
+                    normal_hi_tick = _tick_html(
+                        _temp_to_pct(nr["normal_hi"], temp_min, temp_max),
+                        "var(--wx-normal, rgba(80,140,80,0.45))",
+                    )
+            if show_records:
+                if nr.get("record_lo") is not None:
+                    record_lo_tick = _tick_html(
+                        _temp_to_pct(nr["record_lo"], temp_min, temp_max),
+                        "var(--wx-record, rgba(192,57,43,0.35))",
+                    )
+                if nr.get("record_hi") is not None:
+                    record_hi_tick = _tick_html(
+                        _temp_to_pct(nr["record_hi"], temp_min, temp_max),
+                        "var(--wx-record, rgba(192,57,43,0.35))",
+                    )
 
         # AQI number on bar
         aqi_data = aqi_forecast.get(date_str, {})
@@ -310,7 +298,8 @@ def _build_chart_html(
             p_color = _precip_color(precip_type)
             opacity = 0.5 + (precip_pct / 100.0) * 0.3
             precip_bar_html = (
-                f'<div style="position:relative;height:3px;background:#1e1e1e;'
+                f'<div style="position:relative;height:3px;'
+                f'background:var(--wx-grid, #d8d5d0);'
                 f'border-radius:2px;">'
                 f'<div style="position:absolute;left:0;width:{precip_pct}%;'
                 f'height:100%;background:{p_color};opacity:{opacity:.2f};'
@@ -333,17 +322,24 @@ def _build_chart_html(
 
         lo_str = f"{round(lo)}&deg;" if lo is not None else "&mdash;"
         hi_str = f"{round(hi)}&deg;" if hi is not None else "&mdash;"
-        border = 'border-bottom:1px solid #2a2a2a;' if i < len(forecast) - 1 else ''
+        border = (
+            'border-bottom:1px solid var(--border, #e5e2dd);'
+            if i < len(forecast) - 1
+            else ''
+        )
 
         # Temperature row
         rows.append(
             f'<tr>'
-            f'<td style="width:32px;font-size:9px;font-weight:600;color:#b0ada8;'
+            f'<td style="width:32px;font-size:9px;font-weight:600;'
+            f'color:var(--wx-label, #555);'
             f'padding:5px 6px 0 0;vertical-align:top;">{day_name.upper()}</td>'
-            f'<td style="width:28px;font-size:8px;color:#5a7aa0;text-align:right;'
+            f'<td style="width:28px;font-size:8px;'
+            f'color:var(--wx-lo, #4a6a90);text-align:right;'
             f'padding:6px 5px 0 0;vertical-align:top;">{lo_str}</td>'
             f'<td style="padding:5px 4px 0;vertical-align:top;">'
-            f'<div style="position:relative;height:14px;background:#252525;'
+            f'<div style="position:relative;height:14px;'
+            f'background:var(--wx-grid, #d8d5d0);'
             f'border-radius:6px;">'
             f'{record_lo_tick}{record_hi_tick}'
             f'{normal_lo_tick}{normal_hi_tick}'
@@ -354,9 +350,10 @@ def _build_chart_html(
             f'{aqi_html}'
             f'</div>'
             f'</td>'
-            f'<td style="width:28px;font-size:8px;color:#d09050;'
+            f'<td style="width:28px;font-size:8px;color:var(--wx-hi, #c07830);'
             f'padding:6px 0 0 5px;vertical-align:top;">{hi_str}</td>'
-            f'<td style="width:50px;font-size:7px;color:#888582;text-align:right;'
+            f'<td style="width:50px;font-size:7px;'
+            f'color:var(--wx-label-dim, #888);text-align:right;'
             f'padding:6px 0 0 4px;vertical-align:top;">{right_col}</td>'
             f'</tr>'
         )
@@ -391,6 +388,22 @@ def _temp_to_pct(temp: float, temp_min: float, temp_max: float) -> float:
         return 50.0
     pct = (temp - temp_min) / (temp_max - temp_min) * 100.0
     return max(0.0, min(100.0, pct))
+
+
+def _tick_html(pct: float, color: str) -> str:
+    """Absolute-positioned 2px tick div for normal/record temperature markers."""
+    return (
+        f'<div style="position:absolute;left:{pct:.1f}%;top:0;'
+        f'width:2px;height:100%;background:{color};border-radius:1px;"></div>'
+    )
+
+
+def _legend_item(swatch_html: str, label: str) -> str:
+    """Wrap a legend swatch + label in the standard inline-flex span."""
+    return (
+        f'<span style="display:inline-flex;align-items:center;gap:3px;">'
+        f"{swatch_html}{label}</span>"
+    )
 
 
 def _aqi_position_pct(aqi: int) -> float:

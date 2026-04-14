@@ -441,23 +441,23 @@ class TestBuildChartHtml:
         weather = _load_fixture("weather_clear.json")
         html = _build_chart_html(weather, show_records=True, show_normals=True)
         # Record ticks use red color
-        assert "211,47,47" in html
+        assert "192,57,43" in html
 
     def test_contains_normal_ticks(self):
         weather = _load_fixture("weather_clear.json")
         html = _build_chart_html(weather, show_records=True, show_normals=True)
         # Normal ticks use green color
-        assert "100,160,100" in html
+        assert "80,140,80" in html
 
     def test_no_records_when_disabled(self):
         weather = _load_fixture("weather_clear.json")
         html = _build_chart_html(weather, show_records=False, show_normals=True)
-        assert "211,47,47" not in html
+        assert "192,57,43" not in html
 
     def test_no_normals_when_disabled(self):
         weather = _load_fixture("weather_clear.json")
         html = _build_chart_html(weather, show_records=True, show_normals=False)
-        assert "100,160,100" not in html
+        assert "80,140,80" not in html
 
     def test_no_svg(self):
         weather = _load_fixture("weather_clear.json")
@@ -503,7 +503,7 @@ class TestBuildLegendHtmlUpdated:
         weather = {"aqi": 26}
         html = _build_legend_html(weather, show_aqi=True, show_records=True)
         assert "Record" in html
-        assert "211,47,47" in html  # red color for record
+        assert "192,57,43" in html  # red color for record
 
     def test_no_record_when_disabled(self):
         weather = {}
@@ -514,3 +514,54 @@ class TestBuildLegendHtmlUpdated:
         weather = {}
         html = _build_legend_html(weather, show_aqi=True, show_records=True)
         assert "Precip" in html
+
+
+from modules.weather_display import _tick_html
+
+
+class TestTickHtml:
+    """Absolute-positioned tick div for normals/records on the temperature bar."""
+
+    def test_contains_percentage_position(self):
+        html = _tick_html(42.5, "rgba(80,140,80,0.45)")
+        assert "left:42.5%" in html
+
+    def test_contains_color(self):
+        html = _tick_html(10.0, "rgba(192,57,43,0.35)")
+        assert "background:rgba(192,57,43,0.35)" in html
+
+    def test_standard_structure(self):
+        html = _tick_html(50.0, "#000")
+        assert "position:absolute" in html
+        assert "top:0" in html
+        assert "width:2px" in html
+        assert "height:100%" in html
+        assert "border-radius:1px" in html
+
+    def test_one_decimal_rounding(self):
+        html = _tick_html(33.3333, "#000")
+        assert "left:33.3%" in html
+
+
+from modules.weather_display import _legend_item
+
+
+class TestLegendItem:
+    """Legend entry wrapper: swatch + label."""
+
+    def test_wraps_swatch_and_label(self):
+        html = _legend_item('<span class="sw"></span>', "Forecast Hi")
+        assert '<span class="sw"></span>' in html
+        assert "Forecast Hi" in html
+
+    def test_uses_inline_flex(self):
+        html = _legend_item("", "x")
+        assert "display:inline-flex" in html
+        assert "align-items:center" in html
+        assert "gap:3px" in html
+
+    def test_opens_and_closes_span(self):
+        html = _legend_item("swatch", "label")
+        assert html.startswith("<span")
+        assert html.endswith("</span>")
+        assert "33.33%" not in html

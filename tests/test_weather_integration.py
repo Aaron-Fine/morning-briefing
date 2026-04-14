@@ -142,15 +142,15 @@ class TestRenderWeatherHtmlIntegration:
         weather = _load_fixture("weather_clear.json")
         config = _make_config()
         html = render_weather_html(weather, config)
-        # Normals show as green bands
-        assert "rgba(100,160,100" in html
+        # Normals show as green bands (var with light fallback)
+        assert "rgba(80,140,80,0.45)" in html
 
     def test_records_rendered(self):
         weather = _load_fixture("weather_clear.json")
         config = _make_config()
         html = render_weather_html(weather, config)
-        # Records show as red tick marks
-        assert "211,47,47" in html
+        # Records show as red tick marks (var with light fallback)
+        assert "192,57,43" in html
 
     def test_day_labels_present(self):
         weather = _load_fixture("weather_clear.json")

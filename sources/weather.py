@@ -489,6 +489,8 @@ def _fetch_open_meteo_aqi(lat: float, lon: float) -> dict:
                 "latitude": lat,
                 "longitude": lon,
                 "current": "us_aqi,pm2_5,pm10",
+                "hourly": "us_aqi",
+                "forecast_days": 7,
             },
             timeout=10,
         )
@@ -497,6 +499,18 @@ def _fetch_open_meteo_aqi(lat: float, lon: float) -> dict:
         current = data.get("current", {})
         aqi = current.get("us_aqi")
 
+        # Build daily max AQI forecast from hourly data
+        forecast: dict = {}
+        hourly = data.get("hourly", {})
+        times = hourly.get("time", [])
+        aqi_values = hourly.get("us_aqi", [])
+        for ts, val in zip(times, aqi_values):
+            if val is None:
+                continue
+            date_str = ts[:10]  # "YYYY-MM-DD"
+            if date_str not in forecast or val > forecast[date_str]["aqi"]:
+                forecast[date_str] = {"aqi": val, "aqi_label": _aqi_to_label(val)}
+
         result = {
             "current_aqi": aqi,
             "current_aqi_label": _aqi_to_label(aqi)
@@ -504,7 +518,7 @@ def _fetch_open_meteo_aqi(lat: float, lon: float) -> dict:
             else "unavailable",
             "pm2_5": current.get("pm2_5"),
             "pm10": current.get("pm10"),
-            "forecast": {},
+            "forecast": forecast,
         }
         _cache_write("open_meteo_aqi", result)
         return result
