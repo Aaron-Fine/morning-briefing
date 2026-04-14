@@ -12,6 +12,7 @@ from modules.weather_display import (
     _build_text_fallback,
     _temp_to_pct,
     _aqi_color,
+    _aqi_text_color,
     _precip_color,
     _precip_marker,
     _shorten_condition,
@@ -168,6 +169,13 @@ class TestBuildHeaderHtml:
         html = _build_header_html(weather)
         assert "Maroon Action Day" in html
         assert "#7e0023" in html
+
+    def test_aqi_colored_bold(self):
+        """AQI should render as a bold colored span, not plain text."""
+        weather = {"city": "Logan", "state": "UT", "aqi": 26, "aqi_label": "Good"}
+        html = _build_header_html(weather)
+        assert "font-weight:700" in html
+        assert "#15803d" in html  # Good AQI text color
 
     def test_no_aqi_alert_good(self):
         weather = {"city": "Logan", "state": "UT", "aqi": 26, "aqi_label": "Good"}
@@ -358,6 +366,31 @@ class TestAqiColor:
 
     def test_none(self):
         assert _aqi_color(None) == "#888582"
+
+
+class TestAqiTextColor:
+    """Readable text colors for AQI inline display."""
+
+    def test_good(self):
+        assert _aqi_text_color(26) == "#15803d"
+
+    def test_moderate(self):
+        assert _aqi_text_color(57) == "#854d0e"
+
+    def test_usg(self):
+        assert _aqi_text_color(120) == "#c2410c"
+
+    def test_unhealthy(self):
+        assert _aqi_text_color(175) == "#dc2626"
+
+    def test_very_unhealthy(self):
+        assert _aqi_text_color(220) == "#7c3aed"
+
+    def test_hazardous(self):
+        assert _aqi_text_color(350) == "#991b1b"
+
+    def test_none(self):
+        assert _aqi_text_color(None) == "#666666"
 
 
 class TestPrecipColor:

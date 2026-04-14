@@ -87,7 +87,11 @@ def _build_header_html(weather: dict) -> str:
 
     header_parts = [f"{city}, {state} · {temp_str} {condition}"]
     if aqi is not None:
-        header_parts.append(f"AQI {aqi} ({aqi_label})")
+        tc = _aqi_text_color(aqi)
+        header_parts.append(
+            f'<span style="color:{tc};font-weight:700;">'
+            f'AQI {aqi} ({aqi_label})</span>'
+        )
     header_parts.extend([wind_str, humidity_str])
     header_text = " · ".join(p for p in header_parts if p)
 
@@ -361,6 +365,27 @@ def _aqi_color(aqi: int | None) -> str:
     if aqi <= 300:
         return "#8f3f97"
     return "#7e0023"
+
+
+def _aqi_text_color(aqi: int | None) -> str:
+    """Return a readable text color for AQI inline display.
+
+    The EPA signal colors (#00e400, #ffff00) are illegible on light
+    backgrounds, so this returns darker, print-safe variants.
+    """
+    if aqi is None:
+        return "#666666"
+    if aqi <= 50:
+        return "#15803d"   # Good: dark green
+    if aqi <= 100:
+        return "#854d0e"   # Moderate: amber
+    if aqi <= 150:
+        return "#c2410c"   # USG: dark orange
+    if aqi <= 200:
+        return "#dc2626"   # Unhealthy: red
+    if aqi <= 300:
+        return "#7c3aed"   # Very Unhealthy: purple
+    return "#991b1b"       # Hazardous: dark red
 
 
 def _precip_color(precip_type: str) -> str:
