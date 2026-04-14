@@ -134,7 +134,7 @@ EMAIL_TEMPLATE = _env.from_string("""\
   .scan-ctx-block { margin-bottom: 6px; padding-left: 8px; border-left: 2px solid transparent; }
   .scan-ctx-block:last-child { margin-bottom: 0; }
   .scan-ctx-block-analysis { border-left-color: var(--border); }
-  .scan-ctx-block-thread   { border-left-color: var(--accent-seam); opacity: 0.9; }
+  .scan-ctx-block-thread   { border-left-color: var(--accent-seam); }
   .scan-voice { font-size: 9px; letter-spacing: 1px; display: inline-block; min-width: 6.5ch; padding-right: 4px; vertical-align: baseline; }
   .scan-voice-src      { color: var(--text-faint); }
   .scan-voice-analysis { color: var(--text-muted); }
