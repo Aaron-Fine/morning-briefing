@@ -28,6 +28,7 @@ Each item schema:
 """
 
 import logging
+import time
 from urllib.parse import urlparse
 
 from llm import call_llm
@@ -333,9 +334,9 @@ def _fmt_markets(markets: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _empty_domain_result(domain_key: str) -> dict:
+def _empty_domain_result(domain_key: str, failed: bool = False) -> dict:
     """Return a safe empty result for a domain pass."""
-    result = {"items": []}
+    result = {"items": [], "_failed": failed}
     if domain_key == "econ":
         result["market_context"] = ""
     return result
@@ -356,7 +357,7 @@ def _run_domain_pass(
         log.warning(
             f"  analyze_domain[{domain_key}]: no source items — returning empty"
         )
-        return _empty_domain_result(domain_key)
+        return _empty_domain_result(domain_key, failed=False)
 
     schema = _ECON_OUTPUT_SCHEMA if domain_key == "econ" else _OUTPUT_SCHEMA
 
@@ -397,7 +398,7 @@ def _run_domain_pass(
         )
     except Exception as e:
         log.error(f"  analyze_domain[{domain_key}]: LLM call failed: {e}")
-        return _empty_domain_result(domain_key)
+        return _empty_domain_result(domain_key, failed=True)
 
     # Normalize result
     if isinstance(result, list):
@@ -433,6 +434,9 @@ def _run_domain_pass(
 # ---------------------------------------------------------------------------
 
 
+_RETRY_DELAY_SECONDS = 300  # 5 minutes
+
+
 def run(
     context: dict, config: dict, model_config: dict | None = None, **kwargs
 ) -> dict:
@@ -445,9 +449,59 @@ def run(
     if not model_config:
         model_config = config.get("llm", {})
 
-    domain_analysis: dict = {}
-    total_items = 0
+    domain_analysis = _run_all_domains(
+        rss_items, compressed_transcripts, markets, model_config
+    )
 
+    failed_keys = [k for k, v in domain_analysis.items() if v.get("_failed")]
+    if failed_keys:
+        log.warning(
+            f"analyze_domain: {len(failed_keys)} domain(s) failed ({', '.join(failed_keys)}), "
+            f"retrying in {_RETRY_DELAY_SECONDS}s..."
+        )
+        time.sleep(_RETRY_DELAY_SECONDS)
+        for domain_key in failed_keys:
+            log.info(f"  Retrying domain: {domain_key} ({_DOMAIN_CONFIGS[domain_key]['label']})")
+            result = _run_domain_pass(
+                domain_key,
+                _DOMAIN_CONFIGS[domain_key],
+                rss_items,
+                compressed_transcripts,
+                markets if domain_key == "econ" else [],
+                model_config,
+            )
+            domain_analysis[domain_key] = result
+
+    # Clean _failed sentinel before returning
+    still_failed = []
+    total_items = 0
+    for key, val in domain_analysis.items():
+        if val.pop("_failed", False):
+            still_failed.append(key)
+        total_items += len(val.get("items", []))
+
+    log.info(
+        f"analyze_domain: {total_items} total items across {len(_DOMAIN_CONFIGS)} domains"
+    )
+    if still_failed:
+        log.error(
+            f"analyze_domain: {len(still_failed)} domain(s) still failed after retry: "
+            f"{', '.join(still_failed)}"
+        )
+
+    return {
+        "domain_analysis": domain_analysis,
+        "domain_analysis_failures": still_failed,
+    }
+
+
+def _run_all_domains(
+    rss_items: list[dict],
+    compressed_transcripts: list[dict],
+    markets: list[dict],
+    model_config: dict,
+) -> dict:
+    domain_analysis: dict = {}
     for domain_key, domain_cfg in _DOMAIN_CONFIGS.items():
         log.info(f"  Analyzing domain: {domain_key} ({domain_cfg['label']})")
         result = _run_domain_pass(
@@ -459,9 +513,4 @@ def run(
             model_config,
         )
         domain_analysis[domain_key] = result
-        total_items += len(result.get("items", []))
-
-    log.info(
-        f"analyze_domain: {total_items} total items across {len(_DOMAIN_CONFIGS)} domains"
-    )
-    return {"domain_analysis": domain_analysis}
+    return domain_analysis

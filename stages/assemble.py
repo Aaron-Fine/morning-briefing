@@ -214,6 +214,11 @@ def run(
     if weather_html:
         weather_html = Markup(weather_html)
 
+    # Detect analysis failures: we had source data but no items came through
+    domain_failures = context.get("domain_analysis_failures", [])
+    raw_rss_count = len(raw_sources.get("rss", []))
+    analysis_unavailable = bool(domain_failures) and not at_a_glance and raw_rss_count > 0
+
     template_data = {
         "date_display": today.strftime("%A, %B %-d, %Y"),
         "generated_at": (
@@ -230,6 +235,7 @@ def run(
         "weather_html": weather_html,
         "markets": markets,
         "at_a_glance": at_a_glance,
+        "analysis_unavailable": analysis_unavailable,
         "contested_narratives": seam_data.get("contested_narratives", []),
         "coverage_gaps": seam_data.get("coverage_gaps", []),
         "key_assumptions": seam_data.get("key_assumptions", []),

@@ -181,6 +181,9 @@ EMAIL_TEMPLATE = _env.from_string("""\
   .wk-meta { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
   .wk-desc { font-size: 14px; color: var(--text-secondary); margin-top: 3px; line-height: 1.45; }
 
+  /* ── Service notice ──────────────────────────────────────── */
+  .svc-notice { padding: 16px 20px; background: #fef9e7; border: 1px solid #f0e0a0; border-radius: 4px; font-size: 14px; color: #7d6608; line-height: 1.5; }
+
   /* ── Footer ─────────────────────────────────────────────── */
   .footer { padding: 20px 32px; background: var(--bg-chrome); color: var(--text-chrome-muted); font-size: 11px; line-height: 1.6; text-align: center; }
   .footer a { color: var(--text-chrome-link); text-decoration: none; }
@@ -220,6 +223,13 @@ EMAIL_TEMPLATE = _env.from_string("""\
     {% endif %}
     {% if weather.forecast|length > 1 %}
     <br><span class="bar-detail">{% for day in weather.forecast[1:] %}{{ day.day_name }} {{ day.high_f }}°/{{ day.low_f }}° {{ day.condition }}{% if day.precip_chance >= 30 %} ({{ day.precip_chance }}%){% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</span>
+    {% endif %}
+  </div>
+  {% elif weather and weather.aqi is not none %}
+  <div class="bar">
+    <span>{{ weather.city or 'Logan' }}, {{ weather.state or 'UT' }} — forecast unavailable (NWS) · AQI {{ weather.aqi }} ({{ weather.aqi_label }})</span>
+    {% if weather.aqi and weather.aqi >= 151 %}
+    <span class="aqi-warn" style="color:{% if weather.aqi >= 301 %}#7e0023{% elif weather.aqi >= 201 %}#8f3f97{% else %}#d32f2f{% endif %};">{% if weather.aqi >= 301 %}Maroon Action Day — Hazardous air quality. Everyone should avoid all outdoor activity.{% elif weather.aqi >= 201 %}Purple Action Day — Very Unhealthy. Avoid prolonged outdoor activity; sensitive groups should stay indoors.{% else %}Red Action Day — Unhealthy air quality. Everyone should limit prolonged outdoor activity.{% endif %}</span>
     {% endif %}
   </div>
   {% endif %}
@@ -262,6 +272,11 @@ EMAIL_TEMPLATE = _env.from_string("""\
       {% endif %}
     </div>
     {% endfor %}
+  </div>
+  {% elif analysis_unavailable %}
+  <div class="section">
+    <h2 class="mono-label sec-label">At a Glance</h2>
+    <div class="svc-notice">Analysis unavailable — the upstream LLM provider did not respond. Sources were collected successfully but could not be analyzed. Check the pipeline logs for details.</div>
   </div>
   {% endif %}
 
@@ -322,6 +337,11 @@ EMAIL_TEMPLATE = _env.from_string("""\
       {% endif %}
     </div>
     {% endfor %}
+  </div>
+  {% elif analysis_unavailable %}
+  <div class="section">
+    <h2 class="mono-label sec-label">Deep Dives</h2>
+    <div class="svc-notice">Deep dives unavailable — analysis could not be completed for this edition.</div>
   </div>
   {% endif %}
 
