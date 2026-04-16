@@ -41,9 +41,9 @@ pipeline:
     - name: analyze_domain
       model:
         provider: fireworks
-        model: "accounts/fireworks/models/kimi-k2p5"
-        max_tokens: 8000
-        temperature: 0.3
+        model: "accounts/fireworks/models/minimax-m2p7"
+        max_tokens: 10000
+        temperature: 0.6
 
     - name: prepare_calendar
       # No model needed — deterministic
