@@ -297,7 +297,7 @@ def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
 
     report = {
         "anomalies": all_anomalies,
-        "checks_run": 5,
+        "checks_run": len(checks),
         "anomaly_count": len(all_anomalies),
     }
 
@@ -305,6 +305,6 @@ def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
         for a in all_anomalies:
             log.warning(f"anomaly [{a['check']}]: {a['detail']}")
     else:
-        log.info("anomaly: all 5 checks passed — no anomalies detected")
+        log.info(f"anomaly: all {len(checks)} checks passed — no anomalies detected")
 
     return {"anomaly_report": report}

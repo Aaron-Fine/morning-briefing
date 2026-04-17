@@ -2,7 +2,8 @@
 
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import requests
+
+from sources._http import http_get_json
 
 log = logging.getLogger(__name__)
 
@@ -17,23 +18,15 @@ def fetch_hackernews(config: dict) -> list[dict]:
     hn_config = config.get("hackernews", {})
     count = hn_config.get("top_stories", 15)
 
-    try:
-        resp = requests.get(f"{HN_API}/topstories.json", timeout=10)
-        resp.raise_for_status()
-        story_ids = resp.json()[:count]
-    except Exception as e:
-        log.warning(f"Failed to fetch HN top stories: {e}")
+    top = http_get_json(f"{HN_API}/topstories.json", timeout=10, label="HN topstories")
+    if top is None:
         return []
+    story_ids = top[:count]
 
     stories = []
 
     def _fetch_item(sid):
-        try:
-            r = requests.get(f"{HN_API}/item/{sid}.json", timeout=10)
-            r.raise_for_status()
-            return r.json()
-        except Exception:
-            return None
+        return http_get_json(f"{HN_API}/item/{sid}.json", timeout=10, label=f"HN item {sid}")
 
     with ThreadPoolExecutor(max_workers=10) as pool:
         futures = {pool.submit(_fetch_item, sid): sid for sid in story_ids}
@@ -48,7 +41,6 @@ def fetch_hackernews(config: dict) -> list[dict]:
                     "hn_url": f"https://news.ycombinator.com/item?id={item['id']}",
                 })
 
-    # Sort by score descending (original HN ranking is already good, but
-    # concurrent fetching scrambles order)
+    # Sort by score descending (concurrent fetching scrambles original order)
     stories.sort(key=lambda s: s["score"], reverse=True)
     return stories

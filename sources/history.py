@@ -2,7 +2,8 @@
 
 import logging
 from datetime import datetime
-import requests
+
+from sources._http import http_get_json
 
 log = logging.getLogger(__name__)
 
@@ -19,42 +20,28 @@ def fetch_on_this_day(config: dict) -> dict:
     event_count = history_config.get("event_count", 8)
 
     today = datetime.now()
+    empty = {"selected": [], "events": [], "month": today.month, "day": today.day}
 
-    try:
-        resp = requests.get(
-            f"{WIKI_API}/all/{today.month}/{today.day}",
-            headers={
-                "User-Agent": "MorningDigest/1.0",
-                "Accept": "application/json",
-            },
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+    data = http_get_json(
+        f"{WIKI_API}/all/{today.month}/{today.day}",
+        headers={"Accept": "application/json"},
+        timeout=10,
+        label="On This Day",
+    )
+    if data is None:
+        return empty
 
-        # "selected" contains editorially curated events — best quality
-        selected = []
-        for item in data.get("selected", [])[:event_count]:
-            selected.append({
-                "year": item.get("year", ""),
-                "text": item.get("text", ""),
-            })
-
-        # Also grab a few notable events
-        events = []
-        for item in data.get("events", [])[:event_count]:
-            events.append({
-                "year": item.get("year", ""),
-                "text": item.get("text", ""),
-            })
-
-        return {
-            "selected": selected,
-            "events": events,
-            "month": today.month,
-            "day": today.day,
-        }
-
-    except Exception as e:
-        log.warning(f"On This Day fetch failed: {e}")
-        return {"selected": [], "events": [], "month": today.month, "day": today.day}
+    selected = [
+        {"year": item.get("year", ""), "text": item.get("text", "")}
+        for item in data.get("selected", [])[:event_count]
+    ]
+    events = [
+        {"year": item.get("year", ""), "text": item.get("text", "")}
+        for item in data.get("events", [])[:event_count]
+    ]
+    return {
+        "selected": selected,
+        "events": events,
+        "month": today.month,
+        "day": today.day,
+    }

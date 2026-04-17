@@ -19,7 +19,7 @@ from sources.economic_calendar import fetch_economic_calendar
 log = logging.getLogger(__name__)
 
 
-def run(context: dict, config: dict, model_config: dict | None = None) -> dict:
+def run(context: dict, config: dict, model_config: dict | None = None, **kwargs) -> dict:
     """Collect all sources and return raw_sources artifact."""
     log.info("Collecting from sources...")
     data: dict = {}

@@ -14,11 +14,14 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 _ROOT = Path(__file__).parent.parent
-_TOKEN_ESTIMATE = lambda s: len(s) // 4
 _TARGET_TOKENS = 30_000
 
 # Drop priority for compression (lowest priority first)
 _DROP_PRIORITY = ["perspective-diversity", "global-south", "econ-trade"]
+
+
+def _token_estimate(s: str) -> int:
+    return len(s) // 4
 
 
 def _first_two_sentences(text: str) -> str:
@@ -121,7 +124,7 @@ def _build_metadata(context: dict, config: dict) -> dict:
 
 def _compress_to_budget(packet: dict) -> dict:
     """Apply compression steps until packet is under _TARGET_TOKENS."""
-    estimate = _TOKEN_ESTIMATE(json.dumps(packet, default=str))
+    estimate = _token_estimate(json.dumps(packet, default=str))
     if estimate <= _TARGET_TOKENS:
         return packet
 
@@ -129,7 +132,7 @@ def _compress_to_budget(packet: dict) -> dict:
     for item in packet.get("source_index", []):
         if not item.get("_referenced", False):
             item["summary"] = _first_two_sentences(item.get("summary", ""))
-    estimate = _TOKEN_ESTIMATE(json.dumps(packet, default=str))
+    estimate = _token_estimate(json.dumps(packet, default=str))
     if estimate <= _TARGET_TOKENS:
         return packet
 
@@ -139,7 +142,7 @@ def _compress_to_budget(packet: dict) -> dict:
             i for i in packet.get("source_index", [])
             if i.get("_category", "") != cat
         ]
-        estimate = _TOKEN_ESTIMATE(json.dumps(packet, default=str))
+        estimate = _token_estimate(json.dumps(packet, default=str))
         if estimate <= _TARGET_TOKENS:
             return packet
 
@@ -147,7 +150,7 @@ def _compress_to_budget(packet: dict) -> dict:
     for t in packet.get("transcript_summaries", []):
         if len(t.get("summary", "")) > 500:
             t["summary"] = t["summary"][:500] + "…"
-    estimate = _TOKEN_ESTIMATE(json.dumps(packet, default=str))
+    estimate = _token_estimate(json.dumps(packet, default=str))
     if estimate <= _TARGET_TOKENS:
         return packet
 
@@ -202,7 +205,7 @@ def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
         item.pop("_referenced", None)
         item.pop("_category", None)
 
-    estimated_tokens = _TOKEN_ESTIMATE(json.dumps(packet, default=str))
+    estimated_tokens = _token_estimate(json.dumps(packet, default=str))
     log.info(
         f"briefing_packet: built packet — "
         f"{len(source_index)} sources, "

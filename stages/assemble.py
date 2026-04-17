@@ -117,10 +117,11 @@ def _build_from_domain_analysis(context: dict, config: dict) -> tuple[list, list
     _depth_order = {"widely-reported": 0, "corroborated": 1, "single-source": 2, "": 3}
     all_items.sort(key=lambda i: _depth_order.get(i.get("source_depth", ""), 3))
 
-    # Enforce at_a_glance count limits from config
+    # Enforce at_a_glance count limits from config (Phase 1 fallback only;
+    # Phase 3 cross_domain enforces caps via its LLM prompt).
     digest_cfg = config.get("digest", {}).get("at_a_glance", {})
-    max_items = digest_cfg.get("max_items", 14)
-    normal_items = digest_cfg.get("normal_items", 10)
+    max_items = digest_cfg.get("max_items", 7)
+    normal_items = digest_cfg.get("normal_items", 5)
     cap = min(max_items, max(normal_items, len(all_items)))
 
     at_a_glance = [_item_to_glance(i) for i in all_items[:cap]]

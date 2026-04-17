@@ -12,9 +12,9 @@ from stages.seams import (
     _build_domain_summary,
     _build_raw_source_summary,
     _build_transcript_summary,
-    _collect_known_urls,
     run,
 )
+from utils.urls import collect_known_urls as _collect_known_urls
 
 
 class TestBuildDomainSummary:

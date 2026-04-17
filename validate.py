@@ -75,11 +75,6 @@ def _strip_disallowed_html(html: str) -> str:
     return _HTML_TAG_RE.sub(replace_tag, html)
 
 
-def _collect_known_urls(source_data: dict) -> set[str]:
-    """Build the set of known-good URLs from raw source data."""
-    return collect_known_urls(source_data)
-
-
 def validate_urls(output_json: Any, known_urls: set[str]) -> Any:
     """Strip URLs in output_json that are not in known_urls.
 
@@ -236,25 +231,16 @@ def validate_stage_output(output: dict, source_data: dict, stage_name: str) -> d
         )
         return {}
 
-    known_urls = _collect_known_urls(source_data)
+    known_urls = collect_known_urls(source_data)
     result = dict(output)
 
     # --- At a Glance ---
     if "at_a_glance" in result:
         items = _validate_at_a_glance(result["at_a_glance"], known_urls, source_data)
-        # Length sanity check
-        min_items = (
-            source_data.get("_config", {})
-            .get("digest", {})
-            .get("at_a_glance", {})
-            .get("min_items", 3)
-        )
-        max_items = (
-            source_data.get("_config", {})
-            .get("digest", {})
-            .get("at_a_glance", {})
-            .get("max_items", 20)
-        )
+        # Sanity-check bounds — LLM output outside this range is suspicious
+        # regardless of the configured target. Not enforced, only logged.
+        min_items = 3
+        max_items = 20
         if len(items) < min_items:
             log.warning(
                 f"validate [{stage_name}]: only {len(items)} at_a_glance items (min {min_items})"

@@ -119,11 +119,6 @@ RULES:
 - Output ONLY valid JSON. No markdown, no commentary outside the JSON."""
 
 
-def _collect_known_urls(raw_sources: dict, domain_analysis: dict) -> set[str]:
-    """Build the set of known-good URLs from raw sources and domain artifacts."""
-    return collect_known_urls(raw_sources, domain_analysis)
-
-
 def _build_domain_summary(domain_analysis: dict) -> str:
     """Format domain analysis artifacts for the seam detection prompt."""
     parts = []
@@ -256,7 +251,7 @@ Perform all three detection tasks: contested narratives, coverage gaps, and key 
         )
 
         # Validate URLs against known sources
-        known_urls = _collect_known_urls(raw_sources, domain_analysis)
+        known_urls = collect_known_urls(raw_sources, domain_analysis)
         result = validate_urls(result, known_urls)
 
         # Ensure all expected fields exist with safe defaults

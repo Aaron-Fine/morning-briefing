@@ -6,7 +6,8 @@ for major sky events (planets, meteor showers, moon phases).
 
 import logging
 from datetime import datetime, timezone
-import requests
+
+from sources._http import http_get_json
 
 log = logging.getLogger(__name__)
 
@@ -45,31 +46,24 @@ def fetch_astronomy(config: dict) -> dict:
 
 def _fetch_iss_passes_n2yo(lat: float, lon: float, api_key: str) -> list[dict]:
     """Fetch upcoming visible ISS passes from N2YO."""
-    try:
-        # alt=0 (sea level), days=3, min_visibility=120 (2 min)
-        url = f"{ISS_PASS_URL}/{lat}/{lon}/0/3/120"
-        resp = requests.get(
-            url,
-            params={"apiKey": api_key},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-        passes = []
-        for p in data.get("passes", [])[:5]:
-            start_utc = datetime.fromtimestamp(p["startUTC"], tz=timezone.utc)
-            passes.append({
-                "datetime": start_utc.isoformat(),
-                "duration_sec": p.get("duration", 0),
-                "max_elevation": p.get("maxEl", 0),
-                "magnitude": p.get("mag", None),
-            })
-        return passes
-
-    except Exception as e:
-        log.warning(f"N2YO ISS pass fetch failed: {e}")
+    # alt=0 (sea level), days=3, min_visibility=120 (2 min)
+    url = f"{ISS_PASS_URL}/{lat}/{lon}/0/3/120"
+    data = http_get_json(
+        url, params={"apiKey": api_key}, timeout=10, label="N2YO ISS"
+    )
+    if data is None:
         return []
+
+    passes = []
+    for p in data.get("passes", [])[:5]:
+        start_utc = datetime.fromtimestamp(p["startUTC"], tz=timezone.utc)
+        passes.append({
+            "datetime": start_utc.isoformat(),
+            "duration_sec": p.get("duration", 0),
+            "max_elevation": p.get("maxEl", 0),
+            "magnitude": p.get("mag", None),
+        })
+    return passes
 
 
 def _fetch_iss_simple() -> list[dict]:

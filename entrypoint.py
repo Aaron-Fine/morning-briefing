@@ -82,21 +82,20 @@ def main():
 
         # Check if it's time to run
         if now >= next_run and last_run_date != today:
-            last_run_date = today
             try:
                 log.info(f"Starting daily digest run at {now.strftime('%H:%M:%S %Z')}")
                 run()
                 log.info("Daily digest completed successfully")
+                last_run_date = today
+                next_run = _next_run_time(hour, minute, tz)
             except Exception:
                 log.error(
-                    "Pipeline failed (will retry next scheduled window):\n%s",
+                    "Pipeline failed — retrying in 30 minutes:\n%s",
                     traceback.format_exc(),
                 )
-                # Don't mark today as "done" so we retry if the scheduler loops again
-                last_run_date = None
-
-            # Schedule next run
-            next_run = _next_run_time(hour, minute, tz)
+                # Retry today in 30 min; don't mark the day done so tomorrow's
+                # scheduled run still happens if the retry also fails.
+                next_run = now + timedelta(minutes=30)
             log.info(f"Next run: {next_run.strftime('%Y-%m-%d %H:%M:%S %Z')}")
 
         # Sleep until the next check — use shorter intervals near the run time
@@ -104,7 +103,7 @@ def main():
         if time_until_run < 60:
             sleep_for = 5  # Check every 5s in the last minute
         else:
-            sleep_for = min(30, time_until_run - 60)  # Don't overshast the window
+            sleep_for = min(30, time_until_run - 60)  # Don't overshoot the window
         time.sleep(max(1, sleep_for))
 
 

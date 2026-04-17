@@ -9,6 +9,8 @@ import feedparser
 import requests
 from dateutil import parser as dateparser
 
+from sources._http import http_get_bytes
+
 log = logging.getLogger(__name__)
 
 
@@ -66,21 +68,16 @@ def _fetch_direct(rss_config: dict) -> list[dict]:
                 f"network likely down, skipping remaining {len(feeds) - feeds.index(feed_conf)} feeds"
             )
             break
+        # Pre-fetch via shared HTTP helper so we don't hang indefinitely.
+        # feedparser.parse() has no built-in timeout; passing content bypasses its fetch.
+        feed_content = http_get_bytes(
+            feed_conf["url"], timeout=15, label=f"RSS {feed_conf['name']}"
+        )
+        if feed_content is None:
+            consecutive_failures += 1
+            continue
+        consecutive_failures = 0
         try:
-            # Pre-fetch with requests (15s timeout) so we don't hang indefinitely.
-            # feedparser.parse() has no built-in timeout; passing content bypasses its fetch.
-            try:
-                resp = requests.get(
-                    feed_conf["url"],
-                    headers={"User-Agent": "MorningDigest/1.0"},
-                    timeout=15,
-                )
-                feed_content = resp.content
-                consecutive_failures = 0
-            except requests.exceptions.RequestException as e:
-                log.warning(f"RSS pre-fetch failed for {feed_conf['name']}: {e}")
-                consecutive_failures += 1
-                continue
             parsed = _parse_feed_with_timeout(feed_content, feed_conf["name"])
             cap = feed_conf.get("cap", 15)
             tag = feed_conf.get("tag", "")
@@ -103,8 +100,7 @@ def _fetch_direct(rss_config: dict) -> list[dict]:
                     item["category"] = category
                 all_items.append(item)
         except Exception as e:
-            log.warning(f"RSS fetch failed for {feed_conf['name']}: {e}")
-            consecutive_failures += 1
+            log.warning(f"RSS parse failed for {feed_conf['name']}: {e}")
 
     if all_items:
         log.info(f"RSS: fetched {len(all_items)} items from {len(feeds)} feeds")
@@ -175,7 +171,7 @@ def _fetch_from_freshrss(rss_config: dict) -> list[dict]:
 
 
 def _parse_feed_date(entry) -> Optional[datetime]:
-    """Extract and parse date from a feed entry."""
+    """Extract and parse date from a feed entry. Always returns UTC-aware."""
     for field in ("published_parsed", "updated_parsed"):
         val = entry.get(field)
         if val:
@@ -186,9 +182,18 @@ def _parse_feed_date(entry) -> Optional[datetime]:
         val = entry.get(field)
         if val:
             try:
-                return dateparser.parse(val)
+                dt = dateparser.parse(val)
             except Exception:
                 continue
+            if dt is None:
+                continue
+            # dateparser may return a naive datetime for strings without an
+            # explicit offset; assume UTC so downstream comparisons don't raise.
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            return dt
 
     return None
 

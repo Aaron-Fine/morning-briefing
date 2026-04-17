@@ -521,4 +521,5 @@ def _empty_output(domain_analysis: dict) -> dict:
         "deep_dives": deep_dives,
         "cross_domain_connections": [],
         "market_context": market_context,
+        "worth_reading": [],
     }

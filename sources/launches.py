@@ -1,8 +1,9 @@
 """Fetch upcoming space launches from Launch Library 2 (no API key required)."""
 
 import logging
-import requests
 from datetime import datetime, timedelta, timezone
+
+from sources._http import http_get_json
 
 log = logging.getLogger(__name__)
 
@@ -22,55 +23,45 @@ def fetch_upcoming_launches(lookahead_days: int = 10) -> list[dict]:
     now = datetime.now(timezone.utc)
     cutoff = now + timedelta(days=lookahead_days)
 
-    try:
-        resp = requests.get(
-            LAUNCH_LIBRARY_URL,
-            params={
-                "format": "json",
-                "limit": 25,
-                "ordering": "net",
-            },
-            headers={"User-Agent": "MorningDigest/1.0"},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        results = resp.json().get("results", [])
-
-        launches = []
-        for r in results:
-            net_str = r.get("net", "")
-            if not net_str:
-                continue
-            net = datetime.fromisoformat(net_str.replace("Z", "+00:00"))
-            if net > cutoff:
-                break  # results are ordered by date
-
-            mission = r.get("mission") or {}
-            mission_type = (mission.get("type") or "").lower()
-
-            launches.append({
-                "name": r.get("name", ""),
-                "vehicle": r.get("rocket", {}).get("configuration", {}).get("full_name", ""),
-                "provider": r.get("launch_service_provider", {}).get("name", ""),
-                "date": net.strftime("%Y-%m-%d %H:%MZ"),
-                "launch_site": _get_launch_site(r),
-                "mission_type": mission_type or "unknown",
-                "mission_description": (mission.get("description") or "")[:300],
-                "status": r.get("status", {}).get("name", ""),
-            })
-
-        # Sort: government/military first, then chronological
-        launches.sort(key=lambda x: (
-            0 if x["mission_type"] in HIGH_PRIORITY_TYPES else 1,
-            x["date"],
-        ))
-
-        log.info(f"  Upcoming launches: {len(launches)} in next {lookahead_days} days")
-        return launches
-
-    except Exception as e:
-        log.warning(f"Launch Library fetch failed: {e}")
+    data = http_get_json(
+        LAUNCH_LIBRARY_URL,
+        params={"format": "json", "limit": 25, "ordering": "net"},
+        label="Launch Library",
+    )
+    if data is None:
         return []
+
+    launches = []
+    for r in data.get("results", []):
+        net_str = r.get("net", "")
+        if not net_str:
+            continue
+        net = datetime.fromisoformat(net_str.replace("Z", "+00:00"))
+        if net > cutoff:
+            break  # results are ordered by date
+
+        mission = r.get("mission") or {}
+        mission_type = (mission.get("type") or "").lower()
+
+        launches.append({
+            "name": r.get("name", ""),
+            "vehicle": r.get("rocket", {}).get("configuration", {}).get("full_name", ""),
+            "provider": r.get("launch_service_provider", {}).get("name", ""),
+            "date": net.strftime("%Y-%m-%d %H:%MZ"),
+            "launch_site": _get_launch_site(r),
+            "mission_type": mission_type or "unknown",
+            "mission_description": (mission.get("description") or "")[:300],
+            "status": r.get("status", {}).get("name", ""),
+        })
+
+    # Sort: government/military first, then chronological
+    launches.sort(key=lambda x: (
+        0 if x["mission_type"] in HIGH_PRIORITY_TYPES else 1,
+        x["date"],
+    ))
+
+    log.info(f"  Upcoming launches: {len(launches)} in next {lookahead_days} days")
+    return launches
 
 
 def _get_launch_site(result: dict) -> str:

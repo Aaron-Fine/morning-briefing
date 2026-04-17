@@ -5,8 +5,9 @@ or use a lightweight proxy. Falls back gracefully.
 """
 
 import logging
-import requests
 from bs4 import BeautifulSoup
+
+from sources._http import http_get_text
 
 log = logging.getLogger(__name__)
 
@@ -22,26 +23,13 @@ def fetch_github_trending(config: dict) -> list[dict]:
     count = gh_config.get("count", 5)
     language = gh_config.get("language", "")  # empty = all languages
 
-    try:
-        url = TRENDING_URL
-        params = {}
-        if language:
-            url = f"{TRENDING_URL}/{language}"
-        params["since"] = "daily"
-
-        resp = requests.get(
-            url,
-            params=params,
-            headers={"User-Agent": "MorningDigest/1.0"},
-            timeout=15,
-        )
-        resp.raise_for_status()
-
-        return _parse_trending_page(resp.text, count)
-
-    except Exception as e:
-        log.warning(f"GitHub trending fetch failed: {e}")
+    url = f"{TRENDING_URL}/{language}" if language else TRENDING_URL
+    html = http_get_text(
+        url, params={"since": "daily"}, label="GitHub trending"
+    )
+    if html is None:
         return []
+    return _parse_trending_page(html, count)
 
 
 def _parse_trending_page(html: str, count: int) -> list[dict]:

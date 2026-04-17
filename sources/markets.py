@@ -2,18 +2,12 @@
 
 import os
 import logging
-import requests
+
+from sources._http import http_get_json
 
 log = logging.getLogger(__name__)
 
 FINNHUB_QUOTE_URL = "https://finnhub.io/api/v1/quote"
-
-
-def _get_api_key() -> str:
-    key = os.environ.get("FINNHUB_API_KEY", "")
-    if not key:
-        raise ValueError("FINNHUB_API_KEY environment variable not set")
-    return key
 
 
 def fetch_markets(config: dict) -> list[dict]:
@@ -25,10 +19,9 @@ def fetch_markets(config: dict) -> list[dict]:
     if not symbols_config:
         return []
 
-    try:
-        api_key = _get_api_key()
-    except ValueError as e:
-        log.warning(f"Markets disabled: {e}")
+    api_key = os.environ.get("FINNHUB_API_KEY", "")
+    if not api_key:
+        log.warning("Markets disabled: FINNHUB_API_KEY not set")
         return []
 
     results = []
@@ -39,42 +32,35 @@ def fetch_markets(config: dict) -> list[dict]:
         if consecutive_failures >= 3:
             log.warning(f"Markets: {consecutive_failures} consecutive failures, skipping remaining symbols")
             break
-        try:
-            resp = requests.get(
-                FINNHUB_QUOTE_URL,
-                params={"symbol": symbol, "token": api_key},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            q = resp.json()
 
-            price = q.get("c", 0)
-            change = q.get("dp", 0)  # percent change
+        q = http_get_json(
+            FINNHUB_QUOTE_URL,
+            params={"symbol": symbol, "token": api_key},
+            timeout=10,
+            label=f"Quote {symbol}",
+        )
+        if q is None:
+            consecutive_failures += 1
+            continue
 
-            is_index = symbol.startswith("^")
-            if price > 1000:
-                price_str = f"{price:,.0f}"
-            elif is_index:
-                price_str = f"{price:.2f}"
-            else:
-                price_str = f"${price:.2f}"
+        price = q.get("c", 0)
+        change = q.get("dp", 0)
 
-            results.append({
-                "label": s["label"],
-                "symbol": symbol,
-                "price": price_str,
-                "change_pct": round(change, 2),
-                "direction": "up" if change >= 0 else "down",
-            })
-            consecutive_failures = 0
-        except requests.exceptions.Timeout:
-            log.warning(f"Quote fetch timed out for {symbol}")
-            consecutive_failures += 1
-        except requests.exceptions.ConnectionError:
-            log.warning(f"Quote fetch connection error for {symbol}")
-            consecutive_failures += 1
-        except Exception as e:
-            log.warning(f"Quote fetch failed for {symbol}: {e}")
-            consecutive_failures += 1
+        is_index = symbol.startswith("^")
+        if price > 1000:
+            price_str = f"{price:,.0f}"
+        elif is_index:
+            price_str = f"{price:.2f}"
+        else:
+            price_str = f"${price:.2f}"
+
+        results.append({
+            "label": s["label"],
+            "symbol": symbol,
+            "price": price_str,
+            "change_pct": round(change, 2),
+            "direction": "up" if change >= 0 else "down",
+        })
+        consecutive_failures = 0
 
     return results

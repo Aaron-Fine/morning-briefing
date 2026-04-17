@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-import requests
+from sources._http import http_get_json
 
 log = logging.getLogger(__name__)
 
@@ -183,61 +183,53 @@ def fetch_weather(config: dict) -> dict:
 # NWS fetching
 # ====================================================================
 
-_NWS_HEADERS = {
-    "User-Agent": "MorningDigest/1.0 (morningDigest@lurkers.us)",
-    "Accept": "application/geo+json",
-}
+_NWS_HEADERS = {"Accept": "application/geo+json"}
 
 
 def _fetch_nws(lat: float, lon: float, nws_station: str) -> dict | None:
     """Fetch forecast and current obs from NWS.  Returns None on failure."""
-    try:
-        # Step 1: get forecast URL from points endpoint
-        points = _cache_read("nws_points", ttl_hours=24)
-        if not points:
-            resp = requests.get(
-                NWS_POINTS_URL.format(lat=lat, lon=lon),
-                headers=_NWS_HEADERS,
-                timeout=10,
-            )
-            resp.raise_for_status()
-            points = resp.json()
-            _cache_write("nws_points", points)
-
-        forecast_url = points.get("properties", {}).get("forecast")
-        if not forecast_url:
-            log.warning("weather: no forecast URL in NWS points response")
+    points = _cache_read("nws_points", ttl_hours=24)
+    if not points:
+        points = http_get_json(
+            NWS_POINTS_URL.format(lat=lat, lon=lon),
+            headers=_NWS_HEADERS,
+            timeout=10,
+            label="NWS points",
+        )
+        if points is None:
             return None
+        _cache_write("nws_points", points)
 
-        # Step 2: fetch forecast
-        forecast_raw = _cache_read("nws_forecast", ttl_hours=2)
-        if not forecast_raw:
-            resp = requests.get(forecast_url, headers=_NWS_HEADERS, timeout=10)
-            resp.raise_for_status()
-            forecast_raw = resp.json()
-            _cache_write("nws_forecast", forecast_raw)
-
-        # Step 3: fetch current observations from station
-        current_raw = _cache_read(f"nws_obs_{nws_station}", ttl_hours=2)
-        if not current_raw:
-            resp = requests.get(
-                NWS_STATION_OBS_URL.format(station=nws_station),
-                headers=_NWS_HEADERS,
-                timeout=10,
-            )
-            resp.raise_for_status()
-            current_raw = resp.json()
-            _cache_write(f"nws_obs_{nws_station}", current_raw)
-
-        # Parse into our format
-        forecast = _parse_nws_forecast(forecast_raw)
-        current = _parse_nws_current(current_raw)
-
-        return {"forecast": forecast, "current": current}
-
-    except Exception as e:
-        log.error(f"weather: NWS fetch failed: {e}")
+    forecast_url = points.get("properties", {}).get("forecast")
+    if not forecast_url:
+        log.warning("weather: no forecast URL in NWS points response")
         return None
+
+    forecast_raw = _cache_read("nws_forecast", ttl_hours=2)
+    if not forecast_raw:
+        forecast_raw = http_get_json(
+            forecast_url, headers=_NWS_HEADERS, timeout=10, label="NWS forecast"
+        )
+        if forecast_raw is None:
+            return None
+        _cache_write("nws_forecast", forecast_raw)
+
+    current_raw = _cache_read(f"nws_obs_{nws_station}", ttl_hours=2)
+    if not current_raw:
+        current_raw = http_get_json(
+            NWS_STATION_OBS_URL.format(station=nws_station),
+            headers=_NWS_HEADERS,
+            timeout=10,
+            label=f"NWS obs {nws_station}",
+        )
+        if current_raw is None:
+            return None
+        _cache_write(f"nws_obs_{nws_station}", current_raw)
+
+    return {
+        "forecast": _parse_nws_forecast(forecast_raw),
+        "current": _parse_nws_current(current_raw),
+    }
 
 
 def _parse_nws_forecast(raw: dict) -> list[dict]:
@@ -287,8 +279,16 @@ def _parse_nws_forecast(raw: dict) -> list[dict]:
     for i, (date_str, day) in enumerate(sorted(days.items())):
         if i >= 7:
             break
-        day.setdefault("high_f", day.get("low_f"))
-        day.setdefault("low_f", day.get("high_f"))
+        # NWS sometimes returns a trailing night-only period with no daytime
+        # high. Mirror the available temp so the day renders a sensible value,
+        # or skip entirely if both are missing.
+        if day.get("high_f") is None and day.get("low_f") is None:
+            log.debug(f"Skipping forecast day {date_str} — no temperatures")
+            continue
+        if day.get("high_f") is None:
+            day["high_f"] = day["low_f"]
+        if day.get("low_f") is None:
+            day["low_f"] = day["high_f"]
         day.setdefault("precip_chance", 0)
         day.setdefault("condition", day.get("short_forecast", "Unknown"))
         result.append(day)
@@ -323,33 +323,29 @@ def _parse_nws_current(raw: dict) -> dict:
 
 def _fetch_open_meteo(lat: float, lon: float, tz: str) -> dict:
     """Fetch forecast from Open-Meteo as fallback."""
-    try:
-        cached = _cache_read("open_meteo", ttl_hours=2)
-        if cached:
-            return _parse_open_meteo(cached, tz)
+    cached = _cache_read("open_meteo", ttl_hours=2)
+    if cached:
+        return _parse_open_meteo(cached, tz)
 
-        resp = requests.get(
-            OPEN_METEO_URL,
-            params={
-                "latitude": lat,
-                "longitude": lon,
-                "current": "temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m",
-                "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,wind_speed_10m_max,wind_direction_10m_dominant",
-                "temperature_unit": "fahrenheit",
-                "wind_speed_unit": "mph",
-                "forecast_days": 7,
-                "timezone": tz,
-            },
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        _cache_write("open_meteo", data)
-        return _parse_open_meteo(data, tz)
-
-    except Exception as e:
-        log.error(f"weather: Open-Meteo fetch failed: {e}")
+    data = http_get_json(
+        OPEN_METEO_URL,
+        params={
+            "latitude": lat,
+            "longitude": lon,
+            "current": "temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m",
+            "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,wind_speed_10m_max,wind_direction_10m_dominant",
+            "temperature_unit": "fahrenheit",
+            "wind_speed_unit": "mph",
+            "forecast_days": 7,
+            "timezone": tz,
+        },
+        timeout=10,
+        label="Open-Meteo",
+    )
+    if data is None:
         return {"forecast": [], "current": {}}
+    _cache_write("open_meteo", data)
+    return _parse_open_meteo(data, tz)
 
 
 def _parse_open_meteo(raw: dict, tz: str) -> dict:
@@ -408,55 +404,50 @@ def _fetch_airnow_forecast(lat: float, lon: float, api_key: str | None) -> dict:
     result: dict = {"forecast": {}}
 
     # Current AQI
-    try:
-        cached = _cache_read("airnow_current", ttl_hours=1)
-        if cached:
-            result.update(cached)
-        else:
-            resp = requests.get(
-                AIRNOW_CURRENT_URL,
-                params={
-                    "format": "application/json",
-                    "latitude": lat,
-                    "longitude": lon,
-                    "distance": 25,
-                    "API_KEY": api_key,
-                },
-                timeout=10,
+    cached = _cache_read("airnow_current", ttl_hours=1)
+    if cached:
+        result.update(cached)
+    else:
+        data = http_get_json(
+            AIRNOW_CURRENT_URL,
+            params={
+                "format": "application/json",
+                "latitude": lat,
+                "longitude": lon,
+                "distance": 25,
+                "API_KEY": api_key,
+            },
+            timeout=10,
+            label="AirNow current",
+        )
+        if data:
+            obs = data[0]
+            aqi = obs.get("AQI")
+            result["current_aqi"] = aqi
+            result["current_aqi_label"] = (
+                _aqi_to_label(aqi) if aqi is not None else "unavailable"
             )
-            resp.raise_for_status()
-            data = resp.json()
-            if data:
-                obs = data[0]
-                aqi = obs.get("AQI")
-                result["current_aqi"] = aqi
-                result["current_aqi_label"] = (
-                    _aqi_to_label(aqi) if aqi is not None else "unavailable"
-                )
-                result["pm2_5"] = obs.get("PM2.5")
-                result["pm10"] = obs.get("PM10")
+            result["pm2_5"] = obs.get("PM2.5")
+            result["pm10"] = obs.get("PM10")
             _cache_write("airnow_current", result)
-    except Exception as e:
-        log.warning(f"weather: AirNow current AQI fetch failed: {e}")
 
     # Forecast AQI
-    try:
-        cached = _cache_read("airnow_forecast", ttl_hours=1)
-        if cached:
-            result["forecast"] = cached
-        else:
-            resp = requests.get(
-                AIRNOW_FORECAST_URL,
-                params={
-                    "format": "application/json",
-                    "latitude": lat,
-                    "longitude": lon,
-                    "API_KEY": api_key,
-                },
-                timeout=10,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+    cached = _cache_read("airnow_forecast", ttl_hours=1)
+    if cached:
+        result["forecast"] = cached
+    else:
+        data = http_get_json(
+            AIRNOW_FORECAST_URL,
+            params={
+                "format": "application/json",
+                "latitude": lat,
+                "longitude": lon,
+                "API_KEY": api_key,
+            },
+            timeout=10,
+            label="AirNow forecast",
+        )
+        if data is not None:
             forecast_dict = {}
             for item in data:
                 date_str = item.get("DateForecast", "")[:10]
@@ -470,61 +461,54 @@ def _fetch_airnow_forecast(lat: float, lon: float, api_key: str | None) -> dict:
                     }
             result["forecast"] = forecast_dict
             _cache_write("airnow_forecast", forecast_dict)
-    except Exception as e:
-        log.warning(f"weather: AirNow forecast AQI fetch failed: {e}")
 
     return result
 
 
 def _fetch_open_meteo_aqi(lat: float, lon: float) -> dict:
     """Fallback AQI from Open-Meteo air quality API."""
-    try:
-        cached = _cache_read("open_meteo_aqi", ttl_hours=1)
-        if cached:
-            return cached
+    cached = _cache_read("open_meteo_aqi", ttl_hours=1)
+    if cached:
+        return cached
 
-        resp = requests.get(
-            OPEN_METEO_AQI_URL,
-            params={
-                "latitude": lat,
-                "longitude": lon,
-                "current": "us_aqi,pm2_5,pm10",
-                "hourly": "us_aqi",
-                "forecast_days": 7,
-            },
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        current = data.get("current", {})
-        aqi = current.get("us_aqi")
-
-        # Build daily max AQI forecast from hourly data
-        forecast: dict = {}
-        hourly = data.get("hourly", {})
-        times = hourly.get("time", [])
-        aqi_values = hourly.get("us_aqi", [])
-        for ts, val in zip(times, aqi_values):
-            if val is None:
-                continue
-            date_str = ts[:10]  # "YYYY-MM-DD"
-            if date_str not in forecast or val > forecast[date_str]["aqi"]:
-                forecast[date_str] = {"aqi": val, "aqi_label": _aqi_to_label(val)}
-
-        result = {
-            "current_aqi": aqi,
-            "current_aqi_label": _aqi_to_label(aqi)
-            if aqi is not None
-            else "unavailable",
-            "pm2_5": current.get("pm2_5"),
-            "pm10": current.get("pm10"),
-            "forecast": forecast,
-        }
-        _cache_write("open_meteo_aqi", result)
-        return result
-    except Exception as e:
-        log.warning(f"weather: Open-Meteo AQI fetch failed: {e}")
+    data = http_get_json(
+        OPEN_METEO_AQI_URL,
+        params={
+            "latitude": lat,
+            "longitude": lon,
+            "current": "us_aqi,pm2_5,pm10",
+            "hourly": "us_aqi",
+            "forecast_days": 7,
+        },
+        timeout=10,
+        label="Open-Meteo AQI",
+    )
+    if data is None:
         return {"current_aqi": None, "current_aqi_label": "unavailable", "forecast": {}}
+
+    current = data.get("current", {})
+    aqi = current.get("us_aqi")
+
+    forecast: dict = {}
+    hourly = data.get("hourly", {})
+    times = hourly.get("time", [])
+    aqi_values = hourly.get("us_aqi", [])
+    for ts, val in zip(times, aqi_values):
+        if val is None:
+            continue
+        date_str = ts[:10]
+        if date_str not in forecast or val > forecast[date_str]["aqi"]:
+            forecast[date_str] = {"aqi": val, "aqi_label": _aqi_to_label(val)}
+
+    result = {
+        "current_aqi": aqi,
+        "current_aqi_label": _aqi_to_label(aqi) if aqi is not None else "unavailable",
+        "pm2_5": current.get("pm2_5"),
+        "pm10": current.get("pm10"),
+        "forecast": forecast,
+    }
+    _cache_write("open_meteo_aqi", result)
+    return result
 
 
 # ====================================================================

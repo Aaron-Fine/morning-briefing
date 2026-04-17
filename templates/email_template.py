@@ -414,7 +414,7 @@ EMAIL_TEMPLATE = _env.from_string("""\
 
   <!-- FOOTER -->
   <div class="footer">
-    Generated at {{ generated_at }} · Powered by Kimi K2.5 · Fireworks AI<br>
+    Generated at {{ generated_at }}<br>
     Sources: {{ rss_source_names }}<br>
     {% if yt_source_names %}Analysis transcripts: {{ yt_source_names }}<br>{% endif %}
     Come Follow Me: churchofjesuschrist.org · Markets: Finnhub<br>

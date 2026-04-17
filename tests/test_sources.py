@@ -112,10 +112,9 @@ class TestEconomicCalendar:
             result = fetch_economic_calendar({})
             assert result == []
 
-    @patch("sources.economic_calendar.requests.get")
+    @patch("sources.economic_calendar.http_get_json")
     def test_filters_to_us_events(self, mock_get):
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
+        mock_get.return_value = {
             "economicCalendar": [
                 {
                     "country": "US",
@@ -137,8 +136,6 @@ class TestEconomicCalendar:
                 },
             ]
         }
-        mock_response.raise_for_status = MagicMock()
-        mock_get.return_value = mock_response
 
         with patch.dict(os.environ, {"FINNHUB_API_KEY": "test-key"}):
             result = fetch_economic_calendar({})
@@ -147,9 +144,9 @@ class TestEconomicCalendar:
         assert result[0]["event"] == "Fed Rate Decision"
         assert result[0]["impact"] == "high"
 
-    @patch("sources.economic_calendar.requests.get")
+    @patch("sources.economic_calendar.http_get_json")
     def test_returns_empty_on_error(self, mock_get):
-        mock_get.side_effect = Exception("Network error")
+        mock_get.return_value = None
         with patch.dict(os.environ, {"FINNHUB_API_KEY": "test-key"}):
             result = fetch_economic_calendar({})
         assert result == []
