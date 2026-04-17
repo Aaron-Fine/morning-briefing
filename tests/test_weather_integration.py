@@ -138,20 +138,6 @@ class TestRenderWeatherHtmlIntegration:
         html = render_weather_html(weather, config)
         assert "<table" in html
 
-    def test_normals_rendered(self):
-        weather = _load_fixture("weather_clear.json")
-        config = _make_config()
-        html = render_weather_html(weather, config)
-        # Normals show as green bands (var with light fallback)
-        assert "rgba(80,140,80,0.45)" in html
-
-    def test_records_rendered(self):
-        weather = _load_fixture("weather_clear.json")
-        config = _make_config()
-        html = render_weather_html(weather, config)
-        # Records show as red tick marks (var with light fallback)
-        assert "192,57,43" in html
-
     def test_day_labels_present(self):
         weather = _load_fixture("weather_clear.json")
         config = _make_config()
@@ -184,22 +170,14 @@ class TestRenderWeatherHtmlIntegration:
         today_name = datetime.now().strftime("%A")
         assert today_name in html
 
-    def test_aqi_strip_disabled(self):
+    def test_band_flags_accepted(self):
+        """aqi_strip/record_band/normal_band config flags are accepted but no
+        longer gate any rendered overlays — kept so existing config.yaml
+        entries don't error."""
         weather = _load_fixture("weather_clear.json")
-        config = _make_config(aqi_strip=False)
-        html = render_weather_html(weather, config)
-        # AQI legend entry hidden; numbers still on bars
-        assert "<table" in html
-
-    def test_record_band_disabled(self):
-        weather = _load_fixture("weather_clear.json")
-        config = _make_config(record_band=False)
-        html = render_weather_html(weather, config)
-        assert "<table" in html
-
-    def test_normal_band_disabled(self):
-        weather = _load_fixture("weather_clear.json")
-        config = _make_config(normal_band=False)
+        config = _make_config(
+            aqi_strip=False, record_band=False, normal_band=False
+        )
         html = render_weather_html(weather, config)
         assert "<table" in html
 

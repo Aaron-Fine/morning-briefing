@@ -3,9 +3,21 @@
 Public API:
     render_weather_html(weather: dict, config: dict) -> str
 
-Returns a complete HTML block (header + legend + chart) for embedding
-in the Morning Digest email template.  Uses only <table>/<div>/<span>
-with inline styles so the output survives Gmail's HTML sanitiser.
+Returns a complete HTML block (header + chart) for embedding in the Morning
+Digest email. Uses only <table>/<div>/<span> with inline styles so the output
+survives Gmail's HTML sanitiser.
+
+The chart renders:
+  - a header row: location · current conditions · AQI · wind · humidity
+  - a 7-day grid where each row shows day name, low temp, a hi→lo gradient
+    range bar, high temp, and a right column with condition + precip chance.
+  - a thin blue precip underline when the day has measurable precip.
+
+Normal / record / AQI-on-bar overlays were part of an earlier design that
+relied on absolute-positioned children (Gmail strips `position:relative` on
+divs, breaking them). The current chart intentionally has no overlays, so
+there is no legend — a legend for things that aren't drawn is worse than no
+legend at all.
 """
 
 import logging
@@ -13,28 +25,8 @@ from datetime import datetime
 
 log = logging.getLogger(__name__)
 
-# --- EPA AQI colors (regulatory, not aesthetic) ---
-_AQI_COLORS = {
-    "Good": "#00e400",
-    "Moderate": "#ffff00",
-    "Unhealthy for Sensitive Groups": "#ff7e00",
-    "Unhealthy": "#ff0000",
-    "Very Unhealthy": "#8f3f97",
-    "Hazardous": "#7e0023",
-}
-
-_AQI_OPACITIES = {
-    "Good": 0.15,
-    "Moderate": 0.30,
-    "Unhealthy for Sensitive Groups": 0.45,
-    "Unhealthy": 0.50,
-    "Very Unhealthy": 0.55,
-    "Hazardous": 0.60,
-}
-
 # --- Chart layout ---
 DAY_COUNT = 7
-AQI_SCALE_MAX = 200
 
 # --- Precip bar colors by type ---
 _PRECIP_COLORS = {
@@ -49,28 +41,22 @@ def render_weather_html(weather: dict, config: dict) -> str:
     Fallback chain:
         - empty weather → ""
         - insufficient data → text-only header
-        - SVG exception → text-only header
+        - render exception → text-only header
     """
     if not weather or not weather.get("forecast"):
         return ""
 
-    display_config = config.get("weather", {})
-    show_aqi = display_config.get("aqi_strip", True)
-    show_records = display_config.get("record_band", True)
-    show_normals = display_config.get("normal_band", True)
-
     try:
-        chart = _build_chart_html(weather, show_records, show_normals)
         header = _build_header_html(weather)
-        legend = _build_legend_html(weather, show_aqi, show_records)
-        return f"{header}{legend}{chart}"
+        chart = _build_chart_html(weather)
+        return f"{header}{chart}"
     except Exception as e:
         log.error(f"weather_display: chart render failed: {e}")
         return _build_text_fallback(weather)
 
 
 def _build_header_html(weather: dict) -> str:
-    """Zone 1: text header with location, current conditions, AQI."""
+    """Text header with location, current conditions, AQI, wind, humidity."""
     city = weather.get("city", "Logan")
     state = weather.get("state", "UT")
     temp = weather.get("current_temp_f")
@@ -83,7 +69,7 @@ def _build_header_html(weather: dict) -> str:
 
     temp_str = f"{temp}°F" if temp is not None else "—°F"
     wind_str = f"Wind {wind} mph" if wind else "Wind calm"
-    humidity_str = f"Humidity {humidity}%" if humidity else ""
+    humidity_str = f"Humidity {round(humidity)}%" if humidity else ""
 
     header_parts = [f"{city}, {state} · {temp_str} {condition}"]
     if aqi is not None:
@@ -109,7 +95,7 @@ def _build_header_html(weather: dict) -> str:
         aqi_alert = f'<span style="color:{color};font-size:13px;font-weight:600;display:block;margin-top:3px;">{msg}</span>'
 
     return (
-        f'<div style="font-family:JetBrains Mono,monospace;font-size:13px;'
+        f'<div style="font-family:monospace;font-size:13px;'
         f'color:var(--wx-label, #555);'
         f'margin-bottom:4px;display:flex;justify-content:space-between;align-items:baseline;">'
         f"<span>{header_text}</span>"
@@ -119,63 +105,8 @@ def _build_header_html(weather: dict) -> str:
     )
 
 
-def _build_legend_html(weather: dict, show_aqi: bool, show_records: bool) -> str:
-    """Legend row with colored swatches."""
-    items = [
-        _legend_item(
-            '<span style="width:8px;height:8px;background:var(--wx-hi, #c07830);'
-            'border-radius:50%;display:inline-block;"></span>',
-            "Forecast Hi",
-        ),
-        _legend_item(
-            '<span style="width:8px;height:1px;'
-            'border-top:1px dashed var(--wx-lo, #4a6a90);'
-            'display:inline-block;"></span>',
-            "Forecast Lo",
-        ),
-        _legend_item(
-            '<span style="width:2px;height:10px;'
-            'background:var(--wx-normal, rgba(80,140,80,0.45));'
-            'border-radius:1px;display:inline-block;"></span>',
-            "Normal",
-        ),
-    ]
-    if show_records:
-        items.append(
-            _legend_item(
-                '<span style="width:2px;height:10px;'
-                'background:var(--wx-record, rgba(192,57,43,0.35));'
-                'border-radius:1px;display:inline-block;"></span>',
-                "Record",
-            )
-        )
-    items.append(
-        _legend_item(
-            '<span style="width:8px;height:3px;'
-            'background:var(--wx-precip, #5b9bd5);'
-            'border-radius:1px;display:inline-block;"></span>',
-            "Precip",
-        )
-    )
-    if show_aqi:
-        aqi_swatch = (
-            "AQI "
-            '<span style="color:#00e400;font-weight:600;font-size:8px;">##</span>'
-            '<span style="color:#cccc00;font-weight:600;font-size:8px;">##</span>'
-            '<span style="color:#ff0000;font-weight:600;font-size:8px;">##</span>'
-        )
-        items.append(_legend_item(aqi_swatch, " on bar"))
-
-    return (
-        '<div style="font-size:10px;color:var(--wx-label-dim, #888);'
-        'margin-bottom:6px;display:flex;gap:12px;flex-wrap:wrap;">'
-        + "".join(items)
-        + "</div>"
-    )
-
-
 def _build_text_fallback(weather: dict) -> str:
-    """Simple text fallback when SVG rendering fails."""
+    """Simple text fallback when chart rendering fails."""
     city = weather.get("city", "Logan")
     state = weather.get("state", "UT")
     temp = weather.get("current_temp_f", "—")
@@ -192,82 +123,65 @@ def _build_text_fallback(weather: dict) -> str:
     return "<p>" + "<br>".join(lines) + "</p>"
 
 
-def _build_chart_html(
-    weather: dict, show_records: bool, show_normals: bool
-) -> str:
+def _build_chart_html(weather: dict) -> str:
     """Build the HTML table chart — horizontal day rows with temp range bars."""
     forecast = weather.get("forecast", [])[:DAY_COUNT]
-    normals = weather.get("normals", [])
-    aqi_forecast = weather.get("aqi_forecast", {})
-
     if not forecast:
         return ""
 
-    # Determine temperature scale from all data points
-    all_temps = []
-    for day in forecast:
-        if day.get("high_f") is not None:
-            all_temps.append(day["high_f"])
-        if day.get("low_f") is not None:
-            all_temps.append(day["low_f"])
-    for nr in normals:
-        if show_records:
-            if nr.get("record_hi") is not None:
-                all_temps.append(nr["record_hi"])
-            if nr.get("record_lo") is not None:
-                all_temps.append(nr["record_lo"])
-        if show_normals:
-            if nr.get("normal_hi") is not None:
-                all_temps.append(nr["normal_hi"])
-            if nr.get("normal_lo") is not None:
-                all_temps.append(nr["normal_lo"])
-
-    if not all_temps:
-        temp_min, temp_max = 0, 100
-    else:
+    # Scale from hi/lo across the visible forecast, with a small buffer.
+    all_temps = [
+        t
+        for day in forecast
+        for t in (day.get("high_f"), day.get("low_f"))
+        if t is not None
+    ]
+    if all_temps:
         temp_min = min(all_temps) - 5
         temp_max = max(all_temps) + 5
+    else:
+        temp_min, temp_max = 0, 100
 
     rows = []
     for i, day in enumerate(forecast):
         hi = day.get("high_f")
         lo = day.get("low_f")
         day_name = day.get("day_name", "???")
-        date_str = day.get("date", "")
         condition = day.get("condition", day.get("short_forecast", ""))
         precip_pct = day.get("precip_chance", 0) or 0
         precip_type = day.get("precip_type", "none")
+        has_precip = precip_pct > 0 and precip_type != "none"
 
-        # Temperature bar positions
         lo_pct = _temp_to_pct(lo, temp_min, temp_max) if lo is not None else 0
         hi_pct = _temp_to_pct(hi, temp_min, temp_max) if hi is not None else 100
         bar_width = max(hi_pct - lo_pct, 1)
 
-        # Precip underline bar
-        precip_bar_html = ""
-        if precip_pct > 0 and precip_type != "none":
+        # Precip underline (blue/snow-blue bar beneath the temp range)
+        precip_bar_html = '<div style="height:3px;"></div>'
+        if has_precip:
             p_color = _precip_color(precip_type)
             opacity = 0.5 + (precip_pct / 100.0) * 0.3
             precip_bar_html = (
                 f'<div style="position:relative;height:3px;'
-                f'background:#d8d5d0;'
-                f'border-radius:2px;">'
+                f'background:#d8d5d0;border-radius:2px;">'
                 f'<div style="position:absolute;left:0;width:{precip_pct}%;'
                 f'height:100%;background:{p_color};opacity:{opacity:.2f};'
                 f'border-radius:2px;"></div></div>'
             )
 
-        # Condition/precip right column
+        # Right column: condition always; precip chance appended when present.
         short_cond = _shorten_condition(condition)
-        marker = _precip_marker(precip_type)
-        if precip_pct > 0 and precip_type != "none":
+        if has_precip:
             p_color = _precip_color(precip_type)
-            bold = " font-weight:600;" if precip_pct >= 40 else ""
+            marker = _precip_marker(precip_type)
             marker_str = f" {marker}" if marker else ""
-            right_col = (
+            bold = " font-weight:600;" if precip_pct >= 40 else ""
+            parts = [short_cond] if short_cond else []
+            parts.append(
                 f'<span style="color:{p_color};{bold}">'
-                f'{precip_pct}%</span>{marker_str}'
+                f'{precip_pct}%{marker_str}</span>'
             )
+            right_col = " · ".join(parts)
         else:
             right_col = short_cond
 
@@ -279,8 +193,9 @@ def _build_chart_html(
             else ''
         )
 
-        # Temperature row — bar uses inner table so position:absolute is not needed
-        # (Gmail strips position:relative from divs, breaking absolute-child offsets)
+        # Temperature row. Bar uses an inner table (3 cells: pre-lo pad, hi-lo
+        # gradient, post-hi pad) because Gmail strips `position:relative` from
+        # divs, which would break any absolute-positioned child.
         rows.append(
             f'<tr>'
             f'<td style="width:32px;font-size:9px;font-weight:600;'
@@ -304,8 +219,8 @@ def _build_chart_html(
             f'</td>'
             f'<td style="width:28px;font-size:8px;color:#c07830;'
             f'padding:6px 0 0 5px;vertical-align:top;">{hi_str}</td>'
-            f'<td style="width:50px;font-size:7px;'
-            f'color:#888888;text-align:right;'
+            f'<td style="width:60px;font-size:9px;'
+            f'color:#666666;text-align:right;'
             f'padding:6px 0 0 4px;vertical-align:top;">{right_col}</td>'
             f'</tr>'
         )
@@ -314,9 +229,7 @@ def _build_chart_html(
         rows.append(
             f'<tr style="{border}">'
             f'<td></td><td></td>'
-            f'<td style="padding:1px 4px 5px;">'
-            f'{precip_bar_html if precip_bar_html else "<div style=\"height:3px;\"></div>"}'
-            f'</td>'
+            f'<td style="padding:1px 4px 5px;">{precip_bar_html}</td>'
             f'<td colspan="2"></td>'
             f'</tr>'
         )
@@ -340,31 +253,6 @@ def _temp_to_pct(temp: float, temp_min: float, temp_max: float) -> float:
         return 50.0
     pct = (temp - temp_min) / (temp_max - temp_min) * 100.0
     return max(0.0, min(100.0, pct))
-
-
-def _legend_item(swatch_html: str, label: str) -> str:
-    """Wrap a legend swatch + label in the standard inline-flex span."""
-    return (
-        f'<span style="display:inline-flex;align-items:center;gap:3px;">'
-        f"{swatch_html}{label}</span>"
-    )
-
-
-def _aqi_color(aqi: int | None) -> str:
-    """Return display color for an AQI value using EPA breakpoints."""
-    if aqi is None:
-        return "#888582"
-    if aqi <= 50:
-        return "#00e400"
-    if aqi <= 100:
-        return "#cccc00"
-    if aqi <= 150:
-        return "#ff7e00"
-    if aqi <= 200:
-        return "#ff0000"
-    if aqi <= 300:
-        return "#8f3f97"
-    return "#7e0023"
 
 
 def _aqi_text_color(aqi: int | None) -> str:

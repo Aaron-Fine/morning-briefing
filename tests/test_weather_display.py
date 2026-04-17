@@ -7,11 +7,9 @@ import pytest
 from modules.weather_display import (
     render_weather_html,
     _build_header_html,
-    _build_legend_html,
     _build_chart_html,
     _build_text_fallback,
     _temp_to_pct,
-    _aqi_color,
     _aqi_text_color,
     _precip_color,
     _precip_marker,
@@ -183,30 +181,6 @@ class TestBuildHeaderHtml:
         assert "Action Day" not in html
 
 
-class TestBuildLegendHtml:
-    """Legend HTML generation."""
-
-    def test_default_shows_all(self):
-        weather = {"aqi": 26}
-        html = _build_legend_html(weather, show_aqi=True, show_records=True)
-        assert "Forecast Hi" in html
-        assert "Forecast Lo" in html
-        assert "Normal" in html
-        assert "Record" in html
-        assert "Precip" in html
-        assert "AQI" in html
-
-    def test_hide_aqi(self):
-        weather = {}
-        html = _build_legend_html(weather, show_aqi=False, show_records=True)
-        assert "AQI" not in html
-
-    def test_hide_records(self):
-        weather = {}
-        html = _build_legend_html(weather, show_aqi=True, show_records=False)
-        assert "Record" not in html
-
-
 class TestBuildTextFallback:
     """Text fallback when SVG fails."""
 
@@ -290,27 +264,16 @@ class TestRenderWeatherHtml:
         assert "<svg" not in html
         assert "viewBox" not in html
 
-    def test_aqi_strip_disabled(self):
+    def test_band_flags_accepted(self):
+        """aqi_strip/record_band/normal_band config flags are accepted but no
+        longer gate any rendered overlays — the chart draws only the hi/lo
+        gradient bar and the precip underline."""
         weather = _load_fixture("weather_clear.json")
-        html = render_weather_html(weather, _make_config(aqi_strip=False))
-        # AQI numbers should still appear on bar (aqi_strip only controls legend)
+        html = render_weather_html(
+            weather,
+            _make_config(aqi_strip=False, record_band=False, normal_band=False),
+        )
         assert "<table" in html
-
-    def test_record_band_disabled(self):
-        weather = _load_fixture("weather_clear.json")
-        html = render_weather_html(weather, _make_config(record_band=False))
-        assert "<table" in html
-        # Record ticks removed from chart; legend hides Record swatch too
-        chart_html = _build_chart_html(weather, show_records=False, show_normals=True)
-        assert "211,47,47" not in chart_html
-
-    def test_normal_band_disabled(self):
-        weather = _load_fixture("weather_clear.json")
-        html = render_weather_html(weather, _make_config(normal_band=False))
-        assert "<table" in html
-        # Normal ticks removed from chart; legend swatch still present
-        chart_html = _build_chart_html(weather, show_records=True, show_normals=False)
-        assert "100,160,100" not in chart_html
 
     def test_exception_falls_back_to_text(self):
         """Force an exception by passing bad data."""
@@ -341,31 +304,6 @@ class TestTempToPct:
     def test_above_max(self):
         """Above max should clamp to 100."""
         assert _temp_to_pct(90, 30, 80) == 100.0
-
-
-class TestAqiColor:
-    """AQI value to display color."""
-
-    def test_good(self):
-        assert _aqi_color(26) == "#00e400"
-
-    def test_moderate(self):
-        assert _aqi_color(57) == "#cccc00"
-
-    def test_usg(self):
-        assert _aqi_color(120) == "#ff7e00"
-
-    def test_unhealthy(self):
-        assert _aqi_color(175) == "#ff0000"
-
-    def test_very_unhealthy(self):
-        assert _aqi_color(220) == "#8f3f97"
-
-    def test_hazardous(self):
-        assert _aqi_color(350) == "#7e0023"
-
-    def test_none(self):
-        assert _aqi_color(None) == "#888582"
 
 
 class TestAqiTextColor:
@@ -420,95 +358,99 @@ class TestBuildChartHtml:
 
     def test_returns_table(self):
         weather = _load_fixture("weather_clear.json")
-        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        html = _build_chart_html(weather)
         assert "<table" in html
         assert "</table>" in html
 
     def test_contains_day_labels(self):
         weather = _load_fixture("weather_clear.json")
-        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        html = _build_chart_html(weather)
         assert "TUE" in html
         assert "WED" in html
 
     def test_contains_hi_lo_temps(self):
         weather = _load_fixture("weather_clear.json")
-        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        html = _build_chart_html(weather)
         assert "75&deg;" in html or "75°" in html  # hi temp for day 1
         assert "48&deg;" in html or "48°" in html  # lo temp for day 1
 
     def test_contains_precip_bar(self):
         weather = _load_fixture("weather_clear.json")
-        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        html = _build_chart_html(weather)
         # Day 6 (Sun) has 60% precip
         assert "60%" in html
 
     def test_no_svg(self):
         weather = _load_fixture("weather_clear.json")
-        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        html = _build_chart_html(weather)
         assert "<svg" not in html
 
     def test_condition_text(self):
         weather = _load_fixture("weather_clear.json")
-        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        html = _build_chart_html(weather)
         assert "Sunny" in html
 
     def test_precip_marker_snow(self):
         weather = _load_fixture("weather_snow.json")
-        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        html = _build_chart_html(weather)
         assert "❄" in html
 
     def test_precip_marker_thunderstorm(self):
         weather = _load_fixture("weather_thunderstorm.json")
-        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        html = _build_chart_html(weather)
         assert "⚡" in html
 
     def test_minimal_data(self):
         """Minimal fixture with 2 days, no AQI."""
         weather = _load_fixture("weather_minimal.json")
-        html = _build_chart_html(weather, show_records=True, show_normals=True)
+        html = _build_chart_html(weather)
         assert "<table" in html
         assert "FRI" in html
 
 
-class TestBuildLegendHtmlUpdated:
-    """Legend should include Record swatch."""
+class TestRightColumn:
+    """Right column shows condition + precip% together, not either/or."""
 
-    def test_has_record_swatch(self):
-        weather = {"aqi": 26}
-        html = _build_legend_html(weather, show_aqi=True, show_records=True)
-        assert "Record" in html
-        assert "192,57,43" in html  # red color for record
+    def test_condition_and_precip_both_present(self):
+        weather = {
+            "forecast": [
+                {
+                    "day_name": "Mon",
+                    "high_f": 50,
+                    "low_f": 30,
+                    "condition": "Rain showers",
+                    "precip_chance": 60,
+                    "precip_type": "rain",
+                }
+            ]
+        }
+        html = _build_chart_html(weather)
+        assert "Shwrs" in html  # shortened condition
+        assert "60%" in html
 
-    def test_no_record_when_disabled(self):
-        weather = {}
-        html = _build_legend_html(weather, show_aqi=True, show_records=False)
-        assert "Record" not in html
+    def test_condition_only_when_no_precip(self):
+        weather = {
+            "forecast": [
+                {
+                    "day_name": "Mon",
+                    "high_f": 70,
+                    "low_f": 50,
+                    "condition": "Sunny",
+                    "precip_chance": 0,
+                    "precip_type": "none",
+                }
+            ]
+        }
+        html = _build_chart_html(weather)
+        assert "Sunny" in html
 
-    def test_has_precip_swatch(self):
-        weather = {}
-        html = _build_legend_html(weather, show_aqi=True, show_records=True)
-        assert "Precip" in html
-
-
-from modules.weather_display import _legend_item
-
-
-class TestLegendItem:
-    """Legend entry wrapper: swatch + label."""
-
-    def test_wraps_swatch_and_label(self):
-        html = _legend_item('<span class="sw"></span>', "Forecast Hi")
-        assert '<span class="sw"></span>' in html
-        assert "Forecast Hi" in html
-
-    def test_uses_inline_flex(self):
-        html = _legend_item("", "x")
-        assert "display:inline-flex" in html
-        assert "align-items:center" in html
-        assert "gap:3px" in html
-
-    def test_opens_and_closes_span(self):
-        html = _legend_item("swatch", "label")
-        assert html.startswith("<span")
-        assert html.endswith("</span>")
-        assert "33.33%" not in html
+    def test_humidity_rounded_in_header(self):
+        """Non-integer humidity should render as rounded integer."""
+        weather = {
+            "city": "Logan",
+            "state": "UT",
+            "humidity": 86.601412091818,
+        }
+        html = _build_header_html(weather)
+        assert "Humidity 87%" in html
+        assert "86.6" not in html
