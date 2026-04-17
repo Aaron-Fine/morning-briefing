@@ -2,18 +2,23 @@
 
 _Last updated: 2026-04-17_
 
+> **Design-intent note.** When triaging items marked "stale" or "unused,"
+> first ask whether the feature was *intentional but silently broken* (e.g.
+> Gmail stripping positioning). If so, restore — don't delete. The AQI
+> overlay (restored 2026-04-17) is a canonical example.
+
 ---
 
 ## Open
 
 ### High — Design (HTML / email)
 
-- **Weather bar inline-style soup.** Stale-legend cleanup landed 2026-04-17, but the chart is still emitted as one long line of inline `style=""` attributes per day row — hard to scan, hard to tune, inflates the email payload. Promote the repeating styles (day-name cell, temp cell, gradient-bar cell, right column) to classes in `templates/email_template.py`'s `<style>` block; keep only per-row dynamic values (widths, colors, text) inline.
+- **Weather bar inline-style soup.** Chart is emitted as one long line of inline `style=""` attributes per day row — hard to scan, hard to tune, inflates the email payload. Promote the repeating styles (day-name cell, temp cell, gradient-bar cell, right column) to classes in `templates/email_template.py`'s `<style>` block; keep only per-row dynamic values (widths, colors, text) inline.
+- **Restore Normal / Record / Forecast Hi-Lo bar overlays.** `sources/weather.py::_compute_normals_and_records` still collects `normal_hi`, `normal_lo`, `record_hi`, `record_lo` per day and exposes the `normals` array; `config.yaml` has `record_band: true` and `normal_band: true`. These were meant to gate band overlays on each day's temp bar — the original positioning relied on `position:absolute` which Gmail strips, so they silently disappeared (same fate as AQI before the 2026-04-17 restoration). Restore using the same approach as `_build_chart_html`'s AQI row (spacer-cell width inside a nested table), gated by the `record_band`/`normal_band` flags. Until restored, those flags are no-ops — see `test_band_flags_accepted`.
 - **Dark mode configured but not implemented.** `config.yaml:120` sets `dark_theme: true` but the palette is fixed light. Add a `@media (prefers-color-scheme: dark)` block in the template that overrides the `:root` custom properties — Proton/Gmail on dark devices currently render the light palette.
 - **Mobile padding too tight.** `.section { padding: 24px 32px }` leaves ~310 px of usable width on a 375 px phone. Add `@media (max-width: 480px)` halving horizontal padding to 16 px.
-- **Google Fonts import is wasted bytes.** `email_template.py:23` loads JetBrains Mono + DM Sans; Gmail/Proton strip `@import` in email HTML and the template already falls back to `Courier New` / `-apple-system`. Drop the `@import` and the font names it references.
+- **Audit Google Fonts `@import`.** `email_template.py:23` loads JetBrains Mono + DM Sans. Gmail strips `@import` in email HTML; Proton behavior varies by client. Verify in both clients whether the imported fonts ever actually resolve; if they never do, drop the `@import` (system-font fallbacks already specified). If they do in some clients, document *which* so the tradeoff is visible.
 - **Flexbox in `.markets` and `.scan-header` breaks in Outlook.** Fall back to a table-based layout for the market strip.
-- **At-a-Glance context blocks are visually heavy.** Three nested blocks (Sources / Analysis / Thread) × 7 items = a lot of scrolling. Consider collapsing `Thread` to a single italic line, or making `Analysis` the default and `Sources` a smaller "cited:" footer.
 - **Deep Dive `Further Reading` links have no visual separation** (`email_template.py:334`). Each anchor is block-level; add bullet separators or spacing.
 - **10 px uppercase tags** at the edge of legibility. Bump to 11 px.
 
@@ -54,6 +59,14 @@ _Last updated: 2026-04-17_
 ---
 
 ## Changelog
+
+### 2026-04-17 — Weather: AQI overlay restored
+
+- **Restored per-bar AQI numbers on the 7-day weather chart.** The original design overlaid the AQI number at its `aqi/200` scale position on each day's temp bar, color-coded to the EPA band. The earlier implementation used `position:absolute; left:{pct}%` which Gmail silently strips, leaving only `##` placeholder text (visible in production screenshots). Reimplemented with a Gmail-safe approach: a second row inside the inner bar table containing a nested 3-cell table where `<td style="width:{aqi_pct}%">` acts as the positional spacer. High-AQI values (≥85% of scale) right-align to stay inside the bar bounds.
+- **Restored AQI band legend above the chart.** Keyed to the per-bar number colors so readers can translate a number → health category at a glance. Uses darker readable variants (`#15803d`, `#854d0e`, …) rather than the bright EPA signal colors which are illegible on white.
+- **`aqi_strip` config flag now actually gates the legend + overlay** (was previously a no-op).
+- **Tests: +9 new cases** covering legend, per-bar overlay, color selection, high-AQI right-alignment, and `AQI_SCALE_MAX` contract. Total weather suite: 97 passing.
+- **TODO revision**: added design-intent preamble; removed "collapse At-a-Glance Thread block" item (undermines intentional three-voice rhetorical layering); added "Restore Normal/Record/Forecast Hi-Lo bar overlays" item (same Gmail-strip fate as AQI, same fix pattern); softened Google Fonts `@import` item from "wasted bytes" to "audit in both clients first."
 
 ### 2026-04-16 — Review sweep quick wins
 
