@@ -1,10 +1,32 @@
 # Morning Digest — TODO
 
-_Last updated: 2026-04-16_
+_Last updated: 2026-04-17_
 
 ---
 
 ## Open
+
+### High — Design (HTML / email)
+
+- **Weather bar inline-style soup.** Stale-legend cleanup landed 2026-04-17, but the chart is still emitted as one long line of inline `style=""` attributes per day row — hard to scan, hard to tune, inflates the email payload. Promote the repeating styles (day-name cell, temp cell, gradient-bar cell, right column) to classes in `templates/email_template.py`'s `<style>` block; keep only per-row dynamic values (widths, colors, text) inline.
+- **Dark mode configured but not implemented.** `config.yaml:120` sets `dark_theme: true` but the palette is fixed light. Add a `@media (prefers-color-scheme: dark)` block in the template that overrides the `:root` custom properties — Proton/Gmail on dark devices currently render the light palette.
+- **Mobile padding too tight.** `.section { padding: 24px 32px }` leaves ~310 px of usable width on a 375 px phone. Add `@media (max-width: 480px)` halving horizontal padding to 16 px.
+- **Google Fonts import is wasted bytes.** `email_template.py:23` loads JetBrains Mono + DM Sans; Gmail/Proton strip `@import` in email HTML and the template already falls back to `Courier New` / `-apple-system`. Drop the `@import` and the font names it references.
+- **Flexbox in `.markets` and `.scan-header` breaks in Outlook.** Fall back to a table-based layout for the market strip.
+- **At-a-Glance context blocks are visually heavy.** Three nested blocks (Sources / Analysis / Thread) × 7 items = a lot of scrolling. Consider collapsing `Thread` to a single italic line, or making `Analysis` the default and `Sources` a smaller "cited:" footer.
+- **Deep Dive `Further Reading` links have no visual separation** (`email_template.py:334`). Each anchor is block-level; add bullet separators or spacing.
+- **10 px uppercase tags** at the edge of legibility. Bump to 11 px.
+
+### High — Design (architecture)
+
+- **Stage-specific branches in `pipeline.py`.** `pipeline.py:301` (cross_domain loads prev-day), `:316` (cross_domain gets `force_friday`), `:361` (assemble writes HTML files) — orchestrator keeps growing per-stage special cases. Give stages a standard lifecycle (`pre_run(context, run_meta)` + `post_run(outputs, artifact_dir)` hooks) and move these into `stages/cross_domain.py` and `stages/assemble.py`.
+- **Central registries should be per-stage metadata.** `_stage_artifact_key` (`pipeline.py:401`), `_empty_stage_output` (`:421`), `_NON_CRITICAL_STAGES` (`:41`) all force pipeline.py edits when adding a stage. Let each `stages/<name>.py` export `ARTIFACT_KEY`, `EMPTY_OUTPUT`, `CRITICAL`; read those from the orchestrator.
+- **Retry policy is global.** `max_retries=2` + fixed backoff in `_run_with_retry` (`pipeline.py:165`). LLM stages and scraper stages want different budgets. Put retry config per stage in `config.yaml`.
+- **`config.yaml` is doing four jobs** (pipeline manifest, LLM routing, source catalog, delivery prefs). 246 lines. Split into `config/pipeline.yaml`, `config/sources.yaml`, `config/delivery.yaml` and merge at load.
+- **Stage I/O is untyped dicts.** `context.get("domain_analysis", {})` everywhere. Pydantic models for `DomainAnalysis`, `CrossDomainOutput`, `SeamData` would catch schema drift — that seam is the most likely silent-regression spot.
+- **`email_template.py` is 400+ lines of CSS-in-a-Python-string.** Extract to `templates/digest.css` and load at import so it can be linted and diffed cleanly.
+- **Failure visibility.** `run_meta["stage_failures"]` is saved to an artifact but never surfaced to the reader. Render a compact "Pipeline notes" strip in the email footer when any non-critical stage failed.
+- **`stages/cross_domain.py` at 525 lines** likely mixes prompt construction, LLM call, and response parsing. Split into `cross_domain/prompt.py`, `cross_domain/parse.py`, `cross_domain/stage.py`.
 
 ### High — Performance
 
