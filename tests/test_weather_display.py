@@ -8,12 +8,14 @@ from modules.weather_display import (
     render_weather_html,
     _build_header_html,
     _build_chart_html,
+    _build_legend_html,
     _build_text_fallback,
     _temp_to_pct,
     _aqi_text_color,
     _precip_color,
     _precip_marker,
     _shorten_condition,
+    AQI_SCALE_MAX,
     DAY_COUNT,
 )
 
@@ -265,15 +267,20 @@ class TestRenderWeatherHtml:
         assert "viewBox" not in html
 
     def test_band_flags_accepted(self):
-        """aqi_strip/record_band/normal_band config flags are accepted but no
-        longer gate any rendered overlays — the chart draws only the hi/lo
-        gradient bar and the precip underline."""
+        """record_band/normal_band are currently no-ops (overlays pending
+        restoration — see TODO.md). aqi_strip gates the legend + per-bar AQI
+        overlay; the chart itself always draws the hi/lo gradient + precip
+        underline regardless."""
         weather = _load_fixture("weather_clear.json")
         html = render_weather_html(
             weather,
             _make_config(aqi_strip=False, record_band=False, normal_band=False),
         )
         assert "<table" in html
+        # Legend and per-bar AQI numbers should be suppressed.
+        assert "Moderate" not in html
+        for aqi_val in (e["aqi"] for e in weather["aqi_forecast"].values()):
+            assert f">{aqi_val}<" not in html
 
     def test_exception_falls_back_to_text(self):
         """Force an exception by passing bad data."""
@@ -454,3 +461,86 @@ class TestRightColumn:
         html = _build_header_html(weather)
         assert "Humidity 87%" in html
         assert "86.6" not in html
+
+
+class TestBuildLegendHtml:
+    """AQI band legend shown above the chart."""
+
+    def test_shown_when_aqi_strip_true(self):
+        html = _build_legend_html(True)
+        assert "AQI" in html
+        assert "Good" in html
+        assert "Moderate" in html
+        assert "USG" in html
+        assert "Unhealthy" in html
+
+    def test_hidden_when_aqi_strip_false(self):
+        assert _build_legend_html(False) == ""
+
+    def test_uses_readable_colors(self):
+        """Legend swatches use the darker readable variants, not bright EPA."""
+        html = _build_legend_html(True)
+        assert "#15803d" in html   # Good (dark green)
+        assert "#854d0e" in html   # Moderate (amber)
+        # Bright EPA yellow (#ffff00) would be invisible on white — don't use it.
+        assert "#ffff00" not in html
+
+
+class TestAqiOverlayOnBar:
+    """Per-day AQI number drawn on top of the temp bar.
+
+    Restored after earlier position:absolute approach was stripped by Gmail.
+    Uses a td with width:{aqi_pct}% as a spacer so the number lands near its
+    mark on the 0..AQI_SCALE_MAX scale.
+    """
+
+    def test_all_aqi_numbers_render_on_bars(self):
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather, show_aqi=True)
+        for entry in weather["aqi_forecast"].values():
+            # The number appears inside a <td>…</td>, so look for >N<.
+            assert f">{entry['aqi']}<" in html
+
+    def test_overlay_suppressed_when_show_aqi_false(self):
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather, show_aqi=False)
+        for entry in weather["aqi_forecast"].values():
+            assert f">{entry['aqi']}<" not in html
+
+    def test_overlay_uses_aqi_color(self):
+        """Each AQI number should be wrapped in a span with its band color."""
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather, show_aqi=True)
+        # All fixture AQI values are in the Good band (≤50) → dark green.
+        assert "#15803d" in html
+
+    def test_no_overlay_when_aqi_forecast_missing(self):
+        """Fixture without aqi_forecast should render chart but no AQI row."""
+        weather = _load_fixture("weather_missing_aqi.json")
+        html = _build_chart_html(weather, show_aqi=True)
+        assert "<table" in html
+
+    def test_high_aqi_right_aligns_to_stay_in_bar(self):
+        """AQI values ≥ 85% of AQI_SCALE_MAX get right-aligned so the label
+        doesn't overflow the bar's right edge."""
+        weather = {
+            "forecast": [
+                {
+                    "date": "2026-04-08",
+                    "day_name": "Mon",
+                    "high_f": 70,
+                    "low_f": 50,
+                    "condition": "Hazy",
+                }
+            ],
+            "aqi_forecast": {
+                "2026-04-08": {"aqi": 180, "aqi_label": "Unhealthy"}
+            },
+        }
+        html = _build_chart_html(weather, show_aqi=True)
+        assert "180" in html
+        assert "text-align:right" in html
+
+    def test_aqi_scale_max_is_200(self):
+        """Contract: scale ceiling matches the top of EPA's Unhealthy band."""
+        assert AQI_SCALE_MAX == 200

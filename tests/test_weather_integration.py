@@ -171,9 +171,9 @@ class TestRenderWeatherHtmlIntegration:
         assert today_name in html
 
     def test_band_flags_accepted(self):
-        """aqi_strip/record_band/normal_band config flags are accepted but no
-        longer gate any rendered overlays — kept so existing config.yaml
-        entries don't error."""
+        """aqi_strip gates the legend + per-bar AQI number; record_band and
+        normal_band are currently accepted but no-op (overlays pending
+        restoration — see TODO.md). Config-compatibility smoke test."""
         weather = _load_fixture("weather_clear.json")
         config = _make_config(
             aqi_strip=False, record_band=False, normal_band=False

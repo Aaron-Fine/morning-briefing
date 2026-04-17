@@ -3,21 +3,26 @@
 Public API:
     render_weather_html(weather: dict, config: dict) -> str
 
-Returns a complete HTML block (header + chart) for embedding in the Morning
-Digest email. Uses only <table>/<div>/<span> with inline styles so the output
-survives Gmail's HTML sanitiser.
+Returns a complete HTML block (header + legend + chart) for embedding in the
+Morning Digest email. Uses only <table>/<div>/<span> with inline styles so
+the output survives Gmail's HTML sanitiser.
 
 The chart renders:
   - a header row: location · current conditions · AQI · wind · humidity
-  - a 7-day grid where each row shows day name, low temp, a hi→lo gradient
-    range bar, high temp, and a right column with condition + precip chance.
+  - a legend keying the AQI color bands used on the daily bars
+  - a 7-day grid. Each row shows day name, low temp, a hi→lo gradient range
+    bar with that day's AQI number overlaid at its scale position (0–200),
+    the high temp, and a right column with condition + precip chance.
   - a thin blue precip underline when the day has measurable precip.
 
-Normal / record / AQI-on-bar overlays were part of an earlier design that
-relied on absolute-positioned children (Gmail strips `position:relative` on
-divs, breaking them). The current chart intentionally has no overlays, so
-there is no legend — a legend for things that aren't drawn is worse than no
-legend at all.
+AQI numbers are positioned inside the bar cell using a single div with a
+multi-stop linear-gradient background (temp range colored, rest gray) and
+an inline-block spacer sized to the AQI's fraction of AQI_SCALE_MAX. This
+replaces an earlier position:absolute approach that Gmail stripped.
+
+Normal / record / Forecast-Hi / Forecast-Lo markers were part of the
+original design and relied on the same stripped positioning — they remain
+a TODO (see TODO.md). They are not referenced in the legend until restored.
 """
 
 import logging
@@ -27,6 +32,9 @@ log = logging.getLogger(__name__)
 
 # --- Chart layout ---
 DAY_COUNT = 7
+# AQI values are positioned along the bar as a fraction of this ceiling.
+# 200 is the top of the "Unhealthy" EPA band; higher values clamp to 100%.
+AQI_SCALE_MAX = 200
 
 # --- Precip bar colors by type ---
 _PRECIP_COLORS = {
@@ -46,10 +54,13 @@ def render_weather_html(weather: dict, config: dict) -> str:
     if not weather or not weather.get("forecast"):
         return ""
 
+    show_aqi = config.get("weather", {}).get("aqi_strip", True)
+
     try:
         header = _build_header_html(weather)
-        chart = _build_chart_html(weather)
-        return f"{header}{chart}"
+        legend = _build_legend_html(show_aqi) if show_aqi else ""
+        chart = _build_chart_html(weather, show_aqi=show_aqi)
+        return f"{header}{legend}{chart}"
     except Exception as e:
         log.error(f"weather_display: chart render failed: {e}")
         return _build_text_fallback(weather)
@@ -105,6 +116,36 @@ def _build_header_html(weather: dict) -> str:
     )
 
 
+def _build_legend_html(show_aqi: bool) -> str:
+    """Small AQI band key shown above the 7-day chart.
+
+    Keyed to the colors used by the per-day AQI overlays so readers can
+    translate a number on a bar into a health category at a glance.
+    """
+    if not show_aqi:
+        return ""
+    bands = [
+        ("0-50 Good", "#15803d"),
+        ("51-100 Moderate", "#854d0e"),
+        ("101-150 USG", "#c2410c"),
+        ("151-200 Unhealthy", "#dc2626"),
+    ]
+    items = "".join(
+        f'<span style="margin-right:10px;white-space:nowrap;">'
+        f'<span style="display:inline-block;width:8px;height:8px;'
+        f'background:{color};border-radius:2px;vertical-align:middle;'
+        f'margin-right:3px;"></span>'
+        f'<span style="font-size:9px;color:#666;">{label}</span>'
+        f'</span>'
+        for label, color in bands
+    )
+    return (
+        f'<div style="font-family:monospace;margin:4px 0 2px 0;">'
+        f'<span style="font-size:9px;color:#888;margin-right:6px;">AQI</span>'
+        f'{items}</div>'
+    )
+
+
 def _build_text_fallback(weather: dict) -> str:
     """Simple text fallback when chart rendering fails."""
     city = weather.get("city", "Logan")
@@ -123,9 +164,10 @@ def _build_text_fallback(weather: dict) -> str:
     return "<p>" + "<br>".join(lines) + "</p>"
 
 
-def _build_chart_html(weather: dict) -> str:
+def _build_chart_html(weather: dict, show_aqi: bool = True) -> str:
     """Build the HTML table chart — horizontal day rows with temp range bars."""
     forecast = weather.get("forecast", [])[:DAY_COUNT]
+    aqi_forecast = weather.get("aqi_forecast", {}) or {}
     if not forecast:
         return ""
 
@@ -155,6 +197,43 @@ def _build_chart_html(weather: dict) -> str:
         lo_pct = _temp_to_pct(lo, temp_min, temp_max) if lo is not None else 0
         hi_pct = _temp_to_pct(hi, temp_min, temp_max) if hi is not None else 100
         bar_width = max(hi_pct - lo_pct, 1)
+
+        # AQI number overlay row (Gmail-safe: positioned via spacer td width
+        # instead of position:absolute, which Gmail strips).
+        aqi_overlay_html = ""
+        if show_aqi:
+            day_date = day.get("date")
+            aqi_entry = aqi_forecast.get(day_date, {}) if day_date else {}
+            aqi_val = aqi_entry.get("aqi")
+            if aqi_val is not None:
+                aqi_pct = max(0.0, min(100.0, aqi_val / AQI_SCALE_MAX * 100.0))
+                aqi_col = _aqi_text_color(aqi_val)
+                # When AQI sits near the right edge, right-align the label so
+                # it doesn't overflow the bar.
+                if aqi_pct >= 85:
+                    aqi_overlay_html = (
+                        f'<tr><td colspan="3" style="padding:1px 0 0;">'
+                        f'<div style="font-size:8px;color:{aqi_col};'
+                        f'font-weight:700;text-align:right;line-height:1;">'
+                        f'{aqi_val}</div></td></tr>'
+                    )
+                else:
+                    # Spacer cell + AQI cell. Narrow AQI cell keeps the number
+                    # centered on the mark; trailing cell absorbs remainder.
+                    spacer_pct = max(0.0, aqi_pct - 2)
+                    aqi_overlay_html = (
+                        f'<tr><td colspan="3" style="padding:1px 0 0;">'
+                        f'<table cellspacing="0" cellpadding="0" border="0" '
+                        f'style="width:100%;border-collapse:collapse;">'
+                        f'<tr>'
+                        f'<td style="width:{spacer_pct:.1f}%;font-size:0;'
+                        f'line-height:0;padding:0;"></td>'
+                        f'<td style="font-size:8px;color:{aqi_col};'
+                        f'font-weight:700;line-height:1;padding:0;'
+                        f'white-space:nowrap;">{aqi_val}</td>'
+                        f'<td style="padding:0;"></td>'
+                        f'</tr></table></td></tr>'
+                    )
 
         # Precip underline (blue/snow-blue bar beneath the temp range)
         precip_bar_html = '<div style="height:3px;"></div>'
@@ -215,6 +294,7 @@ def _build_chart_html(weather: dict) -> str:
             f'border-radius:6px;"></td>'
             f'<td style="height:14px;padding:0;font-size:0;line-height:0;"></td>'
             f'</tr>'
+            f'{aqi_overlay_html}'
             f'</table>'
             f'</td>'
             f'<td style="width:28px;font-size:8px;color:#c07830;'
