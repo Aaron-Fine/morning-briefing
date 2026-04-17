@@ -180,13 +180,17 @@ def _call_anthropic(
     max_tokens = model_config.get("max_tokens", 8192)
     temperature = model_config.get("temperature", 0.3)
 
+    # Opus 4.7 removed sampling parameters (temperature, top_p, top_k)
+    _no_sampling = model.startswith("claude-opus-4-7")
+
     create_kwargs = dict(
         model=model,
         max_tokens=max_tokens,
-        temperature=temperature,
         system=system_prompt,
         messages=[{"role": "user", "content": user_content}],
     )
+    if not _no_sampling:
+        create_kwargs["temperature"] = temperature
 
     def _do_call() -> str:
         if stream:

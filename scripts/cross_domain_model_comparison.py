@@ -83,6 +83,15 @@ MODELS = {
             "temperature": 0.3,
         },
     },
+    "claude_opus47": {
+        "label": "Claude Opus 4.7 (Anthropic)",
+        "config": {
+            "provider": "anthropic",
+            "model": "claude-opus-4-7",
+            "max_tokens": 16000,
+            # No temperature — Opus 4.7 removed sampling parameters
+        },
+    },
 }
 
 # ---------------------------------------------------------------------------

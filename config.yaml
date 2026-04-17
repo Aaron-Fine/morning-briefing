@@ -72,9 +72,8 @@ pipeline:
     - name: cross_domain
       model:
         provider: anthropic
-        model: "claude-opus-4-6"
+        model: "claude-opus-4-7"
         max_tokens: 16000
-        temperature: 0.3
 
     - name: assemble
       # No model needed — template rendering
