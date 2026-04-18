@@ -3,12 +3,13 @@
 Inputs:  raw_sources (dict)
 Outputs: compressed_transcripts (list)
 
-One LLM call per transcript, run serially. Returns the transcript list with
-'transcript' replaced by 'compressed_transcript'. Falls back to the first ~600
-words of the raw transcript if the LLM call fails.
+LLM calls run in parallel with bounded concurrency. Returns the transcript list
+with 'transcript' replaced by 'compressed_transcript'. Falls back to the first
+~600 words of the raw transcript if the LLM call fails.
 """
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from llm import call_llm
 from utils.prompts import load_prompt
@@ -16,6 +17,7 @@ from utils.prompts import load_prompt
 log = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = load_prompt("compress_system.md")
+_MAX_PARALLEL_COMPRESSIONS = 4
 
 
 def _target_words(word_count: int) -> int:
@@ -84,7 +86,20 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
         "temperature": 0.2,
     })
 
-    log.info(f"Compressing {len(transcripts)} transcript(s) serially...")
-    results = [_compress_one(video, effective_config) for video in transcripts]
+    log.info(f"Compressing {len(transcripts)} transcript(s) in parallel...")
+    results = [None] * len(transcripts)
+
+    with ThreadPoolExecutor(max_workers=_MAX_PARALLEL_COMPRESSIONS) as pool:
+        future_to_idx = {
+            pool.submit(_compress_one, video, effective_config): i
+            for i, video in enumerate(transcripts)
+        }
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            try:
+                results[idx] = future.result()
+            except Exception as e:
+                log.error(f"  compress[{idx}]: failed: {e}")
+                results[idx] = transcripts[idx]
 
     return {"compressed_transcripts": results}
