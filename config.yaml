@@ -66,6 +66,13 @@ pipeline:
         model: "claude-sonnet-4-6"
         max_tokens: 5000
         temperature: 0.3
+      turns:
+        scan:
+          max_tokens: 4000
+          temperature: 0.4
+        synthesis:
+          max_tokens: 5000
+          temperature: 0.3
 
     # --- Phase 3: Cross-domain synthesis ("editor-in-chief" pass) ---
     - name: cross_domain

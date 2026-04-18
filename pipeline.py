@@ -248,9 +248,15 @@ _STAGE_METADATA = {
     },
     "seams": {
         "artifact_key": "seam_data",
-        "context_keys": ["seam_data"],
+        "context_keys": ["seam_scan", "seam_data"],
         "non_critical": True,
         "empty_output": {
+            "seam_scan": {
+                "schema_version": 1,
+                "tensions": [],
+                "absences": [],
+                "assumptions": [],
+            },
             "seam_data": {
                 "contested_narratives": [],
                 "coverage_gaps": [],
@@ -529,7 +535,9 @@ def run_pipeline(
             module = _load_stage_module(stage_name)
 
             outputs = _run_with_retry(
-                lambda m=module: m.run(context, config, model_config),
+                lambda m=module: m.run(
+                    context, config, model_config, stage_cfg=stage_cfg
+                ),
                 stage_name,
                 max_retries=2,
             )

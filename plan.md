@@ -256,34 +256,34 @@ Output: the same final seam report schema the pipeline currently consumes.
 
 ### Implementation checklist
 
-- [ ] Move current seam prompt content into prompt files.
-- [ ] Implement Turn 1 scan call with `turns.scan` overrides.
-- [ ] Persist diagnostic intermediate artifact `seam_scan.json`.
-- [ ] Define the minimal diagnostic shape of `seam_scan.json`:
+- [x] Move current seam prompt content into prompt files.
+- [x] Implement Turn 1 scan call with `turns.scan` overrides.
+- [x] Persist diagnostic intermediate artifact `seam_scan.json`.
+- [x] Define the minimal diagnostic shape of `seam_scan.json`:
   - `schema_version`
   - `tensions`
   - `absences`
   - `assumptions`
-- [ ] Implement Turn 2 synthesis call with `turns.synthesis` overrides.
-- [ ] Preserve final `seam_data` schema.
-- [ ] Keep scan artifact diagnostic-only; do not make downstream stages depend on it.
-- [ ] Preserve non-fatal fallback semantics if either turn fails.
+- [x] Implement Turn 2 synthesis call with `turns.synthesis` overrides.
+- [x] Preserve final `seam_data` schema.
+- [x] Keep scan artifact diagnostic-only; do not make downstream stages depend on it.
+- [x] Preserve non-fatal fallback semantics if either turn fails.
 
 ### Tests / checks
 
-- [ ] `tests/test_seams_two_turn.py`:
+- [x] `tests/test_seams_two_turn.py`:
   - `seam_scan.json` is produced,
   - scan output contains `tensions`, `absences`, `assumptions`,
   - final `seam_data.json` matches baseline structure, not content
-- [ ] stage re-entry check: `--stage seams` reruns both turns
-- [ ] full dry-run renders valid digest
+- [x] stage re-entry check: `--stage seams` reruns both turns
+- [x] full dry-run renders valid digest
 
 ### Completion criteria
 
-- [ ] both artifacts produced: `seam_scan.json`, `seam_data.json`
-- [ ] downstream stages unchanged by seam schema
-- [ ] tests pass
-- [ ] dry-run produces a well-formed digest
+- [x] both artifacts produced: `seam_scan.json`, `seam_data.json`
+- [x] downstream stages unchanged by seam schema
+- [x] tests pass
+- [x] dry-run produces a well-formed digest
 
 ---
 
