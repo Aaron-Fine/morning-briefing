@@ -351,6 +351,30 @@ class TestAnomalyRepeatedPhrases:
         assert len(result) >= 1
         assert any(a["check"] == "repeated_phrase" for a in result)
 
+    def test_detects_repeated_phrase_from_facts_analysis(self):
+        """Phase 3 items have facts/analysis instead of context."""
+        repeated = "word1 word2 word3 word4 word5 word6 word7 word8 word9 word10"
+        cross_domain = {
+            "at_a_glance": [
+                {
+                    "headline": "headline",
+                    "facts": repeated,
+                    "analysis": "some analysis",
+                    "cross_domain_note": "",
+                }
+            ],
+            "deep_dives": [
+                {
+                    "headline": repeated,
+                    "body": "<p>body text</p>",
+                }
+            ],
+        }
+        seam_data = {"contested_narratives": []}
+        result = _check_repeated_phrases(cross_domain, seam_data)
+        assert len(result) >= 1
+        assert any(a["check"] == "repeated_phrase" for a in result)
+
     def test_no_false_positive_different_sections(self):
         cross_domain = {
             "at_a_glance": [

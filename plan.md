@@ -841,17 +841,17 @@ History entries should preserve the per-run contract fields needed to derive rec
 
 ### Tasks
 
-- [ ] fix repeated-phrase input assembly to consume `facts + analysis + cross_domain_note` with `context` fallback
-- [ ] add tests proving repeated-phrase detection works with the current schema
+- [x] fix repeated-phrase input assembly to consume `facts + analysis + cross_domain_note` with `context` fallback
+- [x] add tests proving repeated-phrase detection works with the current schema
 
 ### Tests / checks
 
-- [ ] anomaly unit tests for the current data shape
+- [x] anomaly unit tests for the current data shape
 - [ ] full suite + dry-run
 
 ### Completion criteria
 
-- [ ] repeated-phrase anomaly check has meaningful signal on current outputs
+- [x] repeated-phrase anomaly check has meaningful signal on current outputs
 
 ---
 

@@ -207,8 +207,14 @@ def _check_repeated_phrases(cross_domain_output: dict, seam_data: dict) -> list:
 
     glance_texts = []
     for item in cross_domain_output.get("at_a_glance", []):
-        # at_a_glance items use "context" (combined facts+analysis) not "facts"/"analysis"
-        parts = [item.get("headline", ""), item.get("context", ""), item.get("cross_domain_note", "")]
+        # Phase 3 items have facts/analysis/cross_domain_note as separate fields;
+        # Phase 1 items may have a combined "context" field instead.
+        facts = item.get("facts", "")
+        analysis = item.get("analysis", "")
+        cross_note = item.get("cross_domain_note", "")
+        context_fallback = item.get("context", "")
+        body = f"{facts} {analysis} {cross_note}".strip() or context_fallback
+        parts = [item.get("headline", ""), body]
         glance_texts.append(" ".join(p for p in parts if p))
     if glance_texts:
         sections["at_a_glance"] = " ".join(glance_texts)
