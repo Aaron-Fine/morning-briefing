@@ -11,20 +11,11 @@ Output: {"spiritual": {reading, title, key_scripture, scripture_text, reflection
 import logging
 
 from llm import call_llm
+from utils.prompts import load_prompt
 
 log = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = (
-    "You are writing the spiritual thought for a daily news digest read by a "
-    "practicing Latter-day Saint. Given the week's Come Follow Me reading, "
-    "write a 2-3 sentence reflection that:\n"
-    "- Opens with the key scripture (quote it directly)\n"
-    "- Draws a specific, grounded connection between the scripture's theme and "
-    "the current news environment (not generic — name a real theme present today)\n"
-    "- Ends with a single, concrete invitation to notice or do something\n\n"
-    "Voice: warm, direct, unpreachy. Avoid clichés.\n"
-    "Output: plain text only. No JSON, no headers, no quotation marks around the whole reflection."
-)
+_SYSTEM_PROMPT = load_prompt("prepare_spiritual_system.md")
 
 
 def run(context: dict, config: dict, model_config: dict | None = None, **kwargs) -> dict:

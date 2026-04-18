@@ -86,42 +86,42 @@ docker compose run --rm morning-digest python pipeline.py --sources-only
 
 ### Tasks
 
-- [ ] Build and run a baseline dry-run.
-- [ ] Save baseline digest:
+- [x] Build and run a baseline dry-run.
+- [x] Save baseline digest:
   - copy `output/last_digest.html` -> `output/baseline_digest.html`
-- [ ] Snapshot baseline artifacts:
+- [x] Snapshot baseline artifacts:
   - copy `output/artifacts/YYYY-MM-DD/` -> `output/artifacts/baseline/`
-- [ ] Make `_empty_domain_result()` helper contract-test compatible:
+- [x] Make `_empty_domain_result()` helper contract-test compatible:
   - no `_failed` leakage in helper expectations,
   - preserve failure signaling where the runtime needs it.
-- [ ] Introduce a shared timezone helper using Python timezone best practice (`zoneinfo`), sourcing timezone from `TZ`.
-- [ ] Use the shared helper for:
+- [x] Introduce a shared timezone helper using Python timezone best practice (`zoneinfo`), sourcing timezone from `TZ`.
+- [x] Use the shared helper for:
   - artifact date selection,
   - `run_meta` timestamps,
   - scheduler runtime calculations,
   - rendered digest timestamps,
   - all user-visible date formatting and subject-line formatting.
-- [ ] Remove `schedule.timezone` and `location.timezone` from config and update code/tests accordingly.
-- [ ] Remove `--force-friday` from code, docs, and tests.
-- [ ] Remove platform-specific `strftime` directives from user-visible dates.
-- [ ] Add DST transition coverage for:
+- [x] Remove `schedule.timezone` and `location.timezone` from config and update code/tests accordingly.
+- [x] Remove `--force-friday` from code, docs, and tests.
+- [x] Remove platform-specific `strftime` directives from user-visible dates.
+- [x] Add DST transition coverage for:
   - scheduler next-run logic,
   - shared datetime helper behavior.
 
 ### Tests / checks
 
-- [ ] `pytest tests/test_analyze_domain.py -v --tb=short`
-- [ ] entrypoint/scheduler tests including DST coverage
-- [ ] CLI tests updated for removal of `--force-friday`
-- [ ] full test suite
-- [ ] `pipeline.py --dry-run`
+- [x] `pytest tests/test_analyze_domain.py -v --tb=short`
+- [x] entrypoint/scheduler tests including DST coverage
+- [x] CLI tests updated for removal of `--force-friday`
+- [x] full test suite
+- [x] `pipeline.py --dry-run`
 
 ### Completion criteria
 
-- [ ] baseline digest and artifact snapshot created
-- [ ] tests green
-- [ ] no timezone drift between scheduler semantics, artifact directories, and rendered timestamps
-- [ ] Friday-specific behavior and CLI flags removed from the codebase
+- [x] baseline digest and artifact snapshot created
+- [x] tests green
+- [x] no timezone drift between scheduler semantics, artifact directories, and rendered timestamps
+- [x] Friday-specific behavior and CLI flags removed from the codebase
 
 ---
 
@@ -165,7 +165,7 @@ docker compose run --rm morning-digest python pipeline.py --sources-only
   - `_stage_artifact_key`
   - `_empty_stage_output`
   - `_NON_CRITICAL_STAGES`
-- [ ] Add a prompt loader that:
+- [x] Add a prompt loader that:
   - reads prompt files from `prompts/`,
   - performs template substitution,
   - fails on missing variables,
@@ -177,7 +177,7 @@ docker compose run --rm morning-digest python pipeline.py --sources-only
 ### Tests / checks
 
 - [ ] update/add contract tests for stage metadata coverage
-- [ ] add prompt loader tests:
+- [x] add prompt loader tests:
   - successful substitution,
   - missing variable failure,
   - disallowed path failure
