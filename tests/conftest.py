@@ -44,7 +44,6 @@ def sample_config():
             "state": "UT",
             "latitude": 41.737,
             "longitude": -111.834,
-            "timezone": "America/Denver",
         },
         "digest": {
             "local": {"max_items": 4},

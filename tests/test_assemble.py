@@ -574,7 +574,6 @@ class TestAssembleRun:
             "raw_sources": {},
         }
         config = {
-            "location": {"timezone": "America/Denver"},
             "digest": {
                 "at_a_glance": {"max_items": 14, "normal_items": 10},
                 "deep_dives": {"count": 2},

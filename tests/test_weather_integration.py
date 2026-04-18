@@ -26,7 +26,6 @@ def _make_config(**overrides):
             "state": "UT",
             "latitude": 41.737,
             "longitude": -111.834,
-            "timezone": "America/Denver",
         },
         "weather": {
             "aqi_strip": True,
