@@ -336,7 +336,9 @@ def _fmt_markets(markets: list[dict]) -> str:
 
 def _empty_domain_result(domain_key: str, failed: bool = False) -> dict:
     """Return a safe empty result for a domain pass."""
-    result = {"items": [], "_failed": failed}
+    result = {"items": []}
+    if failed:
+        result["_failed"] = True
     if domain_key == "econ":
         result["market_context"] = ""
     return result

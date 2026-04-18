@@ -13,9 +13,9 @@ import traceback
 import yaml
 from datetime import datetime, timedelta
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from pipeline import run_pipeline as run
+from utils.time import get_local_tz
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,7 +40,7 @@ def _parse_cron(cron_str: str) -> tuple[int, int]:
     return hour, minute
 
 
-def _next_run_time(hour: int, minute: int, tz: ZoneInfo) -> datetime:
+def _next_run_time(hour: int, minute: int, tz) -> datetime:
     """Compute the next scheduled run time in the given timezone."""
     now = datetime.now(tz)
     candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
@@ -65,8 +65,8 @@ def main():
         config = yaml.safe_load(f)
 
     cron = config.get("schedule", {}).get("cron", "0 6 * * *")
-    tz_name = config.get("schedule", {}).get("timezone", "UTC")
-    tz = ZoneInfo(tz_name)
+    tz = get_local_tz()
+    tz_name = tz.key
 
     hour, minute = _parse_cron(cron)
     run_time = f"{hour:02d}:{minute:02d}"

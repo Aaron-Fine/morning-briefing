@@ -15,7 +15,6 @@ Usage:
   python pipeline.py --dry-run               # full run, skip email send
    python pipeline.py --stage cross_domain    # re-run from cross_domain onwards
   python pipeline.py --sources-only          # collect sources and dump, skip LLM
-  python pipeline.py --force-friday          # force Friday mode (weekend reads)
   python pipeline.py --lookback-hours 72    # override YouTube lookback window
 """
 
@@ -25,10 +24,11 @@ import logging
 import logging.handlers
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 import yaml
+from utils.time import artifact_date, iso_now_local, now_local
 
 log = logging.getLogger("pipeline")
 
@@ -128,7 +128,7 @@ def _prune_artifacts(keep_days: int = 30) -> None:
     """Delete artifact directories older than keep_days."""
     if not _ARTIFACTS_BASE.exists():
         return
-    cutoff = datetime.now() - timedelta(days=keep_days)
+    cutoff = now_local() - timedelta(days=keep_days)
     cutoff_str = cutoff.strftime("%Y-%m-%d")
     for d in _ARTIFACTS_BASE.iterdir():
         if d.is_dir() and len(d.name) == 10 and d.name < cutoff_str:
@@ -191,7 +191,6 @@ def _get_stage_model_config(stage_cfg: dict) -> dict | None:
 def run_pipeline(
     dry_run: bool = False,
     sources_only: bool = False,
-    force_friday: bool = False,
     lookback_hours: int | None = None,
     stage_from: str | None = None,
 ) -> None:
@@ -200,7 +199,6 @@ def run_pipeline(
     Args:
         dry_run:       Skip the send stage; save HTML to output/ only.
         sources_only:  Run only the collect stage and dump sources.json.
-        force_friday:  Force Friday mode (weekend reads).
         lookback_hours: Override YouTube lookback window.
         stage_from:    If set, load prior artifacts and re-run from this stage onwards.
     """
@@ -217,10 +215,7 @@ def run_pipeline(
     if lookback_hours is not None:
         config.setdefault("youtube", {})["lookback_hours"] = lookback_hours
         log.info(f"  Override: lookback_hours={lookback_hours}")
-    if force_friday:
-        log.info("  Override: forcing Friday mode")
-
-    run_date = datetime.now().strftime("%Y-%m-%d")
+    run_date = artifact_date()
     artifact_dir = _artifact_dir(run_date)
     log.info(f"  Artifact dir: {artifact_dir}")
 
@@ -256,13 +251,12 @@ def run_pipeline(
     # Pipeline run metadata
     run_meta = {
         "run_date": run_date,
-        "started_at": datetime.now().isoformat(),
+        "started_at": iso_now_local(),
         "stage_timings": {},
         "stage_failures": [],
         "options": {
             "dry_run": dry_run,
             "sources_only": sources_only,
-            "force_friday": force_friday,
             "lookback_hours": lookback_hours,
             "stage_from": stage_from,
         },
@@ -312,14 +306,9 @@ def run_pipeline(
 
         try:
             module = _load_stage_module(stage_name)
-            extra_kwargs: dict = {}
-            if stage_name == "cross_domain":
-                extra_kwargs["force_friday"] = force_friday
 
             outputs = _run_with_retry(
-                lambda m=module, ec=extra_kwargs: m.run(
-                    context, config, model_config, **ec
-                ),
+                lambda m=module: m.run(context, config, model_config),
                 stage_name,
                 max_retries=2,
             )
@@ -379,7 +368,7 @@ def run_pipeline(
             return
 
     # Finalize run metadata
-    run_meta["finished_at"] = datetime.now().isoformat()
+    run_meta["finished_at"] = iso_now_local()
     _save_artifact(artifact_dir, "run_meta", run_meta)
 
     # Prune old artifacts
@@ -459,11 +448,6 @@ def main() -> None:
         help="Collect sources and dump to output/sources.json; skip LLM and email",
     )
     parser.add_argument(
-        "--force-friday",
-        action="store_true",
-        help="Force Friday mode (weekend reads) regardless of actual day",
-    )
-    parser.add_argument(
         "--lookback-hours",
         type=int,
         default=None,
@@ -480,7 +464,6 @@ def main() -> None:
     run_pipeline(
         dry_run=args.dry_run,
         sources_only=args.sources_only,
-        force_friday=args.force_friday,
         lookback_hours=args.lookback_hours,
         stage_from=args.stage,
     )

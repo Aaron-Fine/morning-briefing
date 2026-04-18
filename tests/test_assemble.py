@@ -2,8 +2,10 @@
 
 import sys
 import os
+from datetime import datetime
 from unittest.mock import patch, MagicMock
 from markupsafe import Markup
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -554,8 +556,12 @@ class TestAssembleRun:
         assert isinstance(call_args["weather_html"], Markup)
 
     @patch("stages.assemble.render_email")
-    def test_date_and_time_generated(self, mock_render):
+    @patch("stages.assemble.now_local")
+    def test_date_and_time_generated(self, mock_now_local, mock_render):
         mock_render.return_value = "<html>date test</html>"
+        mock_now_local.return_value = datetime(
+            2026, 4, 17, 6, 5, tzinfo=ZoneInfo("America/Denver")
+        )
         context = {
             "cross_domain_output": {
                 "at_a_glance": [],
@@ -578,9 +584,8 @@ class TestAssembleRun:
         run(context, config)
 
         call_args = mock_render.call_args[0][0]
-        assert "date_display" in call_args
-        assert "generated_at" in call_args
-        assert "Denver" in call_args["generated_at"]
+        assert call_args["date_display"] == "Friday, April 17, 2026"
+        assert call_args["generated_at"] == "6:05 AM MDT"
 
     @patch("stages.assemble.render_email")
     def test_seam_data_passed_through(self, mock_render):

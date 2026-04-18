@@ -281,7 +281,6 @@ def _build_input(
     seam_data: dict,
     raw_sources: dict,
     previous_cross_domain: dict | None = None,
-    force_friday: bool = False,
 ) -> str:
     """Build the user content for the cross-domain synthesis prompt."""
     parts = []
@@ -373,7 +372,6 @@ def run(
         seam_data,
         raw_sources,
         context.get("previous_cross_domain"),
-        force_friday=kwargs.get("force_friday", False),
     )
 
     try:

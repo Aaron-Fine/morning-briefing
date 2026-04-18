@@ -119,9 +119,9 @@ def get_current_lesson(config: dict) -> dict:
                 "key_scripture": key_ref,
                 "scripture_text": _get_scripture_text(key_ref),
                 "date_range": (
-                    f"{start.strftime('%B %-d')}–{end.strftime('%-d')}"
+                    f"{start.strftime('%B')} {start.day}–{end.day}"
                     if start.month == end.month
-                    else f"{start.strftime('%B %-d')}–{end.strftime('%B %-d')}"
+                    else f"{start.strftime('%B')} {start.day}–{end.strftime('%B')} {end.day}"
                 ),
                 "lesson_url": lesson_url,
                 "lesson_num": num,

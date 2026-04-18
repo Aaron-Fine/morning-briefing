@@ -23,10 +23,10 @@ sanitized by validate.py and then wrapped in Markup() before template rendering.
 """
 
 import logging
-from datetime import datetime
 from markupsafe import Markup
 
 from templates.email_template import render_email
+from utils.time import format_display_date, format_display_time, now_local, tz_abbrev
 
 log = logging.getLogger(__name__)
 
@@ -159,7 +159,7 @@ def run(
     seam_data = context.get("seam_data", {})
     raw_sources = context.get("raw_sources", {})
 
-    today = datetime.now()
+    today = now_local()
 
     # --- Select pipeline mode ---
     if context.get("cross_domain_output"):
@@ -221,14 +221,8 @@ def run(
     analysis_unavailable = bool(domain_failures) and not at_a_glance and raw_rss_count > 0
 
     template_data = {
-        "date_display": today.strftime("%A, %B %-d, %Y"),
-        "generated_at": (
-            today.strftime("%-I:%M %p")
-            + " "
-            + config.get("location", {})
-            .get("timezone", "America/Denver")
-            .split("/")[-1]
-        ),
+        "date_display": format_display_date(today),
+        "generated_at": f"{format_display_time(today)} {tz_abbrev(today)}",
         "rss_source_names": rss_source_names,
         "yt_source_names": yt_source_names,
         "spiritual": spiritual,

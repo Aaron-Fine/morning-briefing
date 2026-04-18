@@ -150,11 +150,6 @@ class TestBuildInput:
         assert "GEOPOLITICS" not in result
         assert "(0 items)" not in result
 
-    def test_force_friday_flag_passed(self):
-        result = _build_input({}, {}, {"rss": []}, force_friday=True)
-        # force_friday doesn't change the input structure but is accepted
-        assert "=== DOMAIN ANALYSES ===" in result
-
     def test_multiple_domains(self):
         domain_analysis = {
             "geopolitics": {"items": [{"headline": "G1"}]},

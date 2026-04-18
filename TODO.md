@@ -48,6 +48,11 @@ _Last updated: 2026-04-17_
 - **Extract retry backoff helper.** `llm.py::_retry_loop` and `pipeline.py` both implement exponential backoff with jitter. Once the 3-layer retry stack is consolidated (see above), keep one implementation in `utils/retry.py`.
 - **Extract artifact helpers.** `_ARTIFACTS_BASE` path + date-directory iteration is duplicated in `pipeline.py` and `stages/anomaly.py`. Move to `utils/artifacts.py` (`artifact_dir(date)`, `iter_recent_dirs(n)`, `load_artifact(date, key)`).
 - **Tracked in `plan.md` Slice 4: standardize `utils.urls` usage.** Validation and URL matching are already being tightened there; keep future notes here only if a second pass is still needed after that slice lands.
+- **Investigate recurring dry-run source warnings.** Current end-to-end dry-runs complete successfully, but `output/digest.log` consistently shows non-fatal source issues for SpaceNews (`429`), Brad Setser (`404`), Reuters Markets (`401`), China Global South Project (`410`), and The Diff (`400`). Decide case by case whether to:
+  - fix the feed URL,
+  - add provider-specific throttling/backoff,
+  - replace the source,
+  - or downgrade/remove the source if it is no longer viable.
 
 ### Low — Correctness / cleanup
 

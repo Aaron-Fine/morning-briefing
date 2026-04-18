@@ -290,7 +290,7 @@ class TestRunDomainPass:
                 [],
                 self._make_model_config(),
             )
-        assert result == {"items": []}
+        assert result == {"items": [], "_failed": True}
         assert "LLM call failed" in caplog.text
 
     @patch("stages.analyze_domain.call_llm")

@@ -3,7 +3,6 @@
 
 schedule:
   cron: "0 6 * * *"  # 6:00 AM daily
-  timezone: "America/Denver"
 
 delivery:
   method: smtp
@@ -93,7 +92,6 @@ location:
   region: "Cache Valley"
   latitude: 41.737
   longitude: -111.834
-  timezone: "America/Denver"
 
 # --- SOURCE CONFIGURATION ---
 

@@ -9,9 +9,10 @@ On failure, attempts to send a plain-text failure notification email.
 import logging
 import os
 import smtplib
-from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+
+from utils.time import artifact_date, format_display_date, iso_now_local, now_local
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ def _send_digest(html: str, config: dict) -> bool:
         return False
 
     subject_template = delivery.get("subject_template", "Morning Digest — {date}")
-    subject = subject_template.format(date=datetime.now().strftime("%A, %B %-d, %Y"))
+    subject = subject_template.format(date=format_display_date())
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -79,14 +80,14 @@ def _send_failure_notification(config: dict) -> None:
         log.error("Cannot send failure notification — SMTP credentials or to_address missing")
         return
 
-    now = datetime.now()
+    now = now_local()
     body = (
-        f"Morning Digest failed to send on {now.strftime('%A, %B %-d, %Y')}.\n\n"
+        f"Morning Digest failed to send on {format_display_date(now)}.\n\n"
         "Check the container logs for details:\n"
         "  docker compose logs morning-digest\n"
     )
     msg = MIMEText(body, "plain")
-    msg["Subject"] = f"[Morning Digest] Delivery failed — {now.strftime('%Y-%m-%d')}"
+    msg["Subject"] = f"[Morning Digest] Delivery failed — {artifact_date()}"
     msg["From"] = f"Morning Digest <{smtp_user}>"
     msg["To"] = to_addr
 
@@ -108,10 +109,16 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
 
     if not html:
         log.error("send: no HTML content to send")
-        return {"send_result": {"success": False, "timestamp": datetime.now().isoformat(), "error": "no html"}}
+        return {
+            "send_result": {
+                "success": False,
+                "timestamp": iso_now_local(),
+                "error": "no html",
+            }
+        }
 
     success = _send_digest(html, config)
-    timestamp = datetime.now().isoformat()
+    timestamp = iso_now_local()
 
     if success:
         log.info("=== Digest sent successfully ===")
