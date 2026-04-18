@@ -24,8 +24,7 @@ _Last updated: 2026-04-17_
 
 ### High — Design (architecture)
 
-- **Stage-specific branches in `pipeline.py`.** `pipeline.py:301` (cross_domain loads prev-day), `:316` (cross_domain gets `force_friday`), `:361` (assemble writes HTML files) — orchestrator keeps growing per-stage special cases. Give stages a standard lifecycle (`pre_run(context, run_meta)` + `post_run(outputs, artifact_dir)` hooks) and move these into `stages/cross_domain.py` and `stages/assemble.py`.
-- **Central registries should be per-stage metadata.** `_stage_artifact_key` (`pipeline.py:401`), `_empty_stage_output` (`:421`), `_NON_CRITICAL_STAGES` (`:41`) all force pipeline.py edits when adding a stage. Let each `stages/<name>.py` export `ARTIFACT_KEY`, `EMPTY_OUTPUT`, `CRITICAL`; read those from the orchestrator.
+- **Tracked in `plan.md` Slice 1: pipeline lifecycle + stage metadata cleanup.** This covers the existing `pipeline.py` stage-specific branches, central registries (`_stage_artifact_key`, `_empty_stage_output`, `_NON_CRITICAL_STAGES`), and related orchestration drift. Keep new ideas here only if they are outside the current plan scope.
 - **Retry policy is global.** `max_retries=2` + fixed backoff in `_run_with_retry` (`pipeline.py:165`). LLM stages and scraper stages want different budgets. Put retry config per stage in `config.yaml`.
 - **`config.yaml` is doing four jobs** (pipeline manifest, LLM routing, source catalog, delivery prefs). 246 lines. Split into `config/pipeline.yaml`, `config/sources.yaml`, `config/delivery.yaml` and merge at load.
 - **Stage I/O is untyped dicts.** `context.get("domain_analysis", {})` everywhere. Pydantic models for `DomainAnalysis`, `CrossDomainOutput`, `SeamData` would catch schema drift — that seam is the most likely silent-regression spot.
@@ -35,7 +34,7 @@ _Last updated: 2026-04-17_
 
 ### High — Performance
 
-- **Parallelize `analyze_domain` domain passes.** `stages/analyze_domain.py` calls LLM once per domain (ai_tech, geopolitics, econ-trade, defense-space) sequentially. Four independent LLM calls run ~4× slower than they should. Move to `concurrent.futures.ThreadPoolExecutor` keyed on domain name. Keep `_failed` flag handling per-pass so one failure doesn't poison the others.
+- **Tracked in `plan.md` Slice 10: parallelize `analyze_domain`.** Keep notes here only if implementation reveals extra constraints beyond per-desk isolation and deterministic output ordering.
 - **Parallelize `collect.py` sources.** `stages/collect.py` fetches RSS, HN, GitHub trending, launches, astronomy, markets, econ calendar, holidays, CFM, history, YouTube transcripts serially. Most are independent HTTP calls. A `ThreadPoolExecutor` with ~6 workers would cut wall time substantially. Be careful to preserve deterministic ordering in outputs.
 - **Parallelize RSS fetch loop.** `sources/rss_feeds._fetch_direct` pulls feeds one-at-a-time. With ~30 feeds at ~1s each this is the biggest single contributor to collect latency. Move to `ThreadPoolExecutor`. Preserve the "5 consecutive failures → network down → abort" circuit breaker by tracking failures atomically.
 - **Parallelize transcript compression.** `stages/compress.py` runs the transcript compression LLM call once per transcript. These are independent; parallelize them.
@@ -44,17 +43,17 @@ _Last updated: 2026-04-17_
 
 ### Medium — Consolidation
 
-- **Consolidate `_TAG_LABELS`.** Defined in `cross_domain.py`, `assemble.py`, and `validate.py` (as `VALID_TAG_LABELS`). Contract tests catch drift but the duplication itself is the bug. Move to `utils/tags.py` and import everywhere.
+- **Tracked in `plan.md` Slice 6: consolidate tag vocabulary helpers.** The current plan now treats tag vocabulary as an explicit contract and should own the `_TAG_LABELS` / `VALID_TAG_LABELS` consolidation work.
 - **Consolidate AQI breakpoint ladder.** The `if aqi <= 50: "Good" / <= 100: "Moderate" / ...` ladder appears in `sources/weather.py::_aqi_to_label` and twice more in `modules/weather_display.py` (label + color). Extract to `utils/aqi.py` with `aqi_label(aqi)` and `aqi_color(aqi)`.
 - **Extract retry backoff helper.** `llm.py::_retry_loop` and `pipeline.py` both implement exponential backoff with jitter. Once the 3-layer retry stack is consolidated (see above), keep one implementation in `utils/retry.py`.
 - **Extract artifact helpers.** `_ARTIFACTS_BASE` path + date-directory iteration is duplicated in `pipeline.py` and `stages/anomaly.py`. Move to `utils/artifacts.py` (`artifact_dir(date)`, `iter_recent_dirs(n)`, `load_artifact(date, key)`).
-- **Audit `utils.urls` usage.** `collect_known_urls`, `normalize_url`, and URL-equality logic are used in `cross_domain`, `analyze_domain`, `anomaly`, `briefing_packet`. Some still use raw `urlparse().netloc` comparison. Standardize on the `utils.urls` helpers everywhere.
+- **Tracked in `plan.md` Slice 4: standardize `utils.urls` usage.** Validation and URL matching are already being tightened there; keep future notes here only if a second pass is still needed after that slice lands.
 
 ### Low — Correctness / cleanup
 
-- **Naive `datetime.now()` mixed with tz-aware.** ~10 locations use `datetime.now()` without a tz, then compare against tz-aware datetimes elsewhere. Audit and standardize on `datetime.now(timezone.utc)`. Ruff rule DTZ005 would catch these automatically if enabled.
+- **Tracked in `plan.md` Slice 0: timezone/date audit.** The current plan now covers `TZ` authority, shared helper adoption, artifact dates, and user-visible date formatting across the codebase.
 - **Phase 0 dead code in `assemble.py`.** The "empty fallback" branch is only reachable when Phase 3 (`cross_domain`) produces nothing, which hasn't happened since the `_failed` flag landed. Verify unreachable and delete, or keep but document the invariant.
-- **`test_analyze_domain` `_empty_domain_result` drift.** Tests assert `{"items": []}` but the function now returns `{"items": [], "_failed": False}` (from the resilience fix). Update the assertions to match current contract.
+- **Tracked in `plan.md` Slice 0: `_empty_domain_result` contract drift.** Keep follow-up notes here only if additional edge cases appear during implementation.
 
 ---
 
