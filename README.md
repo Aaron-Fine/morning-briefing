@@ -142,6 +142,7 @@ python pipeline.py --dry-run               # full run, save HTML only (no email)
 python pipeline.py --sources-only          # collect and dump output/sources.json, stop before AI
 python pipeline.py --lookback-hours 72     # override YouTube lookback window
 python pipeline.py --stage cross_domain    # re-run from a specific stage (loads prior artifacts)
+python pipeline.py --stage cross_domain --from-plan  # reuse today's editorial plan, re-run execution only
 ```
 
 ### Checking output:
@@ -274,6 +275,24 @@ docker build -t morning-digest:latest .
 
 **`youtube.lookback_hours`** — How far back to look for new videos (default: 48)
 
+**`desks`** — Desk manifest mapping desk names to RSS feed categories. Each desk runs a specialist analysis pass in parallel. To add a desk, add an entry here and create a matching `prompts/desk_<name>.md` file.
+
+```yaml
+desks:
+  - { name: "geopolitics", categories: ["non-western", "substack-independent", "global-south", "western-analysis"] }
+  - { name: "energy_materials", categories: ["energy-materials"] }
+```
+
+**`pipeline.stages[].turns.<name>`** — Per-turn model overrides for two-turn stages (`seams`, `cross_domain`). Override `max_tokens`, `temperature`, or `model` for individual turns without changing the stage default.
+
+```yaml
+- name: seams
+  model: { provider: fireworks, model: "...", max_tokens: 5000, temperature: 0.3 }
+  turns:
+    scan: { max_tokens: 4000, temperature: 0.4 }
+    synthesis: { max_tokens: 5000, temperature: 0.3 }
+```
+
 **`rss.feeds`** — Feed list with optional `cap` (max items per feed) and `category` for editorial treatment.
 
 **`markets.symbols`** — Finnhub ticker symbols. ETFs work on free tier; raw indices (`^GSPC`) do not.
@@ -367,21 +386,22 @@ Falls back to direct RSS fetching if the FreshRSS API is unreachable.
 
 ## Cost
 
-**Fireworks AI (Kimi K2.5):** Used for transcript compression and domain analysis.
+**Fireworks AI (Kimi K2.5):** Used for transcript compression and domain analysis (7 desks).
 
 | Stage | Input | Output | Est. cost |
 |-------|-------|--------|-----------|
 | compress (per transcript) | ~5K tokens | ~1.5K tokens | ~$0.01 |
-| analyze_domain | ~30K tokens | ~6K tokens | ~$0.03–0.06 |
+| analyze_domain (×7 desks) | ~30K tokens each | ~6K tokens each | ~$0.07–0.14 |
 
-**Anthropic (Claude Sonnet):** Used for seam detection and cross-domain synthesis.
+**Anthropic (Claude Sonnet):** Used for seams, cross-domain synthesis, and coverage gaps.
 
 | Stage | Input | Output | Est. cost |
 |-------|-------|--------|-----------|
-| seams | ~8K tokens | ~2K tokens | ~$0.03 |
-| cross_domain | ~20K tokens | ~8K tokens | ~$0.10–0.15 |
+| seams (2 turns) | ~12K tokens | ~4K tokens | ~$0.05 |
+| cross_domain (2 turns) | ~25K tokens | ~12K tokens | ~$0.12–0.18 |
+| coverage_gaps | ~15K tokens | ~3K tokens | ~$0.05 |
 
-**Total: ~$0.20–0.40/day** at current pricing.
+**Total: ~$0.30–0.50/day** at current pricing.
 
 **Finnhub:** Free tier (60 API calls/minute). Four symbols = four calls per run. No cost.
 
@@ -424,8 +444,21 @@ morning-digest/
 │   ├── launches.py          # Space launch schedule (Launch Library 2)
 │   ├── holidays.py          # Holiday calendar
 │   └── economic_calendar.py # Economic events
+├── prompts/                 # Prompt files for LLM stages
+│   ├── seams_scan.md        # Seams Turn 1: divergent scan
+│   ├── seams_synthesis.md   # Seams Turn 2: convergent synthesis
+│   ├── cross_domain_plan.md # Cross-domain Turn 1: editorial planning
+│   ├── cross_domain_execute.md  # Cross-domain Turn 2: writing
+│   ├── coverage_gaps.md     # Coverage gap diagnostic
+│   └── ...                  # Per-desk and system prompts
+├── utils/
+│   ├── prompts.py           # Prompt loader (template substitution from prompts/)
+│   ├── time.py              # Shared timezone helper (reads TZ env var)
+│   └── urls.py              # URL validation helpers
 ├── modules/
 │   └── weather_display.py   # SVG weather chart renderer (CSS-variable themed)
+├── scripts/
+│   └── validate_new_feeds.py  # One-off feed URL validator
 ├── templates/
 │   └── email_template.py    # Jinja2 HTML email template
 ├── output/                  # Generated at runtime (volume-mounted in Docker)
@@ -434,13 +467,14 @@ morning-digest/
 │   ├── digest.log           # Pipeline log (30-day rotation)
 │   └── artifacts/
 │       └── YYYY-MM-DD/      # Per-run JSON artifacts for each stage
-├── tests/
-│   ├── fixtures/            # JSON test fixtures (weather scenarios)
-│   ├── test_weather_classify.py
-│   ├── test_weather_display.py
-│   ├── test_weather_integration.py
-│   ├── test_prepare_local.py
-│   └── test_cross_domain_models.py
+├── tests/                   # 775+ tests
+│   ├── fixtures/            # JSON test fixtures
+│   ├── test_contracts.py    # Tag vocabulary sync across all surfaces
+│   ├── test_seams_two_turn.py
+│   ├── test_cross_domain_two_turn.py
+│   ├── test_coverage_gaps.py
+│   ├── test_new_desks.py
+│   └── ...                  # Per-stage and integration tests
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
