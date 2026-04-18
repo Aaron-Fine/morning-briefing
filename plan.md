@@ -466,26 +466,26 @@ Minimum useful definition:
 
 ### Tasks
 
-- [ ] Integrate `validate_stage_output()` into seams final path.
-- [ ] Integrate `validate_stage_output()` into cross_domain final path.
-- [ ] Make validation schema-preserving for current downstream contracts.
-- [ ] Do not strip fields that `assemble`, `briefing_packet`, or other consumers rely on.
-- [ ] Remove `uncategorized` fallback behavior that violates the current tag contract; invalid tags must be normalized into the approved vocabulary or dropped safely without inventing a new tag.
-- [ ] Keep domain-level URL filtering as an additional safeguard.
-- [ ] Ensure cleaned outputs remain schema-safe for assembly.
-- [ ] Update tests and fixtures so future validation checks do not depend on ad hoc runtime snapshots.
-- [ ] Standardize URL validation and domain matching on shared URL helpers rather than a mix of raw `urlparse().netloc` checks and helper-based logic.
+- [x] Integrate `validate_stage_output()` into seams final path.
+- [x] Integrate `validate_stage_output()` into cross_domain final path.
+- [x] Make validation schema-preserving for current downstream contracts.
+- [x] Do not strip fields that `assemble`, `briefing_packet`, or other consumers rely on.
+- [x] Remove `uncategorized` fallback behavior that violates the current tag contract; invalid tags must be normalized into the approved vocabulary or dropped safely without inventing a new tag.
+- [x] Keep domain-level URL filtering as an additional safeguard.
+- [x] Ensure cleaned outputs remain schema-safe for assembly.
+- [x] Update tests and fixtures so future validation checks do not depend on ad hoc runtime snapshots.
+- [x] Standardize URL validation and domain matching on shared URL helpers rather than a mix of raw `urlparse().netloc` checks and helper-based logic.
 
 ### Tests / checks
 
-- [ ] add malformed-model-output fixtures and assert cleaned output contracts
-- [ ] add regressions proving validation preserves current `cross_domain_output` structure
-- [ ] full suite + dry-run
+- [x] add malformed-model-output fixtures and assert cleaned output contracts
+- [x] add regressions proving validation preserves current `cross_domain_output` structure
+- [x] full suite + dry-run
 
 ### Completion criteria
 
-- [ ] malformed or partial LLM outputs are normalized before downstream use
-- [ ] validation preserves the fields and structure current consumers require
+- [x] malformed or partial LLM outputs are normalized before downstream use
+- [x] validation preserves the fields and structure current consumers require
 
 ---
 

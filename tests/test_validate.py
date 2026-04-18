@@ -244,11 +244,11 @@ class TestValidateAtAGlance:
         result = _validate_at_a_glance(items, set(), {})
         assert len(result) == 2
 
-    def test_invalid_tag_replaced_with_uncategorized(self, caplog):
+    def test_invalid_tag_replaced_with_domestic(self, caplog):
         items = [{"tag": "invalid_tag", "headline": "Test", "links": []}]
         with caplog.at_level(logging.WARNING):
             result = _validate_at_a_glance(items, set(), {})
-        assert result[0]["tag"] == "uncategorized"
+        assert result[0]["tag"] == "domestic"
 
     def test_valid_tag_preserved(self):
         items = [
@@ -296,8 +296,8 @@ class TestValidateAtAGlance:
         known = {"https://example.com"}
         result = _validate_at_a_glance(items, known, {})
         assert result[0]["tag"] == "war"
-        # tag_label defaults to tag.capitalize() when not explicitly provided
-        assert result[0]["tag_label"] == "War"
+        # tag_label uses VALID_TAG_LABELS mapping when not explicitly provided
+        assert result[0]["tag_label"] == "Conflict"
         assert result[0]["headline"] == "Conflict headline"
         assert result[0]["context"] == "Background info"
         assert result[0]["links"] == [{"url": "https://example.com"}]
@@ -318,7 +318,7 @@ class TestValidateAtAGlance:
     def test_missing_fields_get_defaults(self):
         items = [{"links": []}]
         result = _validate_at_a_glance(items, set(), {})
-        assert result[0]["tag"] == "uncategorized"
+        assert result[0]["tag"] == "domestic"
         assert result[0]["headline"] == ""
         assert result[0]["context"] == ""
         assert result[0]["links"] == []
@@ -653,3 +653,177 @@ class TestValidateStageOutput:
         output = {"at_a_glance": [], "custom_field": "value"}
         result = validate_stage_output(output, {}, "test_stage")
         assert result["custom_field"] == "value"
+
+
+class TestSchemaPreservation:
+    """Regression tests: validation must not strip fields downstream stages consume."""
+
+    def test_at_a_glance_preserves_downstream_fields(self):
+        """assemble.py needs facts, analysis, cross_domain_note, source_depth, connection_hooks."""
+        items = [
+            {
+                "tag": "war",
+                "headline": "Conflict Update",
+                "facts": "Facts paragraph",
+                "analysis": "Analysis paragraph",
+                "cross_domain_note": "Connects to econ",
+                "source_depth": "widely-reported",
+                "connection_hooks": [{"entity": "China", "region": "Asia", "theme": "trade"}],
+                "links": [],
+            }
+        ]
+        result = _validate_at_a_glance(items, set(), {})
+        item = result[0]
+        assert item["facts"] == "Facts paragraph"
+        assert item["analysis"] == "Analysis paragraph"
+        assert item["cross_domain_note"] == "Connects to econ"
+        assert item["source_depth"] == "widely-reported"
+        assert item["connection_hooks"] == [{"entity": "China", "region": "Asia", "theme": "trade"}]
+
+    def test_deep_dives_preserves_downstream_fields(self):
+        """briefing_packet and assemble need source_depth, domains_bridged."""
+        dives = [
+            {
+                "headline": "Deep Dive",
+                "body": "<p>Content</p>",
+                "why_it_matters": "Why",
+                "further_reading": [],
+                "source_depth": "corroborated",
+                "domains_bridged": ["geopolitics", "econ"],
+            }
+        ]
+        result = _validate_deep_dives(dives, set())
+        dive = result[0]
+        assert dive["source_depth"] == "corroborated"
+        assert dive["domains_bridged"] == ["geopolitics", "econ"]
+
+    def test_full_cross_domain_output_preserved(self):
+        """Realistic cross_domain_output passes through validation without losing structure."""
+        output = {
+            "at_a_glance": [
+                {
+                    "tag": "defense",
+                    "tag_label": "Defense",
+                    "headline": "Pentagon procurement shift",
+                    "facts": "DoD announced new procurement",
+                    "analysis": "Signals shift toward autonomy",
+                    "cross_domain_note": "Ties to AI industrial policy",
+                    "source_depth": "corroborated",
+                    "connection_hooks": [{"entity": "DoD", "theme": "procurement"}],
+                    "links": [{"url": "https://known.com/article", "label": "Breaking Defense"}],
+                }
+            ],
+            "deep_dives": [
+                {
+                    "headline": "Defense AI",
+                    "body": "<p>Analysis</p>",
+                    "why_it_matters": "Shapes budget",
+                    "further_reading": [{"url": "https://known.com/article", "label": "BD: Article"}],
+                    "source_depth": "widely-reported",
+                    "domains_bridged": ["defense_space", "ai_tech"],
+                }
+            ],
+            "cross_domain_connections": [
+                {"description": "Connection", "domains": ["a", "b"], "entities": ["X"]}
+            ],
+            "market_context": "Markets stable",
+            "worth_reading": [
+                {"title": "Read", "url": "https://known.com/read", "source": "S", "description": "D"}
+            ],
+        }
+        source_data = {"rss": [{"url": "https://known.com/article"}, {"url": "https://known.com/read"}]}
+        result = validate_stage_output(output, source_data, "cross_domain")
+
+        # at_a_glance fields preserved
+        glance = result["at_a_glance"][0]
+        assert glance["facts"] == "DoD announced new procurement"
+        assert glance["analysis"] == "Signals shift toward autonomy"
+        assert glance["cross_domain_note"] == "Ties to AI industrial policy"
+        assert glance["source_depth"] == "corroborated"
+        assert glance["connection_hooks"] == [{"entity": "DoD", "theme": "procurement"}]
+
+        # deep_dives fields preserved
+        dive = result["deep_dives"][0]
+        assert dive["source_depth"] == "widely-reported"
+        assert dive["domains_bridged"] == ["defense_space", "ai_tech"]
+
+        # pass-through fields preserved
+        assert result["cross_domain_connections"] == output["cross_domain_connections"]
+        assert result["market_context"] == "Markets stable"
+
+    def test_invalid_tag_gets_valid_label(self):
+        """After tag normalization, tag_label must come from VALID_TAG_LABELS."""
+        items = [{"tag": "made_up_tag", "headline": "Test", "links": []}]
+        result = _validate_at_a_glance(items, set(), {})
+        assert result[0]["tag"] == "domestic"
+        assert result[0]["tag_label"] == "Politics"
+
+
+class TestMalformedModelOutput:
+    """Fixtures for common LLM output malformations."""
+
+    def test_at_a_glance_with_none_values(self):
+        """LLM sometimes returns None for optional string fields."""
+        output = {
+            "at_a_glance": [
+                {
+                    "tag": "ai",
+                    "headline": None,
+                    "facts": None,
+                    "analysis": None,
+                    "links": None,
+                }
+            ]
+        }
+        result = validate_stage_output(output, {}, "test_stage")
+        item = result["at_a_glance"][0]
+        assert item["headline"] == "None"  # str(None)
+        assert item["tag"] == "ai"
+
+    def test_deep_dive_with_missing_body(self):
+        """LLM omits body field entirely."""
+        output = {
+            "deep_dives": [
+                {"headline": "Missing body", "further_reading": []}
+            ]
+        }
+        result = validate_stage_output(output, {}, "test_stage")
+        assert result["deep_dives"][0]["body"] == ""
+        assert result["deep_dives"][0]["why_it_matters"] == ""
+
+    def test_mixed_valid_and_junk_items(self):
+        """LLM returns a mix of well-formed and garbage items."""
+        output = {
+            "at_a_glance": [
+                {"tag": "war", "headline": "Valid", "links": []},
+                42,
+                "string item",
+                {"tag": "econ", "headline": "Also valid", "links": []},
+            ],
+            "deep_dives": [
+                {"headline": "OK", "body": "<p>Text</p>", "further_reading": []},
+                None,
+                "garbage",
+            ],
+        }
+        result = validate_stage_output(output, {}, "test_stage")
+        assert len(result["at_a_glance"]) == 2
+        assert result["at_a_glance"][0]["tag"] == "war"
+        assert result["at_a_glance"][1]["tag"] == "econ"
+        assert len(result["deep_dives"]) == 1
+
+    def test_seam_output_with_extra_fields_preserved(self):
+        """validate_stage_output on seam data preserves key_assumptions and seam_count."""
+        output = {
+            "contested_narratives": [
+                {"topic": "T", "description": "D", "sources_a": "A", "sources_b": "B", "links": []}
+            ],
+            "coverage_gaps": [],
+            "key_assumptions": [{"assumption": "X", "vulnerability": "Y"}],
+            "seam_count": 2,
+            "quiet_day": False,
+        }
+        result = validate_stage_output(output, {}, "seams")
+        assert result["key_assumptions"] == [{"assumption": "X", "vulnerability": "Y"}]
+        assert result["seam_count"] == 2
+        assert result["quiet_day"] is False

@@ -23,8 +23,7 @@ import json
 
 from llm import call_llm
 from utils.prompts import load_prompt
-from utils.urls import collect_known_urls
-from validate import validate_urls
+from validate import validate_stage_output
 
 log = logging.getLogger(__name__)
 
@@ -272,9 +271,8 @@ def run(
             "synthesis",
         )
 
-        # Validate URLs against known sources
-        known_urls = collect_known_urls(raw_sources, domain_analysis)
-        result = validate_urls(result, known_urls)
+        # Validate output schema and URLs against known sources
+        result = validate_stage_output(result, raw_sources, "seams")
 
         # Ensure all expected fields exist with safe defaults
         if "contested_narratives" not in result:

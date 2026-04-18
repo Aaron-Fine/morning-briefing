@@ -42,3 +42,13 @@ def collect_known_urls(
 def extract_domains(urls: set[str]) -> set[str]:
     """Extract unique domains from a set of URLs."""
     return {urlparse(u).netloc for u in urls if urlparse(u).netloc}
+
+
+def url_domain_allowed(url: str, known_domains: set[str]) -> bool:
+    """Check whether a URL's domain is in the set of known-good domains.
+
+    Returns True for empty/missing URLs (no filtering needed).
+    """
+    if not url:
+        return True
+    return urlparse(url).netloc in known_domains

@@ -22,11 +22,11 @@ Outputs: cross_domain_output (dict) containing at_a_glance, deep_dives,
 
 import json
 import logging
-from urllib.parse import urlparse
 
 from llm import call_llm
 from utils.prompts import load_prompt
-from utils.urls import collect_known_urls
+from utils.urls import collect_known_urls, extract_domains, url_domain_allowed
+from validate import validate_stage_output
 
 log = logging.getLogger(__name__)
 
@@ -362,12 +362,7 @@ def _validated_output(
         result["market_context"] = econ.get("market_context", "")
 
     known_urls = collect_known_urls(raw_sources, domain_analysis)
-    known_domains: set[str] = {
-        urlparse(u).netloc for u in known_urls if urlparse(u).netloc
-    }
-
-    def _url_allowed(url: str) -> bool:
-        return not url or urlparse(url).netloc in known_domains
+    known_domains = extract_domains(known_urls)
 
     for item in result["at_a_glance"]:
         item["tag"] = _normalize_tag(item.get("tag", ""))
@@ -375,16 +370,16 @@ def _validated_output(
 
     for item in result["at_a_glance"]:
         item["links"] = [
-            lnk for lnk in item.get("links", []) if _url_allowed(lnk.get("url", ""))
+            lnk for lnk in item.get("links", []) if url_domain_allowed(lnk.get("url", ""), known_domains)
         ]
     for dive in result["deep_dives"]:
         dive["further_reading"] = [
             lnk
             for lnk in dive.get("further_reading", [])
-            if _url_allowed(lnk.get("url", ""))
+            if url_domain_allowed(lnk.get("url", ""), known_domains)
         ]
     for read in result["worth_reading"]:
-        if not _url_allowed(read.get("url", "")):
+        if not url_domain_allowed(read.get("url", ""), known_domains):
             read["url"] = ""
 
     digest_cfg = config.get("digest", {})
@@ -494,6 +489,7 @@ def run(
         return {"cross_domain_output": _empty_output(domain_analysis)}
 
     result = _validated_output(result, domain_analysis, raw_sources, config)
+    result = validate_stage_output(result, raw_sources, "cross_domain")
 
     n_glance = len(result["at_a_glance"])
     n_dives = len(result["deep_dives"])
