@@ -35,6 +35,7 @@ Each item schema:
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse
 
 from llm import call_llm
@@ -633,6 +634,9 @@ def run(
     }
 
 
+_MAX_PARALLEL_DESKS = 4  # bound concurrency to avoid rate limits
+
+
 def _run_all_domains(
     rss_items: list[dict],
     compressed_transcripts: list[dict],
@@ -640,7 +644,9 @@ def _run_all_domains(
     model_config: dict,
 ) -> dict:
     domain_analysis: dict = {}
-    for domain_key, domain_cfg in _DOMAIN_CONFIGS.items():
+
+    def _run_one(domain_key: str) -> tuple[str, dict]:
+        domain_cfg = _DOMAIN_CONFIGS[domain_key]
         log.info(f"  Analyzing domain: {domain_key} ({domain_cfg['label']})")
         result = _run_domain_pass(
             domain_key,
@@ -650,5 +656,19 @@ def _run_all_domains(
             markets if domain_key == "econ" else [],
             model_config,
         )
-        domain_analysis[domain_key] = result
+        return domain_key, result
+
+    with ThreadPoolExecutor(max_workers=_MAX_PARALLEL_DESKS) as pool:
+        futures = {
+            pool.submit(_run_one, key): key for key in _DOMAIN_CONFIGS
+        }
+        for future in as_completed(futures):
+            domain_key = futures[future]
+            try:
+                key, result = future.result()
+                domain_analysis[key] = result
+            except Exception as e:
+                log.error(f"  analyze_domain[{domain_key}]: parallel execution failed: {e}")
+                domain_analysis[domain_key] = _empty_domain_result(domain_key, failed=True)
+
     return domain_analysis

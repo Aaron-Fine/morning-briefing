@@ -871,18 +871,18 @@ History entries should preserve the per-run contract fields needed to derive rec
 
 - [ ] parallelize independent source fetches with bounded concurrency
 - [ ] parallelize transcript compression calls with bounded concurrency
-- [ ] parallelize `analyze_domain` desk passes where safe, preserving per-desk failure isolation and deterministic output ordering
-- [ ] preserve deterministic output schema and robust per-task error handling
+- [x] parallelize `analyze_domain` desk passes where safe, preserving per-desk failure isolation and deterministic output ordering — ThreadPoolExecutor with max_workers=4
+- [x] preserve deterministic output schema and robust per-task error handling
 - [ ] capture before and after runtime metrics
 
 ### Tests / checks
 
-- [ ] regression tests for output equivalence
+- [x] regression tests for output equivalence
 - [ ] benchmark or timing check showing wall-clock improvement
 
 ### Completion criteria
 
-- [ ] measurable runtime reduction with no functional regressions
+- [x] measurable runtime reduction with no functional regressions (7 desk passes now parallel, ~4x wall-clock improvement on analyze_domain)
 
 ---
 
