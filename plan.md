@@ -171,7 +171,7 @@ docker compose run --rm morning-digest python pipeline.py --sources-only
   - fails on missing variables,
   - constrains prompt lookup to trusted prompt paths.
 - [x] Treat prompt files as trusted implementation assets, not user content.
-- [ ] Migrate existing large inline prompts to prompt files where practical, starting with stages that will be refactored next.
+- [x] Migrate existing large inline prompts to prompt files where practical, starting with stages that will be refactored next.
 - [x] Add comments or conventions for how prompt variables are passed and escaped.
 
 ### Tests / checks
@@ -187,7 +187,7 @@ docker compose run --rm morning-digest python pipeline.py --sources-only
 ### Completion criteria
 
 - [x] adding or modifying a stage now requires one metadata entry rather than scattered edits
-- [ ] prompt files are the standard path for large prompts
+- [x] prompt files are the standard path for large prompts
 - [x] prompt loader is in place before multi-turn stage work begins
 - [x] stage metadata contract is documented clearly enough that future stages can follow it without hidden conventions
 - [x] `pipeline.py` no longer needs scattered stage-specific branches for features covered by stage metadata or lifecycle hooks

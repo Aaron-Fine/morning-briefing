@@ -33,6 +33,7 @@ from urllib.parse import urlparse
 
 from llm import call_llm
 from sanitize import sanitize_source_content
+from utils.prompts import load_prompt
 
 log = logging.getLogger(__name__)
 
@@ -363,12 +364,17 @@ def _run_domain_pass(
 
     schema = _ECON_OUTPUT_SCHEMA if domain_key == "econ" else _OUTPUT_SCHEMA
 
-    system_prompt = (
-        f"You are a {cfg['label']} analyst for Aaron's Morning Digest.\n\n"
-        f"{cfg['domain_instructions']}\n\n"
-        f"{schema}\n\n"
-        f"{_SHARED_RULES}\n\n"
-        f"Produce {cfg['normal_items']}-{cfg['max_items']} items (minimum {cfg['min_items']})."
+    system_prompt = load_prompt(
+        "analyze_domain_system.md",
+        {
+            "label": cfg["label"],
+            "domain_instructions": cfg["domain_instructions"],
+            "schema": schema,
+            "shared_rules": _SHARED_RULES,
+            "normal_items": cfg["normal_items"],
+            "max_items": cfg["max_items"],
+            "min_items": cfg["min_items"],
+        },
     )
 
     source_block_parts = [f"RSS/WEB SOURCES ({cfg['label']}):"]

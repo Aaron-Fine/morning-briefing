@@ -11,22 +11,11 @@ words of the raw transcript if the LLM call fails.
 import logging
 
 from llm import call_llm
+from utils.prompts import load_prompt
 
 log = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = (
-    "You are a transcript compressor. Given a YouTube video transcript, "
-    "produce a dense summary that preserves:\n"
-    "1. All concrete claims and factual assertions\n"
-    "2. The speaker's analytical framework and conclusions\n"
-    "3. Any named sources, data points, or specific examples\n"
-    "4. The speaker's specific interpretive framing — how they characterize events "
-    "matters as much as what events they cover\n\n"
-    "Strip: filler, repetition, sponsor/ad reads, calls to action, tangents, "
-    "conversational padding, verbal tics.\n\n"
-    "The target word count is specified in the request. Match it closely.\n"
-    "Output plain text, no JSON, no markdown headers."
-)
+_SYSTEM_PROMPT = load_prompt("compress_system.md")
 
 
 def _target_words(word_count: int) -> int:
