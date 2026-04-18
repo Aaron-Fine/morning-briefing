@@ -254,8 +254,8 @@ class TestNonCriticalStagesConsistency:
     def test_non_critical_stages_are_valid_names(self):
         for stage in _NON_CRITICAL_STAGES:
             key = _stage_artifact_key(stage)
-            assert key != stage or stage == "briefing_packet", (
-                f"Non-critical stage '{stage}' has no explicit artifact key mapping"
+            assert key is not None, (
+                f"Non-critical stage '{stage}' has no artifact key in metadata"
             )
 
 
