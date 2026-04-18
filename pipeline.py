@@ -19,6 +19,7 @@ Usage:
 """
 
 import argparse
+from copy import deepcopy
 import json
 import logging
 import logging.handlers
@@ -35,19 +36,6 @@ log = logging.getLogger("pipeline")
 _ROOT = Path(__file__).parent
 _OUTPUT_DIR = _ROOT / "output"
 _ARTIFACTS_BASE = _OUTPUT_DIR / "artifacts"
-
-# Stages that are allowed to fail without aborting the pipeline.
-# A failed non-critical stage produces an empty output and logs a warning.
-_NON_CRITICAL_STAGES = {
-    "seams",
-    "compress",
-    "prepare_weather",  # weather enhances but isn't required
-    "prepare_spiritual",  # spiritual section is optional
-    "prepare_local",  # local news is optional
-    "anomaly",  # post-assembly checks — non-blocking
-    "briefing_packet",  # chat context artifact — non-blocking
-}
-
 
 # ---------------------------------------------------------------------------
 # Config
@@ -157,6 +145,225 @@ def _load_stage_module(name: str):
     return importlib.import_module(f"stages.{name}")
 
 
+def _load_previous_cross_domain(context: dict, *, run_date: str, **_kwargs) -> None:
+    """Inject the previous day's cross-domain output when available."""
+    prev_dir = _find_most_recent_artifact_dir(before_date=run_date)
+    if not prev_dir:
+        return
+
+    prev_xd = _load_artifact(prev_dir, "cross_domain_output")
+    if prev_xd:
+        context["previous_cross_domain"] = prev_xd
+        log.info(f"  Loaded previous cross_domain from {prev_dir.name}")
+
+
+def _write_assemble_outputs(
+    context: dict,
+    outputs: dict,
+    *,
+    artifact_dir: Path,
+    run_date: str,
+    dry_run: bool,
+    **_kwargs,
+) -> None:
+    """Persist the rendered digest HTML for the assemble stage."""
+    html = outputs.get("html") or context.get("html", "")
+    if not html:
+        return
+
+    (artifact_dir / "digest.html").write_text(html, encoding="utf-8")
+    (_OUTPUT_DIR / "last_digest.html").write_text(html, encoding="utf-8")
+    if not dry_run:
+        (_OUTPUT_DIR / f"{run_date}.html").write_text(html, encoding="utf-8")
+
+
+def _load_cached_assemble_outputs(context: dict, *, artifact_dir: Path, **_kwargs) -> None:
+    """Reload assemble outputs, including the rendered HTML sidecar file."""
+    for key in ("template_data", "digest_json"):
+        artifact_data = _load_artifact(artifact_dir, key)
+        if artifact_data is not None:
+            context[key] = artifact_data
+
+    html_path = artifact_dir / "digest.html"
+    if html_path.exists():
+        context["html"] = html_path.read_text(encoding="utf-8")
+
+
+_STAGE_METADATA = {
+    "collect": {
+        "artifact_key": "raw_sources",
+        "context_keys": ["raw_sources"],
+        "non_critical": False,
+        "empty_output": None,
+        "model_defaults": None,
+        "turn_model_overrides": None,
+    },
+    "compress": {
+        "artifact_key": "compressed_transcripts",
+        "context_keys": ["compressed_transcripts"],
+        "non_critical": True,
+        "empty_output": {"compressed_transcripts": []},
+        "model_defaults": {},
+        "turn_model_overrides": None,
+    },
+    "analyze_domain": {
+        "artifact_key": "domain_analysis",
+        "context_keys": ["domain_analysis"],
+        "non_critical": False,
+        "empty_output": None,
+        "model_defaults": {},
+        "turn_model_overrides": None,
+    },
+    "prepare_calendar": {
+        "artifact_key": "calendar",
+        "context_keys": ["calendar"],
+        "non_critical": False,
+        "empty_output": None,
+        "model_defaults": None,
+        "turn_model_overrides": None,
+    },
+    "prepare_weather": {
+        "artifact_key": "weather",
+        "context_keys": ["weather", "weather_html"],
+        "non_critical": True,
+        "empty_output": {"weather": {}, "weather_html": ""},
+        "model_defaults": None,
+        "turn_model_overrides": None,
+    },
+    "prepare_spiritual": {
+        "artifact_key": "spiritual",
+        "context_keys": ["spiritual"],
+        "non_critical": True,
+        "empty_output": {"spiritual": {}},
+        "model_defaults": {},
+        "turn_model_overrides": None,
+    },
+    "prepare_local": {
+        "artifact_key": "local_items",
+        "context_keys": ["local_items"],
+        "non_critical": True,
+        "empty_output": {"local_items": []},
+        "model_defaults": None,
+        "turn_model_overrides": None,
+    },
+    "seams": {
+        "artifact_key": "seam_data",
+        "context_keys": ["seam_data"],
+        "non_critical": True,
+        "empty_output": {
+            "seam_data": {
+                "contested_narratives": [],
+                "coverage_gaps": [],
+                "key_assumptions": [],
+                "seam_count": 0,
+                "quiet_day": True,
+            }
+        },
+        "model_defaults": {},
+        "turn_model_overrides": None,
+    },
+    "cross_domain": {
+        "artifact_key": "cross_domain_output",
+        "context_keys": ["cross_domain_output"],
+        "non_critical": False,
+        "empty_output": None,
+        "model_defaults": {},
+        "turn_model_overrides": None,
+        "before_run": _load_previous_cross_domain,
+    },
+    "assemble": {
+        "artifact_key": "digest_json",
+        "context_keys": ["template_data", "digest_json"],
+        "non_critical": False,
+        "empty_output": None,
+        "model_defaults": None,
+        "turn_model_overrides": None,
+        "after_run": _write_assemble_outputs,
+        "load_cached": _load_cached_assemble_outputs,
+    },
+    "anomaly": {
+        "artifact_key": "anomaly_report",
+        "context_keys": ["anomaly_report"],
+        "non_critical": True,
+        "empty_output": {
+            "anomaly_report": {"anomalies": [], "checks_run": 0, "anomaly_count": 0}
+        },
+        "model_defaults": None,
+        "turn_model_overrides": None,
+    },
+    "briefing_packet": {
+        "artifact_key": "briefing_packet",
+        "context_keys": ["briefing_packet"],
+        "non_critical": True,
+        "empty_output": {"briefing_packet": {}},
+        "model_defaults": None,
+        "turn_model_overrides": None,
+    },
+    "send": {
+        "artifact_key": "send_result",
+        "context_keys": ["send_result"],
+        "non_critical": False,
+        "empty_output": None,
+        "model_defaults": None,
+        "turn_model_overrides": None,
+    },
+}
+
+# Stages that are allowed to fail without aborting the pipeline.
+# A failed non-critical stage produces an empty output and logs a warning.
+_NON_CRITICAL_STAGES = {
+    stage_name
+    for stage_name, meta in _STAGE_METADATA.items()
+    if meta.get("non_critical")
+}
+
+
+def _get_stage_meta(stage_name: str) -> dict:
+    """Return canonical stage metadata with safe defaults for unknown stages."""
+    meta = _STAGE_METADATA.get(stage_name, {})
+    artifact_key = meta.get("artifact_key", stage_name)
+    context_keys = meta.get("context_keys", [artifact_key])
+    return {
+        "artifact_key": artifact_key,
+        "context_keys": context_keys,
+        "non_critical": meta.get("non_critical", False),
+        "empty_output": deepcopy(meta.get("empty_output")),
+        "model_defaults": deepcopy(meta.get("model_defaults")),
+        "turn_model_overrides": deepcopy(meta.get("turn_model_overrides")),
+        "before_run": meta.get("before_run"),
+        "after_run": meta.get("after_run"),
+        "load_cached": meta.get("load_cached"),
+    }
+
+
+def _load_cached_stage_outputs(stage_name: str, context: dict, artifact_dir: Path) -> None:
+    """Reload all cached outputs for a skipped stage."""
+    meta = _get_stage_meta(stage_name)
+    custom_loader = meta.get("load_cached")
+    if custom_loader:
+        custom_loader(context, artifact_dir=artifact_dir)
+        return
+
+    for key in meta["context_keys"]:
+        artifact_data = _load_artifact(artifact_dir, key)
+        if artifact_data is not None:
+            context[key] = artifact_data
+
+
+def _run_stage_before_hook(stage_name: str, context: dict, **kwargs) -> None:
+    """Run any stage-specific pre-execution lifecycle hook."""
+    hook = _get_stage_meta(stage_name).get("before_run")
+    if hook:
+        hook(context, **kwargs)
+
+
+def _run_stage_after_hook(stage_name: str, context: dict, outputs: dict, **kwargs) -> None:
+    """Run any stage-specific post-execution lifecycle hook."""
+    hook = _get_stage_meta(stage_name).get("after_run")
+    if hook:
+        hook(context, outputs, **kwargs)
+
+
 # ---------------------------------------------------------------------------
 # Retry
 # ---------------------------------------------------------------------------
@@ -183,9 +390,25 @@ def _run_with_retry(fn, stage_name: str, max_retries: int = 2):
 # ---------------------------------------------------------------------------
 
 
-def _get_stage_model_config(stage_cfg: dict) -> dict | None:
-    """Extract the model config dict from a stage config entry."""
-    return stage_cfg.get("model")
+def _get_stage_model_config(
+    stage_cfg: dict,
+    stage_name: str | None = None,
+    config: dict | None = None,
+) -> dict | None:
+    """Resolve stage model config from global defaults, metadata, and manifest overrides."""
+    stage_meta = _get_stage_meta(stage_name or stage_cfg.get("name", ""))
+    manifest_model = stage_cfg.get("model")
+    if manifest_model is None and stage_meta["model_defaults"] is None:
+        return None
+
+    resolved = {}
+    if config:
+        resolved.update(config.get("llm", {}))
+    if stage_meta["model_defaults"]:
+        resolved.update(stage_meta["model_defaults"])
+    if manifest_model:
+        resolved.update(manifest_model)
+    return resolved or None
 
 
 def run_pipeline(
@@ -266,7 +489,8 @@ def run_pipeline(
 
     for stage_cfg in stage_manifest:
         stage_name = stage_cfg["name"]
-        model_config = _get_stage_model_config(stage_cfg)
+        stage_meta = _get_stage_meta(stage_name)
+        model_config = _get_stage_model_config(stage_cfg, stage_name=stage_name, config=config)
 
         # --sources-only: stop after collect
         if sources_only and stage_name != "collect":
@@ -284,21 +508,18 @@ def run_pipeline(
             if idx_current < idx_from:
                 log.info(f"  Loading cached artifact for skipped stage: {stage_name}")
                 if load_dir:
-                    artifact_data = _load_artifact(
-                        load_dir, _stage_artifact_key(stage_name)
-                    )
-                    if artifact_data is not None:
-                        context[_stage_artifact_key(stage_name)] = artifact_data
+                    _load_cached_stage_outputs(stage_name, context, load_dir)
                 continue  # don't execute this stage
 
-        # Before cross_domain, inject previous-day context for continuity
-        if stage_name == "cross_domain":
-            prev_dir = _find_most_recent_artifact_dir(before_date=run_date)
-            if prev_dir:
-                prev_xd = _load_artifact(prev_dir, "cross_domain_output")
-                if prev_xd:
-                    context["previous_cross_domain"] = prev_xd
-                    log.info(f"  Loaded previous cross_domain from {prev_dir.name}")
+        _run_stage_before_hook(
+            stage_name,
+            context,
+            run_date=run_date,
+            artifact_dir=artifact_dir,
+            dry_run=dry_run,
+            load_dir=load_dir,
+            config=config,
+        )
 
         # Execute the stage
         log.info(f"--- Stage: {stage_name} ---")
@@ -317,7 +538,7 @@ def run_pipeline(
             elapsed = time.monotonic() - t_start
             run_meta["stage_timings"][stage_name] = round(elapsed, 2)
 
-            if stage_name in _NON_CRITICAL_STAGES:
+            if stage_meta["non_critical"]:
                 log.warning(
                     f"Stage '{stage_name}' failed after retries (non-critical, continuing): {e}"
                 )
@@ -346,16 +567,16 @@ def run_pipeline(
             if key not in ("html",):  # don't double-write html; handled below
                 _save_artifact(artifact_dir, key, value)
 
-        # Special handling for assemble outputs: write HTML files
-        if stage_name == "assemble":
-            html = context.get("html", "")
-            if html:
-                (artifact_dir / "digest.html").write_text(html, encoding="utf-8")
-                (_OUTPUT_DIR / "last_digest.html").write_text(html, encoding="utf-8")
-                if not dry_run:
-                    (_OUTPUT_DIR / f"{run_date}.html").write_text(
-                        html, encoding="utf-8"
-                    )
+        _run_stage_after_hook(
+            stage_name,
+            context,
+            outputs,
+            artifact_dir=artifact_dir,
+            run_date=run_date,
+            dry_run=dry_run,
+            load_dir=load_dir,
+            config=config,
+        )
 
         # --sources-only: dump sources.json after collect and exit
         if sources_only and stage_name == "collect":
@@ -389,45 +610,12 @@ def run_pipeline(
 
 def _stage_artifact_key(stage_name: str) -> str:
     """Map stage name to its primary output artifact key."""
-    return {
-        "collect": "raw_sources",
-        "compress": "compressed_transcripts",
-        # "synthesize" removed — was Phase 0 legacy, replaced by analyze_domain + cross_domain
-        "analyze_domain": "domain_analysis",  # Phase 1+
-        "prepare_calendar": "calendar",
-        "prepare_weather": "weather",
-        "prepare_spiritual": "spiritual",
-        "prepare_local": "local_items",
-        "seams": "seam_data",
-        "cross_domain": "cross_domain_output",  # Phase 3+
-        "assemble": "digest_json",
-        "anomaly": "anomaly_report",
-        "briefing_packet": "briefing_packet",
-        "send": "send_result",
-    }.get(stage_name, stage_name)
+    return _get_stage_meta(stage_name)["artifact_key"]
 
 
 def _empty_stage_output(stage_name: str) -> dict:
     """Return safe empty outputs for a failed non-critical stage."""
-    return {
-        "compress": {"compressed_transcripts": []},
-        "seams": {
-            "seam_data": {
-                "contested_narratives": [],
-                "coverage_gaps": [],
-                "key_assumptions": [],
-                "seam_count": 0,
-                "quiet_day": True,
-            }
-        },
-        "prepare_weather": {"weather": {}, "weather_html": ""},
-        "prepare_spiritual": {"spiritual": {}},
-        "prepare_local": {"local_items": []},
-        "anomaly": {
-            "anomaly_report": {"anomalies": [], "checks_run": 0, "anomaly_count": 0}
-        },
-        "briefing_packet": {"briefing_packet": {}},
-    }.get(stage_name, {})
+    return _get_stage_meta(stage_name)["empty_output"] or {}
 
 
 # ---------------------------------------------------------------------------

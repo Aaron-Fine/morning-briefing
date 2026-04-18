@@ -12,13 +12,30 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from pipeline import (
+    _get_stage_meta,
     _stage_artifact_key,
     _empty_stage_output,
     _NON_CRITICAL_STAGES,
+    _load_cached_stage_outputs,
     _save_artifact,
     _load_artifact,
     _prune_artifacts,
 )
+
+
+class TestStageMetadata:
+    def test_prepare_weather_loads_all_context_keys(self):
+        meta = _get_stage_meta("prepare_weather")
+        assert meta["artifact_key"] == "weather"
+        assert meta["context_keys"] == ["weather", "weather_html"]
+        assert meta["non_critical"] is True
+
+    def test_unknown_stage_gets_safe_defaults(self):
+        meta = _get_stage_meta("unknown_stage")
+        assert meta["artifact_key"] == "unknown_stage"
+        assert meta["context_keys"] == ["unknown_stage"]
+        assert meta["non_critical"] is False
+        assert meta["empty_output"] is None
 
 
 class TestStageArtifactKey:
@@ -105,6 +122,32 @@ class TestArtifactPersistence:
         artifact_dir = tmp_path / "artifacts" / "2026-01-01"
         artifact_dir.mkdir(parents=True)
         assert _load_artifact(artifact_dir, "nonexistent") is None
+
+    def test_load_cached_stage_outputs_loads_secondary_artifacts(self, tmp_path):
+        artifact_dir = tmp_path / "artifacts" / "2026-01-01"
+        artifact_dir.mkdir(parents=True)
+        _save_artifact(artifact_dir, "weather", {"forecast": []})
+        _save_artifact(artifact_dir, "weather_html", "<p>Forecast</p>")
+
+        context = {}
+        _load_cached_stage_outputs("prepare_weather", context, artifact_dir)
+
+        assert context["weather"] == {"forecast": []}
+        assert context["weather_html"] == "<p>Forecast</p>"
+
+    def test_load_cached_assemble_outputs_restores_html(self, tmp_path):
+        artifact_dir = tmp_path / "artifacts" / "2026-01-01"
+        artifact_dir.mkdir(parents=True)
+        _save_artifact(artifact_dir, "template_data", {"date": "Apr 18"})
+        _save_artifact(artifact_dir, "digest_json", {"date": "Apr 18"})
+        (artifact_dir / "digest.html").write_text("<html>digest</html>", encoding="utf-8")
+
+        context = {}
+        _load_cached_stage_outputs("assemble", context, artifact_dir)
+
+        assert context["template_data"] == {"date": "Apr 18"}
+        assert context["digest_json"] == {"date": "Apr 18"}
+        assert context["html"] == "<html>digest</html>"
 
 
 class TestPruneArtifacts:

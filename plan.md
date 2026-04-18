@@ -144,24 +144,24 @@ docker compose run --rm morning-digest python pipeline.py --sources-only
 
 ### Tasks
 
-- [ ] Refactor stage metadata into a single canonical structure:
+- [x] Refactor stage metadata into a single canonical structure:
   - primary artifact key,
   - criticality,
   - empty fallback,
   - model defaults,
   - per-turn override resolution.
-- [ ] Keep stage order in config; avoid duplicating stage semantics in multiple maps or sets.
-- [ ] Define the canonical internal stage metadata contract explicitly, including:
+- [x] Keep stage order in config; avoid duplicating stage semantics in multiple maps or sets.
+- [x] Define the canonical internal stage metadata contract explicitly, including:
   - primary artifact key,
   - non-critical or fatal behavior,
   - empty fallback function or structure,
   - model defaults,
   - optional per-turn overrides.
-- [ ] Fold pipeline special cases into the stage metadata or lifecycle model so `pipeline.py` stops accumulating per-stage branches for:
+- [x] Fold pipeline special cases into the stage metadata or lifecycle model so `pipeline.py` stops accumulating per-stage branches for:
   - previous-day context loading,
   - stage-specific extra kwargs,
   - stage-specific post-run side effects.
-- [ ] Replace central registries in `pipeline.py` with stage-owned metadata or an equivalent single source of truth:
+- [x] Replace central registries in `pipeline.py` with stage-owned metadata or an equivalent single source of truth:
   - `_stage_artifact_key`
   - `_empty_stage_output`
   - `_NON_CRITICAL_STAGES`
@@ -170,27 +170,27 @@ docker compose run --rm morning-digest python pipeline.py --sources-only
   - performs template substitution,
   - fails on missing variables,
   - constrains prompt lookup to trusted prompt paths.
-- [ ] Treat prompt files as trusted implementation assets, not user content.
+- [x] Treat prompt files as trusted implementation assets, not user content.
 - [ ] Migrate existing large inline prompts to prompt files where practical, starting with stages that will be refactored next.
-- [ ] Add comments or conventions for how prompt variables are passed and escaped.
+- [x] Add comments or conventions for how prompt variables are passed and escaped.
 
 ### Tests / checks
 
-- [ ] update/add contract tests for stage metadata coverage
+- [x] update/add contract tests for stage metadata coverage
 - [x] add prompt loader tests:
   - successful substitution,
   - missing variable failure,
   - disallowed path failure
-- [ ] verify existing stages still pass stage artifact key and empty output tests
-- [ ] full test suite + dry-run
+- [x] verify existing stages still pass stage artifact key and empty output tests
+- [x] full test suite + dry-run
 
 ### Completion criteria
 
-- [ ] adding or modifying a stage now requires one metadata entry rather than scattered edits
+- [x] adding or modifying a stage now requires one metadata entry rather than scattered edits
 - [ ] prompt files are the standard path for large prompts
-- [ ] prompt loader is in place before multi-turn stage work begins
-- [ ] stage metadata contract is documented clearly enough that future stages can follow it without hidden conventions
-- [ ] `pipeline.py` no longer needs scattered stage-specific branches for features covered by stage metadata or lifecycle hooks
+- [x] prompt loader is in place before multi-turn stage work begins
+- [x] stage metadata contract is documented clearly enough that future stages can follow it without hidden conventions
+- [x] `pipeline.py` no longer needs scattered stage-specific branches for features covered by stage metadata or lifecycle hooks
 
 ---
 

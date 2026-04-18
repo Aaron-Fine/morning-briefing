@@ -180,3 +180,29 @@ class TestStageArtifactKeyCoverage:
                 f"Stage '{stage}' falls through to identity fallback — "
                 f"add an explicit mapping in _stage_artifact_key"
             )
+
+
+class TestStageMetadataCoverage:
+    """Stage metadata should remain the single source of truth for pipeline behavior."""
+
+    def test_known_stages_have_metadata_entries(self):
+        from pipeline import _STAGE_METADATA
+
+        stage_names = [
+            "collect",
+            "compress",
+            "analyze_domain",
+            "prepare_calendar",
+            "prepare_weather",
+            "prepare_spiritual",
+            "prepare_local",
+            "seams",
+            "cross_domain",
+            "assemble",
+            "anomaly",
+            "briefing_packet",
+            "send",
+        ]
+
+        for stage in stage_names:
+            assert stage in _STAGE_METADATA, f"Missing stage metadata for '{stage}'"
