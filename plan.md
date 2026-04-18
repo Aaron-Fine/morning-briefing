@@ -533,24 +533,30 @@ If a feed URL is wrong or dead, do not guess:
 
 ### Tasks
 
-- [ ] implement `validate_new_feeds.py`
-- [ ] run it inside Docker, not on the host
-- [ ] add only confirmed-working feeds to config
-- [ ] omit failed feeds and document the omission
-- [ ] tune caps for prolific feeds
-- [ ] update README category table and category treatment text
+- [x] implement `validate_new_feeds.py`
+- [x] run it inside Docker, not on the host
+- [x] add only confirmed-working feeds to config
+- [x] omit failed feeds and document the omission
+- [x] tune caps for prolific feeds
+- [x] update README category table and category treatment text
 
 ### Tests / checks
 
-- [ ] run validation script and preserve output in implementation logs
-- [ ] run `--sources-only` and verify each new category appears in `output/sources.json`
+- [x] run validation script and preserve output in implementation logs
+- [x] run `--sources-only` and verify each new category appears in `output/sources.json`
 
 ### Completion criteria
 
-- [ ] all included feeds are validated
-- [ ] `sources.json` shows all included new categories
-- [ ] `validate_new_feeds.py` is committed and working
-- [ ] README category table updated
+- [x] all included feeds are validated
+- [x] `sources.json` shows all included new categories
+- [x] `validate_new_feeds.py` is committed and working
+- [x] README category table updated
+
+### Omitted feeds (need replacement URLs)
+
+- Salt Lake Tribune — RSS endpoint returns 404
+- KUER (Utah NPR) — RSS endpoint returns 404
+- Institute for Family Studies — RSS endpoint returns 404
 
 ---
 

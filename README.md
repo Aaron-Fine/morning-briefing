@@ -10,7 +10,7 @@ Every morning at 6:00 AM MT, this container:
 
 1. **Collects** data from multiple sources:
    - YouTube analysis channels (yt-dlp — transcripts from configured channels, no API key)
-   - RSS feeds (25+ categorized feeds: non-western press, defense/military, geopolitics, AI/tech, economics, cybersecurity, and more)
+   - RSS feeds (50+ categorized feeds: non-western press, defense/military, geopolitics, AI/tech, economics, energy/materials, science/biotech, legal/institutional, cybersecurity, demographics, and more)
    - Local news RSS (Cache Valley Daily, Herald Journal)
    - NWS weather (primary) with Open-Meteo fallback, AirNow AQI, NOAA normals/records
    - Finnhub market quotes (SPY, DIA, XAR, XLE)
@@ -274,6 +274,12 @@ The digest applies different editorial treatment to each category:
 | `global-south` | Global South perspective |
 | `perspective-diversity` | "Stress test" layer — surface only when contradicting consensus |
 | `cyber` | Cybersecurity |
+| `energy-materials` | Physical substrate: power, raw materials, grid, industrial capacity |
+| `culture-structural` | Institutional shifts — not entertainment or discourse-chasing |
+| `science-biotech` | Frontier science and biotech with geopolitical/economic implications |
+| `legal-institutional` | Legal analysis, Supreme Court, national security law |
+| `regional-west` | Utah and Western US regional reporting |
+| `demographics` | Population, migration, and demographic trend research |
 
 ### Weather Display
 
