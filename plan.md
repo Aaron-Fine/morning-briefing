@@ -794,37 +794,37 @@ History entries should preserve the per-run contract fields needed to derive rec
 
 ### Data-shape and assembly updates
 
-- [ ] keep the single editorial `at_a_glance` flow
-- [ ] do not introduce reserved rendering regions for new desks unless implementation proves necessary
-- [ ] ensure `assemble` continues to consume schema-preserving `cross_domain_output`
-- [ ] ensure diagnostics remain opt-in for dry-run or explicit diagnostics mode only
+- [x] keep the single editorial `at_a_glance` flow
+- [x] do not introduce reserved rendering regions for new desks unless implementation proves necessary
+- [x] ensure `assemble` continues to consume schema-preserving `cross_domain_output`
+- [x] ensure diagnostics remain opt-in for dry-run or explicit diagnostics mode only
 
 ### Safety / trust-boundary tasks
 
-- [ ] choose one safe-HTML mechanism and make it explicit
-- [ ] remove duplicate safe-bypass behavior for the same field
-- [ ] ensure all non-HTML fields remain autoescaped
-- [ ] document which fields are trusted HTML and why
+- [x] choose one safe-HTML mechanism and make it explicit
+- [x] remove duplicate safe-bypass behavior for the same field — removed `|safe` from weather_html (Markup() in assemble.py is sufficient)
+- [x] ensure all non-HTML fields remain autoescaped
+- [x] document which fields are trusted HTML and why — docstring in assemble.py, comment in email_template.py
 
 ### Optional UX cleanup
 
 - [ ] move hardcoded personalization or location labels to config-backed fields when practical
-- [ ] keep backward compatibility where possible
+- [x] keep backward compatibility where possible
 
 ### Tests / checks
 
-- [ ] `tests/test_assemble.py` covers current and expanded output shapes
-- [ ] diagnostics section appears only in dry-run or diagnostics mode
-- [ ] diagnostics section omitted in normal mode
-- [ ] trusted HTML renders as intended
-- [ ] untrusted fields remain escaped
-- [ ] section order remains stable
+- [x] `tests/test_assemble.py` covers current and expanded output shapes
+- [x] diagnostics section appears only in dry-run or diagnostics mode
+- [x] diagnostics section omitted in normal mode
+- [x] trusted HTML renders as intended
+- [x] untrusted fields remain escaped
+- [x] section order remains stable
 
 ### Completion criteria
 
-- [ ] digest remains readable and structurally stable
-- [ ] diagnostics never leak into the sent email path by default
-- [ ] trust boundary is explicit and covered by tests
+- [x] digest remains readable and structurally stable
+- [x] diagnostics never leak into the sent email path by default
+- [x] trust boundary is explicit and covered by tests
 
 ---
 
