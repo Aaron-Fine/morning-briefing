@@ -41,6 +41,8 @@ _VALID_TAGS = {
     "cyber",
     "local",
     "science",
+    "energy",
+    "biotech",
 }
 
 _TAG_LABELS = {
@@ -54,6 +56,8 @@ _TAG_LABELS = {
     "cyber": "Cyber",
     "local": "Local",
     "science": "Science",
+    "energy": "Energy",
+    "biotech": "Biotech",
 }
 
 # Keyword → standard tag mapping for post-processing normalization.
@@ -125,12 +129,33 @@ _TAG_KEYWORDS: list[tuple[str, str]] = [
     ("gdp", "econ"),
     ("labor", "econ"),
     ("wage", "econ"),
-    ("energy", "econ"),
-    ("oil", "econ"),
     ("food", "econ"),
     ("supply chain", "econ"),
     ("wto", "econ"),
     ("imf", "econ"),
+    # energy
+    ("energy", "energy"),
+    ("oil", "energy"),
+    ("gas", "energy"),
+    ("grid", "energy"),
+    ("utility", "energy"),
+    ("mining", "energy"),
+    ("critical mineral", "energy"),
+    ("lithium", "energy"),
+    ("solar", "energy"),
+    ("wind power", "energy"),
+    ("nuclear power", "energy"),
+    ("electricity", "energy"),
+    # biotech
+    ("biotech", "biotech"),
+    ("pharmaceutical", "biotech"),
+    ("drug approval", "biotech"),
+    ("clinical trial", "biotech"),
+    ("gene therapy", "biotech"),
+    ("crispr", "biotech"),
+    ("vaccine", "biotech"),
+    ("fda", "biotech"),
+    ("nih", "biotech"),
     # science
     ("science", "science"),
     ("climate", "science"),

@@ -651,28 +651,28 @@ These are optional only in the sense that implementation may prove one or both u
 
 ### Tasks
 
-- [ ] introduce desk manifest in config and route categories through it
-- [ ] implement the three new desk prompts with the exact scoping constraints above
-- [ ] ensure seams and cross_domain prompts enumerate and consume all seven desks
-- [ ] ensure new desks can compete for `at_a_glance` inclusion with no reserved slots
-- [ ] add or avoid new tags intentionally; keep the list small
-- [ ] if `energy` or `biotech` is adopted, treat that as an explicit vocabulary change and update all synchronized surfaces in the same slice
-- [ ] update fixtures and tests to reflect the new desk set
+- [x] introduce desk manifest in config and route categories through it
+- [x] implement the three new desk prompts with the exact scoping constraints above
+- [x] ensure seams and cross_domain prompts enumerate and consume all seven desks
+- [x] ensure new desks can compete for `at_a_glance` inclusion with no reserved slots
+- [x] add or avoid new tags intentionally; keep the list small
+- [x] if `energy` or `biotech` is adopted, treat that as an explicit vocabulary change and update all synchronized surfaces in the same slice
+- [x] update fixtures and tests to reflect the new desk set
 
 ### Tests / checks
 
-- [ ] representative fixture tests for each new desk output
-- [ ] cross_domain tests ensure new desks are considered when relevant
-- [ ] contract tests cover any added tags across all synchronized modules
+- [x] representative fixture tests for each new desk output
+- [x] cross_domain tests ensure new desks are considered when relevant
+- [x] contract tests cover any added tags across all synchronized modules
 - [ ] dry-run visual check for digest length growth target (<= +20% vs baseline)
 
 ### Completion criteria
 
-- [ ] 7 desks running with manifest-driven routing
-- [ ] no schema regressions in downstream stages
-- [ ] seams and cross_domain are aware of all desks
-- [ ] new desks participate editorially without guaranteed placement
-- [ ] tests pass
+- [x] 7 desks running with manifest-driven routing
+- [x] no schema regressions in downstream stages
+- [x] seams and cross_domain are aware of all desks
+- [x] new desks participate editorially without guaranteed placement
+- [x] tests pass
 
 ---
 

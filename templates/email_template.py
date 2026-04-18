@@ -64,6 +64,8 @@ EMAIL_TEMPLATE = _env.from_string("""\
     --tag-science-text:  #7e5109; --tag-science-bg:  #fef5e7;
     --tag-econ-text:     #1a5276; --tag-econ-bg:     #d4efdf;
     --tag-cyber-text:    #633974; --tag-cyber-bg:    #f5eef8;
+    --tag-energy-text:   #784212; --tag-energy-bg:   #fdebd0;
+    --tag-biotech-text:  #0e6251; --tag-biotech-bg:  #d1f2eb;
 
     /* Weather display */
     --wx-bg:         #f7f5f0;

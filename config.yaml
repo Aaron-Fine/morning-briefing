@@ -100,6 +100,17 @@ pipeline:
     - name: send
       # No model needed — SMTP delivery
 
+# Desk manifest — maps analysis desks to RSS feed categories.
+# Each desk runs a focused LLM pass on its subset of sources.
+desks:
+  - { name: "geopolitics", categories: ["non-western", "western-analysis", "substack-independent", "global-south", "perspective-diversity"] }
+  - { name: "defense_space", categories: ["defense-mil"] }
+  - { name: "ai_tech", categories: ["ai-tech", "cyber"] }
+  - { name: "energy_materials", categories: ["energy-materials"] }
+  - { name: "culture_structural", categories: ["culture-structural"] }
+  - { name: "science_biotech", categories: ["science-biotech"] }
+  - { name: "econ", categories: ["econ-trade"] }
+
 location:
   city: "Logan"
   state: "UT"

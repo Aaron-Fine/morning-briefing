@@ -42,6 +42,8 @@ _TAG_LABELS = {
     "cyber": "Cyber",
     "local": "Local",
     "science": "Science",
+    "energy": "Energy",
+    "biotech": "Biotech",
 }
 
 

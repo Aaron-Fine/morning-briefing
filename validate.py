@@ -29,6 +29,8 @@ VALID_TAGS = {
     "science",
     "econ",
     "cyber",
+    "energy",
+    "biotech",
 }
 VALID_TAG_LABELS = {
     "war": "Conflict",
@@ -41,6 +43,8 @@ VALID_TAG_LABELS = {
     "science": "Science",
     "econ": "Economy",
     "cyber": "Cyber",
+    "energy": "Energy",
+    "biotech": "Biotech",
 }
 
 # HTML tags allowed in deep dive body fields after sanitization
