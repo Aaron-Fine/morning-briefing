@@ -231,22 +231,31 @@ class TestEmptyOutput:
 class TestCrossDomainRun:
     @patch("stages.cross_domain.call_llm")
     def test_successful_run(self, mock_llm):
-        mock_llm.return_value = {
-            "at_a_glance": [
-                {
-                    "tag": "war",
-                    "headline": "Test",
-                    "facts": "Facts",
-                    "analysis": "Analysis",
-                    "source_depth": "widely-reported",
-                    "links": [],
-                }
-            ],
-            "deep_dives": [],
-            "cross_domain_connections": [],
-            "worth_reading": [],
-            "market_context": "Test context",
-        }
+        mock_llm.side_effect = [
+            {
+                "schema_version": 1,
+                "cross_domain_connections": [],
+                "deep_dives": [{"topic": "Test topic", "angle": "Angle", "why_selected": "Why"}],
+                "worth_reading": [{"topic": "Long read", "why_worth_reading": "Because"}],
+                "rejected_alternatives": [{"topic": "Other", "reason": "Lower priority"}],
+            },
+            {
+                "at_a_glance": [
+                    {
+                        "tag": "war",
+                        "headline": "Test",
+                        "facts": "Facts",
+                        "analysis": "Analysis",
+                        "source_depth": "widely-reported",
+                        "links": [],
+                    }
+                ],
+                "deep_dives": [],
+                "cross_domain_connections": [],
+                "worth_reading": [],
+                "market_context": "Test context",
+            },
+        ]
         context = {
             "domain_analysis": {
                 "geopolitics": {
@@ -265,10 +274,12 @@ class TestCrossDomainRun:
         }
         config = {"llm": {"provider": "fireworks"}}
         result = run(context, config)
+        assert "cross_domain_plan" in result
         assert "cross_domain_output" in result
         output = result["cross_domain_output"]
         assert len(output["at_a_glance"]) == 1
         assert output["at_a_glance"][0]["tag"] == "war"
+        assert mock_llm.call_count == 2
 
     @patch("stages.cross_domain.call_llm")
     def test_llm_failure_returns_empty(self, mock_llm):
@@ -311,12 +322,21 @@ class TestCrossDomainRun:
                     "links": [],
                 }
             )
-        mock_llm.return_value = {
-            "at_a_glance": items,
-            "deep_dives": [],
-            "cross_domain_connections": [],
-            "worth_reading": [],
-        }
+        mock_llm.side_effect = [
+            {
+                "schema_version": 1,
+                "cross_domain_connections": [],
+                "deep_dives": [{"topic": "Test topic", "angle": "Angle", "why_selected": "Why"}],
+                "worth_reading": [{"topic": "Long read", "why_worth_reading": "Because"}],
+                "rejected_alternatives": [{"topic": "Other", "reason": "Lower priority"}],
+            },
+            {
+                "at_a_glance": items,
+                "deep_dives": [],
+                "cross_domain_connections": [],
+                "worth_reading": [],
+            },
+        ]
         context = {
             "domain_analysis": {"geopolitics": {"items": [{"headline": "Test"}]}},
             "seam_data": {},
@@ -331,24 +351,33 @@ class TestCrossDomainRun:
 
     @patch("stages.cross_domain.call_llm")
     def test_url_validation_filters_unknown_domains(self, mock_llm):
-        mock_llm.return_value = {
-            "at_a_glance": [
-                {
-                    "tag": "war",
-                    "headline": "Test",
-                    "facts": "Facts",
-                    "analysis": "Analysis",
-                    "source_depth": "widely-reported",
-                    "links": [
-                        {"url": "https://example.com/valid", "label": "Valid"},
-                        {"url": "https://unknown.com/fake", "label": "Fake"},
-                    ],
-                }
-            ],
-            "deep_dives": [],
-            "cross_domain_connections": [],
-            "worth_reading": [],
-        }
+        mock_llm.side_effect = [
+            {
+                "schema_version": 1,
+                "cross_domain_connections": [],
+                "deep_dives": [{"topic": "Test topic", "angle": "Angle", "why_selected": "Why"}],
+                "worth_reading": [{"topic": "Long read", "why_worth_reading": "Because"}],
+                "rejected_alternatives": [{"topic": "Other", "reason": "Lower priority"}],
+            },
+            {
+                "at_a_glance": [
+                    {
+                        "tag": "war",
+                        "headline": "Test",
+                        "facts": "Facts",
+                        "analysis": "Analysis",
+                        "source_depth": "widely-reported",
+                        "links": [
+                            {"url": "https://example.com/valid", "label": "Valid"},
+                            {"url": "https://unknown.com/fake", "label": "Fake"},
+                        ],
+                    }
+                ],
+                "deep_dives": [],
+                "cross_domain_connections": [],
+                "worth_reading": [],
+            },
+        ]
         context = {
             "domain_analysis": {"geopolitics": {"items": [{"headline": "Test"}]}},
             "seam_data": {},
@@ -364,20 +393,29 @@ class TestCrossDomainRun:
 
     @patch("stages.cross_domain.call_llm")
     def test_worth_reading_url_validation(self, mock_llm):
-        mock_llm.return_value = {
-            "at_a_glance": [],
-            "deep_dives": [],
-            "cross_domain_connections": [],
-            "worth_reading": [
-                {
-                    "title": "Test",
-                    "url": "https://unknown.com/fake",
-                    "source": "Unknown",
-                    "description": "Desc",
-                    "read_time": "10 min",
-                }
-            ],
-        }
+        mock_llm.side_effect = [
+            {
+                "schema_version": 1,
+                "cross_domain_connections": [],
+                "deep_dives": [{"topic": "Test topic", "angle": "Angle", "why_selected": "Why"}],
+                "worth_reading": [{"topic": "Long read", "why_worth_reading": "Because"}],
+                "rejected_alternatives": [{"topic": "Other", "reason": "Lower priority"}],
+            },
+            {
+                "at_a_glance": [],
+                "deep_dives": [],
+                "cross_domain_connections": [],
+                "worth_reading": [
+                    {
+                        "title": "Test",
+                        "url": "https://unknown.com/fake",
+                        "source": "Unknown",
+                        "description": "Desc",
+                        "read_time": "10 min",
+                    }
+                ],
+            },
+        ]
         context = {
             "domain_analysis": {"geopolitics": {"items": [{"headline": "Test"}]}},
             "seam_data": {},
@@ -391,21 +429,30 @@ class TestCrossDomainRun:
     def test_tag_normalisation_in_run(self):
         """Test that unknown tags get normalized to domestic."""
         with patch("stages.cross_domain.call_llm") as mock_llm:
-            mock_llm.return_value = {
-                "at_a_glance": [
-                    {
-                        "tag": "unknown_tag",
-                        "headline": "Test",
-                        "facts": "Facts",
-                        "analysis": "Analysis",
-                        "source_depth": "single-source",
-                        "links": [],
-                    }
-                ],
-                "deep_dives": [],
-                "cross_domain_connections": [],
-                "worth_reading": [],
-            }
+            mock_llm.side_effect = [
+                {
+                    "schema_version": 1,
+                    "cross_domain_connections": [],
+                    "deep_dives": [{"topic": "Test topic", "angle": "Angle", "why_selected": "Why"}],
+                    "worth_reading": [{"topic": "Long read", "why_worth_reading": "Because"}],
+                    "rejected_alternatives": [{"topic": "Other", "reason": "Lower priority"}],
+                },
+                {
+                    "at_a_glance": [
+                        {
+                            "tag": "unknown_tag",
+                            "headline": "Test",
+                            "facts": "Facts",
+                            "analysis": "Analysis",
+                            "source_depth": "single-source",
+                            "links": [],
+                        }
+                    ],
+                    "deep_dives": [],
+                    "cross_domain_connections": [],
+                    "worth_reading": [],
+                },
+            ]
             context = {
                 "domain_analysis": {"geopolitics": {"items": [{"headline": "Test"}]}},
                 "seam_data": {},
@@ -418,12 +465,21 @@ class TestCrossDomainRun:
     def test_market_context_fallback_from_econ(self):
         """Test that market_context falls back to econ domain analysis."""
         with patch("stages.cross_domain.call_llm") as mock_llm:
-            mock_llm.return_value = {
-                "at_a_glance": [],
-                "deep_dives": [],
-                "cross_domain_connections": [],
-                "worth_reading": [],
-            }
+            mock_llm.side_effect = [
+                {
+                    "schema_version": 1,
+                    "cross_domain_connections": [],
+                    "deep_dives": [{"topic": "Test topic", "angle": "Angle", "why_selected": "Why"}],
+                    "worth_reading": [{"topic": "Long read", "why_worth_reading": "Because"}],
+                    "rejected_alternatives": [{"topic": "Other", "reason": "Lower priority"}],
+                },
+                {
+                    "at_a_glance": [],
+                    "deep_dives": [],
+                    "cross_domain_connections": [],
+                    "worth_reading": [],
+                },
+            ]
             context = {
                 "domain_analysis": {
                     "geopolitics": {"items": [{"headline": "Test"}]},

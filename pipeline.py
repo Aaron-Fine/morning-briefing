@@ -157,6 +157,34 @@ def _load_previous_cross_domain(context: dict, *, run_date: str, **_kwargs) -> N
         log.info(f"  Loaded previous cross_domain from {prev_dir.name}")
 
 
+def _load_same_day_cross_domain_plan(
+    context: dict,
+    *,
+    artifact_dir: Path,
+    stage_from: str | None = None,
+    from_plan: bool = False,
+    **_kwargs,
+) -> None:
+    """Optionally preload the same-day cross-domain plan for execution-only reruns."""
+    if not from_plan or stage_from != "cross_domain":
+        return
+
+    plan = _load_artifact(artifact_dir, "cross_domain_plan")
+    if isinstance(plan, dict):
+        context["cross_domain_plan"] = plan
+        context["cross_domain_from_plan"] = True
+        log.info("  Loaded same-day cross_domain_plan for --from-plan reuse")
+    else:
+        log.info("  No readable same-day cross_domain_plan found; recomputing Turn 1")
+
+
+def _prepare_cross_domain_context(context: dict, **kwargs) -> None:
+    """Load continuity context and optional same-day plan reuse inputs."""
+    _load_previous_cross_domain(context, **kwargs)
+    # Validity rules for reusing a saved plan may tighten over time if needed.
+    _load_same_day_cross_domain_plan(context, **kwargs)
+
+
 def _write_assemble_outputs(
     context: dict,
     outputs: dict,
@@ -270,12 +298,12 @@ _STAGE_METADATA = {
     },
     "cross_domain": {
         "artifact_key": "cross_domain_output",
-        "context_keys": ["cross_domain_output"],
+        "context_keys": ["cross_domain_plan", "cross_domain_output"],
         "non_critical": False,
         "empty_output": None,
         "model_defaults": {},
         "turn_model_overrides": None,
-        "before_run": _load_previous_cross_domain,
+        "before_run": _prepare_cross_domain_context,
     },
     "assemble": {
         "artifact_key": "digest_json",
@@ -422,6 +450,7 @@ def run_pipeline(
     sources_only: bool = False,
     lookback_hours: int | None = None,
     stage_from: str | None = None,
+    from_plan: bool = False,
 ) -> None:
     """Execute the full pipeline.
 
@@ -459,6 +488,9 @@ def run_pipeline(
     if stage_from and stage_from not in stage_names:
         log.error(f"Unknown stage: '{stage_from}'. Valid stages: {stage_names}")
         sys.exit(1)
+    if from_plan and stage_from != "cross_domain":
+        log.error("--from-plan is only supported with --stage cross_domain")
+        sys.exit(1)
 
     skip_before = stage_from  # stages before this are loaded from artifacts
 
@@ -488,6 +520,7 @@ def run_pipeline(
             "sources_only": sources_only,
             "lookback_hours": lookback_hours,
             "stage_from": stage_from,
+            "from_plan": from_plan,
         },
     }
 
@@ -525,6 +558,8 @@ def run_pipeline(
             dry_run=dry_run,
             load_dir=load_dir,
             config=config,
+            stage_from=stage_from,
+            from_plan=from_plan,
         )
 
         # Execute the stage
@@ -655,6 +690,11 @@ def main() -> None:
         default=None,
         help="Re-run from this stage onwards, loading prior stage artifacts from disk",
     )
+    parser.add_argument(
+        "--from-plan",
+        action="store_true",
+        help="With --stage cross_domain, reuse same-day cross_domain_plan.json when readable",
+    )
     args = parser.parse_args()
 
     run_pipeline(
@@ -662,6 +702,7 @@ def main() -> None:
         sources_only=args.sources_only,
         lookback_hours=args.lookback_hours,
         stage_from=args.stage,
+        from_plan=args.from_plan,
     )
 
 

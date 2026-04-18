@@ -421,31 +421,31 @@ Minimum useful definition:
 
 ### Implementation checklist
 
-- [ ] Implement Turn 1 planning call with `cross_domain_plan.json` artifact.
-- [ ] Implement Turn 2 execution call consuming the plan and stage context.
-- [ ] Add `--from-plan` CLI behavior with the minimum useful definition above.
-- [ ] Add a code note that validity rules for plan reuse may evolve during implementation.
-- [ ] Preserve final `cross_domain_output` schema.
-- [ ] Persist `cross_domain_plan.json` as the serialized artifact for the explicit `cross_domain_plan` contract.
+- [x] Implement Turn 1 planning call with `cross_domain_plan.json` artifact.
+- [x] Implement Turn 2 execution call consuming the plan and stage context.
+- [x] Add `--from-plan` CLI behavior with the minimum useful definition above.
+- [x] Add a code note that validity rules for plan reuse may evolve during implementation.
+- [x] Preserve final `cross_domain_output` schema.
+- [x] Persist `cross_domain_plan.json` as the serialized artifact for the explicit `cross_domain_plan` contract.
 
 ### Tests / checks
 
-- [ ] `tests/test_cross_domain_two_turn.py`:
+- [x] `tests/test_cross_domain_two_turn.py`:
   - `cross_domain_plan.json` is produced with expected keys
   - `worth_reading` is produced via the planning path
   - final output matches baseline structure
   - `--from-plan` skips Turn 1 when the same-day plan exists
   - `--from-plan` recomputes Turn 1 when the plan is missing or unreadable
-- [ ] update any cross-domain model/config tests for two-turn flow
-- [ ] run `--dry-run`
+- [x] update any cross-domain model/config tests for two-turn flow
+- [x] run `--dry-run`
 
 ### Completion criteria
 
-- [ ] plan and final artifacts both produced
-- [ ] `--from-plan` works and is documented in code/tests
-- [ ] final digest renders correctly
-- [ ] no Friday-specific logic remains in this stage
-- [ ] `cross_domain_plan` is stable enough to support both `--from-plan` and `coverage_gaps`
+- [x] plan and final artifacts both produced
+- [x] `--from-plan` works and is documented in code/tests
+- [x] final digest renders correctly
+- [x] no Friday-specific logic remains in this stage
+- [x] `cross_domain_plan` is stable enough to support both `--from-plan` and `coverage_gaps`
 
 ---
 

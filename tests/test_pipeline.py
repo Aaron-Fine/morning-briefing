@@ -17,6 +17,7 @@ from pipeline import (
     _empty_stage_output,
     _NON_CRITICAL_STAGES,
     _load_cached_stage_outputs,
+    _prepare_cross_domain_context,
     _save_artifact,
     _load_artifact,
     _prune_artifacts,
@@ -135,6 +136,18 @@ class TestArtifactPersistence:
         assert context["weather"] == {"forecast": []}
         assert context["weather_html"] == "<p>Forecast</p>"
 
+    def test_load_cached_cross_domain_outputs_loads_plan_and_output(self, tmp_path):
+        artifact_dir = tmp_path / "artifacts" / "2026-01-01"
+        artifact_dir.mkdir(parents=True)
+        _save_artifact(artifact_dir, "cross_domain_plan", {"schema_version": 1})
+        _save_artifact(artifact_dir, "cross_domain_output", {"at_a_glance": []})
+
+        context = {}
+        _load_cached_stage_outputs("cross_domain", context, artifact_dir)
+
+        assert context["cross_domain_plan"] == {"schema_version": 1}
+        assert context["cross_domain_output"] == {"at_a_glance": []}
+
     def test_load_cached_assemble_outputs_restores_html(self, tmp_path):
         artifact_dir = tmp_path / "artifacts" / "2026-01-01"
         artifact_dir.mkdir(parents=True)
@@ -148,6 +161,39 @@ class TestArtifactPersistence:
         assert context["template_data"] == {"date": "Apr 18"}
         assert context["digest_json"] == {"date": "Apr 18"}
         assert context["html"] == "<html>digest</html>"
+
+    def test_prepare_cross_domain_context_loads_same_day_plan_for_from_plan(self, tmp_path):
+        artifact_dir = tmp_path / "artifacts" / "2026-01-01"
+        artifact_dir.mkdir(parents=True)
+        _save_artifact(artifact_dir, "cross_domain_plan", {"schema_version": 1})
+
+        context = {}
+        _prepare_cross_domain_context(
+            context,
+            artifact_dir=artifact_dir,
+            stage_from="cross_domain",
+            from_plan=True,
+            run_date="2026-01-01",
+        )
+
+        assert context["cross_domain_plan"] == {"schema_version": 1}
+        assert context["cross_domain_from_plan"] is True
+
+    def test_prepare_cross_domain_context_missing_same_day_plan_does_not_set_flag(self, tmp_path):
+        artifact_dir = tmp_path / "artifacts" / "2026-01-01"
+        artifact_dir.mkdir(parents=True)
+
+        context = {}
+        _prepare_cross_domain_context(
+            context,
+            artifact_dir=artifact_dir,
+            stage_from="cross_domain",
+            from_plan=True,
+            run_date="2026-01-01",
+        )
+
+        assert "cross_domain_plan" not in context
+        assert "cross_domain_from_plan" not in context
 
 
 class TestPruneArtifacts:
