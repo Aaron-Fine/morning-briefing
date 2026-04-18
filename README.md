@@ -20,11 +20,12 @@ Every morning at 6:00 AM MT, this container:
 
 2. **Processes** sources through a staged AI pipeline (`pipeline.py`):
    - **collect** — Fetches all sources (RSS, YouTube transcripts, weather, markets, CFM)
-   - **compress** — Pre-compresses YouTube transcripts to ~400–800 word summaries (Kimi K2.5)
-   - **analyze_domain** — Four specialist desks: geopolitics, defense/space, AI/tech, economics (Kimi K2.5)
-    - **prepare_*** — Calendar, weather (SVG display), spiritual, local news enrichment passes
-   - **seams** — Contested narratives, coverage gaps, key assumptions detection (Claude Sonnet)
-   - **cross_domain** — Editor-in-chief synthesis: cross-domain connections, deep dive selection and writing, worth reading picks (Claude Sonnet)
+   - **compress** — Pre-compresses YouTube transcripts to ~400–800 word summaries
+   - **analyze_domain** — Seven specialist desks run in parallel: geopolitics, defense/space, AI/tech, energy/materials, culture/structural, science/biotech, economics
+   - **prepare_*** — Calendar, weather (SVG display), spiritual, local news enrichment passes
+   - **seams** — Two-turn adversarial review: scan for tensions/absences/assumptions, then synthesize into contested narratives, coverage gaps, key assumptions
+   - **cross_domain** — Two-turn editor-in-chief synthesis: plan (editorial decisions) then execute (at-a-glance, deep dives, worth reading)
+   - **coverage_gaps** — Diagnostic blind-spot detection with recurring pattern history (artifacts only, not in email)
    - **assemble** — Renders HTML digest from all stage outputs
    - **anomaly** — Post-assembly behavioral checks: category skew, source absence, unusual deep dives, length drift, repeated phrases
    - **briefing_packet** — Builds compressed JSON context for follow-up chat (writes `output/latest_briefing_packet.json`)
@@ -36,21 +37,39 @@ Every morning at 6:00 AM MT, this container:
 
 ## Architecture
 
+### Data Sources
+
+```mermaid
+graph LR
+    YT[YouTube channels] --> C[collect]
+    RSS[RSS Feeds 50+] --> C
+    WX[Weather API] --> C
+    MKT[Finnhub] --> C
+    LN[Local News RSS] --> C
+    CFM[CFM Schedule] --> C
+    CAL[Calendar] --> C
+    C --> pipeline.py
 ```
-┌──────────────────┐
-│ YouTube channels │──(transcripts)──┐
-│ RSS Feeds (25+)  │─────────────────┤
-│ Weather API      │─────────────────┤   ┌─────────────────────────────────────────────────────┐
-│ Finnhub          │─────────────────┼──▶│                   pipeline.py                       │
-│ Local News RSS   │─────────────────┤   │  collect → compress → analyze_domain → seams        │
-│ CFM Schedule     │─────────────────┤   │  → cross_domain → assemble → anomaly → briefing     │
-│ Calendar         │─────────────────┘   │  → send                                             │
-└──────────────────┘                     └──────────────┬──────────────────────────────────────┘
-                                                        │
-                              ┌─────────────────────────┼────────────────────────┐
-                              ▼                         ▼                        ▼
-                    Kimi K2.5 (Fireworks)      Claude Sonnet (Anthropic)       Email (SMTP)
-                    compress, analyze_domain    seams, cross_domain
+
+### Pipeline Flow
+
+```mermaid
+graph TD
+    collect --> compress
+    compress --> analyze_domain
+    analyze_domain -->|"7 desks in parallel"| prepare["prepare_*"]
+    prepare --> seams
+    seams -->|"scan → synthesis"| cross_domain
+    cross_domain -->|"plan → execute"| coverage_gaps
+    coverage_gaps --> assemble
+    assemble --> anomaly
+    anomaly --> briefing_packet
+    briefing_packet --> send
+
+    subgraph LLM Providers
+        FW["Fireworks (compress, analyze_domain)"]
+        AN["Anthropic (seams, cross_domain, coverage_gaps)"]
+    end
 ```
 
 ## Quick Start
@@ -384,13 +403,14 @@ morning-digest/
 ├── stages/
 │   ├── collect.py           # Fetches all sources
 │   ├── compress.py          # YouTube transcript compression
-│   ├── analyze_domain.py    # Four specialist domain passes
+│   ├── analyze_domain.py    # Seven specialist domain passes (parallel)
 │   ├── prepare_calendar.py  # Calendar enrichment
 │   ├── prepare_weather.py   # Weather enrichment
 │   ├── prepare_spiritual.py # Come Follow Me enrichment
 │   ├── prepare_local.py     # Local news filter
 │   ├── seams.py             # Contested narratives + coverage gaps + key assumptions
-│   ├── cross_domain.py      # Editor-in-chief cross-domain synthesis
+│   ├── cross_domain.py      # Editor-in-chief cross-domain synthesis (two-turn)
+│   ├── coverage_gaps.py     # Diagnostic blind-spot detection
 │   ├── assemble.py          # HTML rendering from stage outputs
 │   ├── anomaly.py           # Post-assembly behavioral checks
 │   ├── briefing_packet.py   # Compressed chat context artifact

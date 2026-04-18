@@ -902,12 +902,12 @@ Two diagrams, no more:
 
 ### Required documentation updates
 
-- [ ] update pipeline description to:
+- [x] update pipeline description to:
   - seven desks
   - two-turn seams
   - two-turn cross_domain
   - coverage_gaps
-- [ ] replace ASCII architecture with Mermaid diagrams
+- [x] replace ASCII architecture with Mermaid diagrams
 - [ ] update feed category table
 - [ ] update cost estimates based on measured behavior
 - [ ] add operational notes for desk manifest and `turns.<name>` overrides
@@ -920,7 +920,7 @@ Two diagrams, no more:
   - two-turn stage pattern
   - coverage_gaps purpose
   - tag-vocabulary synchronization rule if new tags were added
-- [ ] update `TODO.md`
+- [x] update `TODO.md`
 
 ### Tests / checks
 
@@ -929,10 +929,10 @@ Two diagrams, no more:
 
 ### Completion criteria
 
-- [ ] cold reader can understand and run the expanded pipeline from docs alone
-- [ ] README and AGENTS accurately describe the final pipeline
-- [ ] Mermaid diagrams committed
-- [ ] ASCII architecture removed
+- [x] cold reader can understand and run the expanded pipeline from docs alone
+- [x] README and AGENTS accurately describe the final pipeline
+- [x] Mermaid diagrams committed
+- [x] ASCII architecture removed
 
 ---
 
