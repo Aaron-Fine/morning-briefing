@@ -233,8 +233,8 @@ Output: the same final seam report schema the pipeline currently consumes.
   ```yaml
   - name: seams
     model:
-      provider: anthropic
-      model: "claude-sonnet-4-6"
+      provider: fireworks
+      model: "accounts/fireworks/models/minimax-m2p7"
       max_tokens: 5000
       temperature: 0.3
     turns:
@@ -323,7 +323,7 @@ Output: the current `cross_domain_output` schema:
 - `market_context`
 - `worth_reading`
 
-Model: use the current approved target, `claude-opus-4-7`, unless implementation reveals a practical reason to adjust.
+Model: use MiniMax during development unless a later validation pass proves a more expensive model is necessary.
 
 ### `cross_domain_plan` Contract
 
@@ -397,8 +397,8 @@ Minimum useful definition:
   ```yaml
   - name: cross_domain
     model:
-      provider: anthropic
-      model: "claude-opus-4-7"
+      provider: fireworks
+      model: "accounts/fireworks/models/minimax-m2p7"
       max_tokens: 16000
       temperature: 0.3
     turns:

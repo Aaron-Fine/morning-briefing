@@ -90,7 +90,7 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
 
     effective_config = model_config or config.get("llm", {}).get("compression", {
         "provider": "fireworks",
-        "model": "accounts/fireworks/models/kimi-k2p5",
+        "model": "accounts/fireworks/models/minimax-m2p7",
         "max_tokens": 2000,
         "temperature": 0.2,
     })

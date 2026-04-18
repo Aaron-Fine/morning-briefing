@@ -352,7 +352,7 @@ class TestSeamsRun:
             },
             "compressed_transcripts": [],
         }
-        config = {"llm": {"seam_detection": {"provider": "anthropic"}}}
+        config = {"llm": {"seam_detection": {"provider": "fireworks"}}}
         result = run(context, config)
         assert "seam_scan" in result
         assert "seam_data" in result

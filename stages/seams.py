@@ -228,12 +228,12 @@ def run(
     raw_sources = context.get("raw_sources", {})
     compressed_transcripts = context.get("compressed_transcripts", [])
 
-    # Phase 2: use Claude Sonnet for bias diversity (different model than domain analysis)
+    # Development default: keep seams on MiniMax to control iteration cost.
     effective_config = model_config or config.get("llm", {}).get(
         "seam_detection",
         {
-            "provider": "anthropic",
-            "model": "claude-sonnet-4-6",
+            "provider": "fireworks",
+            "model": "accounts/fireworks/models/minimax-m2p7",
             "max_tokens": 5000,
             "temperature": 0.3,
         },

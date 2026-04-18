@@ -51,8 +51,8 @@ def test_seams_applies_turn_overrides(mock_llm):
         }
     }
     model_config = {
-        "provider": "anthropic",
-        "model": "claude-sonnet-4-6",
+        "provider": "fireworks",
+        "model": "accounts/fireworks/models/minimax-m2p7",
         "max_tokens": 6000,
         "temperature": 0.2,
     }
@@ -83,7 +83,10 @@ def test_seams_retries_turn_without_stream(mock_llm):
     run(
         {"domain_analysis": {}, "raw_sources": {}, "compressed_transcripts": []},
         {"llm": {}},
-        model_config={"provider": "anthropic", "model": "claude-sonnet-4-6"},
+        model_config={
+            "provider": "fireworks",
+            "model": "accounts/fireworks/models/minimax-m2p7",
+        },
     )
 
     assert mock_llm.call_args_list[0].kwargs["stream"] is True

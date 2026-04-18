@@ -15,11 +15,10 @@ delivery:
   subject_template: "Morning Digest — {date}"
 
 llm:
-  model: "accounts/fireworks/models/kimi-k2p5"
+  model: "accounts/fireworks/models/minimax-m2p7"
   max_tokens: 12000
   temperature: 0.4
   # Set FIREWORKS_API_KEY as env var
-  # Set ANTHROPIC_API_KEY as env var (used by seam detection and final assembly in later phases)
 
 # Pipeline stage manifest — defines execution order and per-stage model config.
 # Stages with no model config are deterministic (no LLM call).
@@ -32,7 +31,7 @@ pipeline:
     - name: compress
       model:
         provider: fireworks
-        model: "accounts/fireworks/models/kimi-k2p5"
+        model: "accounts/fireworks/models/minimax-m2p7"
         max_tokens: 2000
         temperature: 0.2
 
@@ -52,8 +51,8 @@ pipeline:
 
     - name: prepare_spiritual
       model:
-        provider: anthropic
-        model: "claude-haiku-4-5-20251001"
+        provider: fireworks
+        model: "accounts/fireworks/models/minimax-m2p7"
         max_tokens: 512
         temperature: 0.5
 
@@ -62,8 +61,8 @@ pipeline:
 
     - name: seams
       model:
-        provider: anthropic
-        model: "claude-sonnet-4-6"
+        provider: fireworks
+        model: "accounts/fireworks/models/minimax-m2p7"
         max_tokens: 5000
         temperature: 0.3
       turns:
@@ -77,8 +76,8 @@ pipeline:
     # --- Phase 3: Cross-domain synthesis ("editor-in-chief" pass) ---
     - name: cross_domain
       model:
-        provider: anthropic
-        model: "claude-opus-4-7"
+        provider: fireworks
+        model: "accounts/fireworks/models/minimax-m2p7"
         max_tokens: 16000
 
     - name: assemble
