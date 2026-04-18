@@ -305,6 +305,21 @@ _STAGE_METADATA = {
         "turn_model_overrides": None,
         "before_run": _prepare_cross_domain_context,
     },
+    "coverage_gaps": {
+        "artifact_key": "coverage_gaps",
+        "context_keys": ["coverage_gaps"],
+        "non_critical": True,
+        "empty_output": {
+            "coverage_gaps": {
+                "schema_version": 1,
+                "date": "",
+                "gaps": [],
+                "recurring_patterns": [],
+            }
+        },
+        "model_defaults": {},
+        "turn_model_overrides": None,
+    },
     "assemble": {
         "artifact_key": "digest_json",
         "context_keys": ["template_data", "digest_json"],

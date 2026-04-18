@@ -754,27 +754,27 @@ History entries should preserve the per-run contract fields needed to derive rec
 
 ### Tasks
 
-- [ ] implement per-run artifact `coverage_gaps.json`
-- [ ] append history to `output/coverage_gaps_history.jsonl`
-- [ ] compute recurring patterns from history
-- [ ] keep the contract small:
+- [x] implement per-run artifact `coverage_gaps.json`
+- [x] append history to `output/coverage_gaps_history.jsonl`
+- [x] compute recurring patterns from history
+- [x] keep the contract small:
   - downstream consumers rely on `gaps` and `recurring_patterns`
   - display-only or debugging extras stay optional
-- [ ] render diagnostics only in dry-run or explicit diagnostics mode
-- [ ] keep diagnostics out of the normal send path
+- [x] render diagnostics only in dry-run or explicit diagnostics mode
+- [x] keep diagnostics out of the normal send path
 
 ### Tests / checks
 
-- [ ] schema test for stage output
-- [ ] two-run append test for history
-- [ ] recurring-pattern trigger test with synthetic repeated inputs
+- [x] schema test for stage output
+- [x] two-run append test for history
+- [x] recurring-pattern trigger test with synthetic repeated inputs
 - [ ] dry-run manual check of diagnostics visibility
 
 ### Completion criteria
 
-- [ ] stage runs reliably and writes both per-run and historical diagnostics
-- [ ] diagnostics render only in non-send workflows
-- [ ] tests pass
+- [x] stage runs reliably and writes both per-run and historical diagnostics
+- [x] diagnostics render only in non-send workflows
+- [x] tests pass
 
 ---
 

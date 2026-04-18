@@ -165,16 +165,19 @@ class TestStageArtifactKeyCoverage:
             "prepare_local",
             "seams",
             "cross_domain",
+            "coverage_gaps",
             "assemble",
             "anomaly",
             "briefing_packet",
             "send",
         ]
 
+        # Stages where artifact_key intentionally matches the stage name
+        _IDENTITY_KEY_STAGES = {"briefing_packet", "coverage_gaps"}
+
         for stage in stage_names:
             key = _stage_artifact_key(stage)
-            # briefing_packet intentionally maps to itself (the artifact key matches the stage name)
-            if stage == "briefing_packet":
+            if stage in _IDENTITY_KEY_STAGES:
                 continue
             assert key != stage, (
                 f"Stage '{stage}' falls through to identity fallback — "
@@ -198,6 +201,7 @@ class TestStageMetadataCoverage:
             "prepare_local",
             "seams",
             "cross_domain",
+            "coverage_gaps",
             "assemble",
             "anomaly",
             "briefing_packet",
