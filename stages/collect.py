@@ -13,6 +13,10 @@ from sources.weather import fetch_weather
 from sources.markets import fetch_markets
 from sources.launches import fetch_upcoming_launches
 from sources.rss_feeds import fetch_rss
+from sources.hackernews import fetch_hackernews
+from sources.github_trending import fetch_github_trending
+from sources.astronomy import fetch_astronomy
+from sources.history import fetch_on_this_day
 from sources.come_follow_me import get_current_lesson, get_upcoming_church_events
 from sources.holidays import get_upcoming_holidays
 from sources.economic_calendar import fetch_economic_calendar
@@ -68,6 +72,26 @@ def _fetch_rss(config):
     return "rss", fetch_rss(config)
 
 
+def _fetch_hackernews(config):
+    log.info("  → Hacker News")
+    return "hackernews", fetch_hackernews(config)
+
+
+def _fetch_github_trending(config):
+    log.info("  → GitHub trending")
+    return "github_trending", fetch_github_trending(config)
+
+
+def _fetch_astronomy(config):
+    log.info("  → Astronomy")
+    return "astronomy", fetch_astronomy(config)
+
+
+def _fetch_on_this_day(config):
+    log.info("  → On this day")
+    return "on_this_day", fetch_on_this_day(config)
+
+
 def _fetch_local_news(config):
     local_sources = config.get("local_news", {}).get("sources", [])
     if local_sources:
@@ -88,6 +112,10 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
         (_fetch_calendar, config),
         (_fetch_youtube, config),
         (_fetch_rss, config),
+        (_fetch_hackernews, config),
+        (_fetch_github_trending, config),
+        (_fetch_astronomy, config),
+        (_fetch_on_this_day, config),
         (_fetch_local_news, config),
     ]
 
@@ -120,12 +148,20 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
     data.setdefault("come_follow_me", {})
     data.setdefault("analysis_transcripts", [])
     data.setdefault("rss", [])
+    data.setdefault("hackernews", [])
+    data.setdefault("github_trending", [])
+    data.setdefault("astronomy", {})
+    data.setdefault("on_this_day", {})
     data.setdefault("local_news", [])
 
     data["source_counts"] = {
         "analysis_transcripts": len(data.get("analysis_transcripts", [])),
         "rss_items": len(data.get("rss", [])),
         "local_news_items": len(data.get("local_news", [])),
+        "hackernews_items": len(data.get("hackernews", [])),
+        "github_trending_items": len(data.get("github_trending", [])),
+        "astronomy_events": len(data.get("astronomy", {}).get("events", [])),
+        "history_items": len(data.get("on_this_day", {}).get("selected", [])),
     }
 
     log.info(

@@ -1,11 +1,11 @@
 """Fetch trending GitHub repositories.
 
-GitHub has no official trending API, so we scrape the trending page
-or use a lightweight proxy. Falls back gracefully.
+GitHub has no official trending API, so we scrape the trending page.
+Falls back gracefully.
 """
 
 import logging
-from bs4 import BeautifulSoup
+from html.parser import HTMLParser
 
 from sources._http import http_get_text
 
@@ -34,37 +34,87 @@ def fetch_github_trending(config: dict) -> list[dict]:
 
 def _parse_trending_page(html: str, count: int) -> list[dict]:
     """Parse the GitHub trending HTML page."""
-    soup = BeautifulSoup(html, "lxml")
-    repos = []
+    parser = _TrendingParser(count)
+    parser.feed(html)
+    return parser.repos
 
-    for article in soup.select("article.Box-row")[:count]:
-        # Repo name (org/repo)
-        name_el = article.select_one("h2 a")
-        if not name_el:
-            continue
-        name = name_el.get_text(strip=True).replace("\n", "").replace(" ", "")
-        url = f"https://github.com{name_el['href']}"
 
-        # Description
-        desc_el = article.select_one("p")
-        description = desc_el.get_text(strip=True) if desc_el else ""
+class _TrendingParser(HTMLParser):
+    """Minimal parser for GitHub Trending article cards."""
 
-        # Language
-        lang_el = article.select_one("[itemprop='programmingLanguage']")
-        language = lang_el.get_text(strip=True) if lang_el else ""
+    def __init__(self, count: int):
+        super().__init__()
+        self.count = count
+        self.repos: list[dict] = []
+        self._article_depth = 0
+        self._current: dict | None = None
+        self._capture: str | None = None
+        self._parts: list[str] = []
 
-        # Stars today
-        stars_today = ""
-        spans = article.select("span.d-inline-block.float-sm-right")
-        if spans:
-            stars_today = spans[0].get_text(strip=True)
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attrs_map = dict(attrs)
+        classes = attrs_map.get("class", "").split()
 
-        repos.append({
-            "name": name,
-            "url": url,
-            "description": description[:200],
-            "language": language,
-            "stars_today": stars_today,
-        })
+        if tag == "article" and "Box-row" in classes and len(self.repos) < self.count:
+            self._article_depth = 1
+            self._current = {
+                "name": "",
+                "url": "",
+                "description": "",
+                "language": "",
+                "stars_today": "",
+            }
+            return
 
-    return repos
+        if self._article_depth <= 0 or self._current is None:
+            return
+
+        if tag == "article":
+            self._article_depth += 1
+            return
+
+        if tag == "a" and self._current["url"] == "" and attrs_map.get("href", "").startswith("/"):
+            self._current["url"] = f"https://github.com{attrs_map['href']}"
+            self._capture = "name"
+            self._parts = []
+            return
+
+        if tag == "p" and self._current["description"] == "":
+            self._capture = "description"
+            self._parts = []
+            return
+
+        if attrs_map.get("itemprop") == "programmingLanguage":
+            self._capture = "language"
+            self._parts = []
+            return
+
+        if tag == "span" and "float-sm-right" in classes:
+            self._capture = "stars_today"
+            self._parts = []
+
+    def handle_data(self, data: str) -> None:
+        if self._capture:
+            self._parts.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if self._article_depth <= 0 or self._current is None:
+            return
+
+        if self._capture and tag in {"a", "p", "span"}:
+            value = " ".join("".join(self._parts).split())
+            if self._capture == "name":
+                value = value.replace(" / ", "/").replace(" ", "")
+            if self._capture == "description":
+                value = value[:200]
+            self._current[self._capture] = value
+            self._capture = None
+            self._parts = []
+            return
+
+        if tag == "article":
+            self._article_depth -= 1
+            if self._article_depth == 0 and self._current:
+                if self._current["name"] and self._current["url"]:
+                    self.repos.append(self._current)
+                self._current = None
