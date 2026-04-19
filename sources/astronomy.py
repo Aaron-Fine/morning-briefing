@@ -6,10 +6,15 @@ for major sky events (planets, meteor showers, moon phases).
 
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
+
+import yaml
 
 from sources._http import http_get_json
 
 log = logging.getLogger(__name__)
+
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 # Open Notify ISS pass predictions (free, no key)
 ISS_PASS_URL = "https://api.n2yo.com/rest/v1/satellite/visualpasses/25544"
@@ -107,7 +112,7 @@ def _get_moon_phase() -> str:
 def _get_sky_events() -> list[str]:
     """Return notable sky events for the current period.
 
-    This is a static schedule of major astronomical events for 2026.
+    Loads events from data/astronomy_events_2026.yaml.
     For a production version, consider an ephemeris library like skyfield.
     """
     from datetime import date, timedelta
@@ -115,37 +120,13 @@ def _get_sky_events() -> list[str]:
     today = date.today()
     window_end = today + timedelta(days=3)
 
-    # Major 2026 sky events (date, description)
-    events_2026 = [
-        ("2026-01-03", "Quadrantids meteor shower peaks"),
-        ("2026-01-10", "Full Wolf Moon"),
-        ("2026-02-09", "Full Snow Moon"),
-        ("2026-03-03", "Jupiter-Mercury conjunction"),
-        ("2026-03-11", "Full Worm Moon"),
-        ("2026-03-29", "Partial solar eclipse (visible from parts of N. America)"),
-        ("2026-04-09", "Full Pink Moon"),
-        ("2026-04-22", "Lyrids meteor shower peaks"),
-        ("2026-05-06", "Eta Aquariids meteor shower peaks"),
-        ("2026-05-08", "Full Flower Moon"),
-        ("2026-06-07", "Full Strawberry Moon"),
-        ("2026-07-06", "Full Buck Moon"),
-        ("2026-07-28", "Delta Aquariids meteor shower peaks"),
-        ("2026-08-04", "Full Sturgeon Moon"),
-        ("2026-08-12", "Perseids meteor shower peaks — best viewing after midnight"),
-        ("2026-08-12", "Total lunar eclipse (visible from Americas)"),
-        ("2026-09-03", "Full Corn Moon"),
-        ("2026-10-02", "Full Harvest Moon"),
-        ("2026-10-21", "Orionids meteor shower peaks"),
-        ("2026-11-01", "Full Beaver Moon"),
-        ("2026-11-17", "Leonids meteor shower peaks"),
-        ("2026-12-01", "Full Cold Moon"),
-        ("2026-12-13", "Geminids meteor shower peaks — best of the year"),
-    ]
+    with open(DATA_DIR / "astronomy_events_2026.yaml") as f:
+        raw = yaml.safe_load(f)
 
     upcoming = []
-    for date_str, desc in events_2026:
-        event_date = date.fromisoformat(date_str)
+    for entry in raw:
+        event_date = entry["date"] if isinstance(entry["date"], date) else date.fromisoformat(str(entry["date"]))
         if today <= event_date <= window_end:
-            upcoming.append(desc)
+            upcoming.append(entry["description"])
 
     return upcoming

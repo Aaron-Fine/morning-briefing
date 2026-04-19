@@ -17,8 +17,8 @@ from sources.weather import (
     _compute_normals_and_records,
     _cache_read,
     _cache_write,
-    _LOGAN_NORMALS,
-    _LOGAN_RECORDS,
+    _FALLBACK_NORMALS,
+    _FALLBACK_RECORDS,
     _WMO_CODES,
 )
 
@@ -80,75 +80,78 @@ class TestInterpolateMonthly:
     def test_mid_month_returns_month_value(self):
         """On the 15th, should return the exact monthly value."""
         dt = datetime(2026, 7, 15)
-        hi, lo = _interpolate_monthly(_LOGAN_NORMALS, dt)
-        assert hi == _LOGAN_NORMALS[7][0]
-        assert lo == _LOGAN_NORMALS[7][1]
+        hi, lo = _interpolate_monthly(_FALLBACK_NORMALS, dt)
+        assert hi == _FALLBACK_NORMALS[7][0]
+        assert lo == _FALLBACK_NORMALS[7][1]
 
     def test_early_month_interpolates_from_previous(self):
         """Before the 15th, interpolates between previous and current month."""
         dt = datetime(2026, 4, 1)  # Early April
-        hi, lo = _interpolate_monthly(_LOGAN_NORMALS, dt)
+        hi, lo = _interpolate_monthly(_FALLBACK_NORMALS, dt)
         # Should be between March and April values
-        march_hi = _LOGAN_NORMALS[3][0]
-        april_hi = _LOGAN_NORMALS[4][0]
+        march_hi = _FALLBACK_NORMALS[3][0]
+        april_hi = _FALLBACK_NORMALS[4][0]
         assert march_hi <= hi <= april_hi
 
     def test_late_month_interpolates_to_next(self):
         """After the 15th, interpolates between current and next month."""
         dt = datetime(2026, 4, 30)  # Late April
-        hi, lo = _interpolate_monthly(_LOGAN_NORMALS, dt)
+        hi, lo = _interpolate_monthly(_FALLBACK_NORMALS, dt)
         # Should be between April and May values
-        april_hi = _LOGAN_NORMALS[4][0]
-        may_hi = _LOGAN_NORMALS[5][0]
+        april_hi = _FALLBACK_NORMALS[4][0]
+        may_hi = _FALLBACK_NORMALS[5][0]
         assert april_hi <= hi <= may_hi
 
     def test_january_early_interpolates_from_december(self):
         """Early January should interpolate from December to January."""
         dt = datetime(2026, 1, 10)
-        hi, lo = _interpolate_monthly(_LOGAN_NORMALS, dt)
-        dec_hi = _LOGAN_NORMALS[12][0]
-        jan_hi = _LOGAN_NORMALS[1][0]
+        hi, lo = _interpolate_monthly(_FALLBACK_NORMALS, dt)
+        dec_hi = _FALLBACK_NORMALS[12][0]
+        jan_hi = _FALLBACK_NORMALS[1][0]
         assert min(dec_hi, jan_hi) <= hi <= max(dec_hi, jan_hi)
 
     def test_december_late_interpolates_to_january(self):
         """Late December should interpolate from December to January."""
         dt = datetime(2026, 12, 20)
-        hi, lo = _interpolate_monthly(_LOGAN_NORMALS, dt)
-        dec_hi = _LOGAN_NORMALS[12][0]
-        jan_hi = _LOGAN_NORMALS[1][0]
+        hi, lo = _interpolate_monthly(_FALLBACK_NORMALS, dt)
+        dec_hi = _FALLBACK_NORMALS[12][0]
+        jan_hi = _FALLBACK_NORMALS[1][0]
         assert min(dec_hi, jan_hi) <= hi <= max(dec_hi, jan_hi)
 
     def test_records_interpolation(self):
         """Records should also be interpolated."""
         dt = datetime(2026, 7, 15)
-        hi, lo = _interpolate_monthly(_LOGAN_RECORDS, dt)
-        assert hi == _LOGAN_RECORDS[7][0]
-        assert lo == _LOGAN_RECORDS[7][1]
+        hi, lo = _interpolate_monthly(_FALLBACK_RECORDS, dt)
+        assert hi == _FALLBACK_RECORDS[7][0]
+        assert lo == _FALLBACK_RECORDS[7][1]
 
     def test_february_mid_month(self):
         dt = datetime(2026, 2, 15)
-        hi, lo = _interpolate_monthly(_LOGAN_NORMALS, dt)
-        assert hi == _LOGAN_NORMALS[2][0]
-        assert lo == _LOGAN_NORMALS[2][1]
+        hi, lo = _interpolate_monthly(_FALLBACK_NORMALS, dt)
+        assert hi == _FALLBACK_NORMALS[2][0]
+        assert lo == _FALLBACK_NORMALS[2][1]
 
     def test_leap_year_february(self):
         """Leap year should still work correctly."""
         dt = datetime(2028, 2, 29)
-        hi, lo = _interpolate_monthly(_LOGAN_NORMALS, dt)
-        feb_hi = _LOGAN_NORMALS[2][0]
-        mar_hi = _LOGAN_NORMALS[3][0]
+        hi, lo = _interpolate_monthly(_FALLBACK_NORMALS, dt)
+        feb_hi = _FALLBACK_NORMALS[2][0]
+        mar_hi = _FALLBACK_NORMALS[3][0]
         assert feb_hi <= hi <= mar_hi
 
 
 class TestComputeNormalsAndRecords:
     """Tests for normals and records computation from forecast data."""
 
-    def test_basic_forecast(self):
+    _LAT, _LON = 41.737, -111.834
+
+    @patch("sources.weather._fetch_historical_normals", return_value=None)
+    def test_basic_forecast(self, _mock):
         forecast = [
             {"date": "2026-07-15"},
             {"date": "2026-07-16"},
         ]
-        result = _compute_normals_and_records(forecast)
+        result = _compute_normals_and_records(self._LAT, self._LON, forecast)
         assert len(result) == 2
         assert result[0]["date"] == "2026-07-15"
         assert "normal_hi" in result[0]
@@ -156,38 +159,52 @@ class TestComputeNormalsAndRecords:
         assert "record_hi" in result[0]
         assert "record_lo" in result[0]
 
-    def test_empty_forecast(self):
-        result = _compute_normals_and_records([])
+    @patch("sources.weather._fetch_historical_normals", return_value=None)
+    def test_empty_forecast(self, _mock):
+        result = _compute_normals_and_records(self._LAT, self._LON, [])
         assert result == []
 
-    def test_skips_entries_without_date(self):
+    @patch("sources.weather._fetch_historical_normals", return_value=None)
+    def test_skips_entries_without_date(self, _mock):
         forecast = [
             {"date": "2026-07-15"},
             {"no_date": True},
         ]
-        result = _compute_normals_and_records(forecast)
+        result = _compute_normals_and_records(self._LAT, self._LON, forecast)
         assert len(result) == 1
 
-    def test_skips_entries_with_invalid_date(self):
+    @patch("sources.weather._fetch_historical_normals", return_value=None)
+    def test_skips_entries_with_invalid_date(self, _mock):
         forecast = [
             {"date": "2026-07-15"},
             {"date": "not-a-date"},
         ]
-        result = _compute_normals_and_records(forecast)
+        result = _compute_normals_and_records(self._LAT, self._LON, forecast)
         assert len(result) == 1
 
-    def test_values_are_rounded(self):
+    @patch("sources.weather._fetch_historical_normals", return_value=None)
+    def test_values_are_rounded(self, _mock):
         forecast = [{"date": "2026-07-15"}]
-        result = _compute_normals_and_records(forecast)
+        result = _compute_normals_and_records(self._LAT, self._LON, forecast)
         # On the 15th, values should be exact monthly values (already integers)
         assert isinstance(result[0]["normal_hi"], float)
         assert isinstance(result[0]["normal_lo"], float)
 
-    def test_year_boundary_january(self):
+    @patch("sources.weather._fetch_historical_normals", return_value=None)
+    def test_year_boundary_january(self, _mock):
         forecast = [{"date": "2026-01-15"}]
-        result = _compute_normals_and_records(forecast)
+        result = _compute_normals_and_records(self._LAT, self._LON, forecast)
         assert len(result) == 1
-        assert result[0]["normal_hi"] == _LOGAN_NORMALS[1][0]
+        assert result[0]["normal_hi"] == _FALLBACK_NORMALS[1][0]
+
+    def test_uses_fetched_normals_when_available(self):
+        """When historical fetch succeeds, uses those values instead of fallback."""
+        fetched = {m: (70.0, 50.0) for m in range(1, 13)}
+        with patch("sources.weather._fetch_historical_normals", return_value=fetched):
+            forecast = [{"date": "2026-07-15"}]
+            result = _compute_normals_and_records(self._LAT, self._LON, forecast)
+        assert result[0]["normal_hi"] == 70.0
+        assert result[0]["normal_lo"] == 50.0
 
 
 class TestCacheReadWrite:

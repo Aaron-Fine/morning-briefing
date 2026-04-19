@@ -7,16 +7,20 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import yaml
+
 from sources._http import http_get_json
 
 log = logging.getLogger(__name__)
+
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 # --- Endpoints ---
 NWS_POINTS_URL = "https://api.weather.gov/points/{lat},{lon}"
 NWS_STATION_OBS_URL = "https://api.weather.gov/stations/{station}/observations/latest"
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_AQI_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
-OPEN_METEO_CLIMATE_URL = "https://climate-api.open-meteo.com/v1/climate"
+OPEN_METEO_HISTORICAL_URL = "https://archive-api.open-meteo.com/v1/archive"
 AIRNOW_CURRENT_URL = "https://www.airnowapi.org/aq/observation/latLong/current/"
 AIRNOW_FORECAST_URL = "https://www.airnowapi.org/aq/forecast/latLong/"
 UTAH_DEQ_FORECAST_URL = "https://air.utah.gov/forecast.php"
@@ -25,70 +29,22 @@ UTAH_DEQ_FORECAST_URL = "https://air.utah.gov/forecast.php"
 CACHE_DIR = Path(__file__).resolve().parent.parent / "cache" / "weather"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-# --- NOAA 1991-2020 normals for Logan, UT (approx KLGU) ---
-# Month index 1-12.  Values are daily normal high/low.
-_LOGAN_NORMALS = {
-    1: (28.8, 14.0),
-    2: (31.5, 17.8),
-    3: (40.3, 25.5),
-    4: (48.6, 30.9),
-    5: (59.4, 38.5),
-    6: (70.7, 46.3),
-    7: (83.3, 55.4),
-    8: (81.1, 53.6),
-    9: (71.4, 43.8),
-    10: (54.5, 32.8),
-    11: (41.0, 22.7),
-    12: (28.8, 15.3),
-}
+def _load_yaml(filename: str):
+    """Load a YAML data file from the data/ directory."""
+    with open(DATA_DIR / filename) as f:
+        return yaml.safe_load(f)
 
-# Approximate monthly record highs/lows for Logan
-_LOGAN_RECORDS = {
-    1: (60, -25),
-    2: (63, -23),
-    3: (75, -5),
-    4: (82, 10),
-    5: (93, 18),
-    6: (100, 28),
-    7: (103, 35),
-    8: (101, 32),
-    9: (97, 16),
-    10: (85, 2),
-    11: (73, -14),
-    12: (62, -20),
-}
 
-# WMO weather code mapping (Open-Meteo fallback)
-_WMO_CODES = {
-    0: "Clear",
-    1: "Mainly clear",
-    2: "Partly cloudy",
-    3: "Overcast",
-    45: "Fog",
-    48: "Rime fog",
-    51: "Light drizzle",
-    53: "Drizzle",
-    55: "Heavy drizzle",
-    56: "Light freezing drizzle",
-    57: "Freezing drizzle",
-    61: "Light rain",
-    63: "Rain",
-    65: "Heavy rain",
-    66: "Light freezing rain",
-    67: "Freezing rain",
-    71: "Light snow",
-    73: "Snow",
-    75: "Heavy snow",
-    77: "Snow grains",
-    80: "Light showers",
-    81: "Showers",
-    82: "Heavy showers",
-    85: "Light snow showers",
-    86: "Snow showers",
-    95: "Thunderstorm",
-    96: "Thunderstorm w/ hail",
-    99: "Severe thunderstorm",
-}
+def _load_monthly_table(filename: str) -> dict[int, tuple[float, float]]:
+    """Load a month-keyed YAML file into {int: (hi, lo)} format."""
+    raw = _load_yaml(filename)
+    return {int(k): tuple(v) for k, v in raw.items()}
+
+
+# Loaded from data/ files; see data/*.yaml for sources and notes.
+_FALLBACK_NORMALS = _load_monthly_table("weather_fallback_normals.yaml")
+_FALLBACK_RECORDS = _load_monthly_table("weather_fallback_records.yaml")
+_WMO_CODES = {int(k): v for k, v in _load_yaml("wmo_codes.yaml").items()}
 
 
 # ====================================================================
@@ -135,7 +91,7 @@ def fetch_weather(config: dict) -> dict:
         aqi_data = _fetch_open_meteo_aqi(lat, lon)
 
     # --- Normals & records ---
-    normals_records = _compute_normals_and_records(forecast)
+    normals_records = _compute_normals_and_records(lat, lon, forecast)
 
     # --- Enrich forecast days ---
     for i, day in enumerate(forecast):
@@ -516,12 +472,20 @@ def _fetch_open_meteo_aqi(lat: float, lon: float) -> dict:
 # ====================================================================
 
 
-def _compute_normals_and_records(forecast: list[dict]) -> list[dict]:
+def _compute_normals_and_records(
+    lat: float, lon: float, forecast: list[dict]
+) -> list[dict]:
     """Compute daily normals and records for the forecast window.
 
-    Uses hardcoded NOAA 1991-2020 tables for Logan, UT with linear
-    monthly interpolation for daily resolution.
+    Fetches multi-year historical averages from Open-Meteo for the
+    location.  Falls back to hardcoded Logan, UT tables on failure.
+    Records always use the hardcoded fallback (no free API exists).
     """
+    normals_table = _fetch_historical_normals(lat, lon)
+    if normals_table is None:
+        log.info("weather: using fallback normals for Logan, UT")
+        normals_table = _FALLBACK_NORMALS
+
     result = []
     for day in forecast:
         date_str = day.get("date", "")
@@ -532,8 +496,8 @@ def _compute_normals_and_records(forecast: list[dict]) -> list[dict]:
         except ValueError:
             continue
 
-        normal_hi, normal_lo = _interpolate_monthly(_LOGAN_NORMALS, dt)
-        record_hi, record_lo = _interpolate_monthly(_LOGAN_RECORDS, dt)
+        normal_hi, normal_lo = _interpolate_monthly(normals_table, dt)
+        record_hi, record_lo = _interpolate_monthly(_FALLBACK_RECORDS, dt)
 
         result.append(
             {
@@ -546,6 +510,77 @@ def _compute_normals_and_records(forecast: list[dict]) -> list[dict]:
         )
 
     return result
+
+
+def _fetch_historical_normals(lat: float, lon: float) -> dict | None:
+    """Fetch monthly normals from Open-Meteo Historical API.
+
+    Queries the last 5 complete years of daily temperature data,
+    averages highs and lows by month, and returns a dict keyed by
+    month (1-12) with (avg_hi, avg_lo) tuples — same shape as
+    _FALLBACK_NORMALS.  Results are cached for 30 days.
+    """
+    cached = _cache_read("historical_normals", ttl_hours=24 * 30)
+    if cached:
+        # Convert string keys back to int (JSON round-trip)
+        try:
+            return {int(k): tuple(v) for k, v in cached.items()}
+        except (ValueError, TypeError):
+            pass
+
+    now = datetime.now()
+    end_year = now.year - 1  # last complete year
+    start_year = end_year - 4  # 5 years of data
+
+    data = http_get_json(
+        OPEN_METEO_HISTORICAL_URL,
+        params={
+            "latitude": lat,
+            "longitude": lon,
+            "start_date": f"{start_year}-01-01",
+            "end_date": f"{end_year}-12-31",
+            "daily": "temperature_2m_max,temperature_2m_min",
+            "temperature_unit": "fahrenheit",
+            "timezone": "auto",
+        },
+        timeout=15,
+        label="Open-Meteo historical normals",
+    )
+    if data is None:
+        return None
+
+    daily = data.get("daily", {})
+    times = daily.get("time", [])
+    highs = daily.get("temperature_2m_max", [])
+    lows = daily.get("temperature_2m_min", [])
+
+    if not times or len(times) != len(highs) or len(times) != len(lows):
+        log.warning("weather: historical normals response malformed")
+        return None
+
+    # Accumulate by month
+    month_hi: dict[int, list[float]] = {m: [] for m in range(1, 13)}
+    month_lo: dict[int, list[float]] = {m: [] for m in range(1, 13)}
+    for date_str, hi, lo in zip(times, highs, lows):
+        if hi is None or lo is None:
+            continue
+        month = int(date_str[5:7])
+        month_hi[month].append(hi)
+        month_lo[month].append(lo)
+
+    normals: dict[int, tuple[float, float]] = {}
+    for m in range(1, 13):
+        if not month_hi[m] or not month_lo[m]:
+            log.warning(f"weather: no historical data for month {m}")
+            return None
+        avg_hi = sum(month_hi[m]) / len(month_hi[m])
+        avg_lo = sum(month_lo[m]) / len(month_lo[m])
+        normals[m] = (round(avg_hi, 1), round(avg_lo, 1))
+
+    # Cache as string-keyed dict (JSON requires string keys)
+    _cache_write("historical_normals", {str(k): list(v) for k, v in normals.items()})
+    log.info("weather: fetched and cached historical normals")
+    return normals
 
 
 def _interpolate_monthly(table: dict, dt: datetime) -> tuple[float, float]:

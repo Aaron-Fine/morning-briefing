@@ -1,0 +1,16 @@
+# Approximate monthly record highs/lows for Logan, UT (F).
+# No free API provides all-time station records reliably; fallback only.
+# Keys are month (1-12), values are [record_high_F, record_low_F].
+
+1: [60, -25]
+2: [63, -23]
+3: [75, -5]
+4: [82, 10]
+5: [93, 18]
+6: [100, 28]
+7: [103, 35]
+8: [101, 32]
+9: [97, 16]
+10: [85, 2]
+11: [73, -14]
+12: [62, -20]
