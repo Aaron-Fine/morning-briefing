@@ -249,11 +249,14 @@ rss:
 
     # --- REGIONAL / WESTERN US ---
     - { url: "https://www.deseret.com/arc/outboundfeeds/rss/category/utah/", name: "Deseret News (Utah)", cap: 5, category: "regional-west", reliability: "primary-reporting" }
-    # Skipped: Salt Lake Tribune (RSS 404), KUER (RSS 404) — need replacement URLs
+    - { url: "https://www.sltrib.com/arc/outboundfeeds/news/?outputType=xml", name: "Salt Lake Tribune (Utah)", cap: 5, category: "regional-west", reliability: "primary-reporting" }
+    - { url: "https://www.sltrib.com/arc/outboundfeeds/religion/?outputType=xml", name: "Salt Lake Tribune (Religion)", cap: 5, category: "regional-west", reliability: "primary-reporting" }
+    - { url: "https://www.sltrib.com/arc/outboundfeeds/culture/?outputType=xml", name: "Salt Lake Tribune (Culture)", cap: 5, category: "regional-west", reliability: "primary-reporting" }
+    - { url: "https://www.kuer.org/news.rss", name: "KUER public radio", cap: 5, category: "regional-west", reliability: "primary-reporting" }
 
     # --- DEMOGRAPHICS ---
     - { url: "https://www.pewresearch.org/feed/", name: "Pew Research Center", cap: 3, category: "demographics", reliability: "primary-reporting" }
-    # Skipped: Institute for Family Studies (RSS 404) — need replacement URL
+    - { url: "https://ifstudies.org/blog/rss", name: "Institute for Family Studies", cap: 3, category: "demographics", reliability: "primary-reporting" }
 
 come_follow_me:
   # Scrape weekly from churchofjesuschrist.org
