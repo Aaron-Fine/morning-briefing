@@ -637,3 +637,36 @@ class TestAssembleRun:
         assert len(result["template_data"]["contested_narratives"]) == 1
         assert len(result["template_data"]["coverage_gaps"]) == 1
         assert len(result["template_data"]["key_assumptions"]) == 1
+
+    @patch("stages.assemble.render_email")
+    def test_coverage_gap_diagnostics_only_in_dry_run(self, mock_render):
+        mock_render.return_value = "<html>diagnostics</html>"
+        context = {
+            "cross_domain_output": {
+                "at_a_glance": [],
+                "deep_dives": [],
+                "market_context": "",
+                "worth_reading": [],
+                "cross_domain_connections": [],
+            },
+            "coverage_gaps": {
+                "schema_version": 1,
+                "date": "2026-04-18",
+                "gaps": [{"topic": "Gap A", "description": "Desc", "significance": "high"}],
+                "recurring_patterns": [],
+            },
+            "seam_data": {},
+            "raw_sources": {},
+        }
+        config = {
+            "digest": {
+                "at_a_glance": {"max_items": 14, "normal_items": 10},
+                "deep_dives": {"count": 2},
+            }
+        }
+
+        dry_run_result = run(context, config, dry_run=True)
+        normal_result = run(context, config, dry_run=False)
+
+        assert dry_run_result["template_data"]["coverage_gap_diagnostics"]["gaps"][0]["topic"] == "Gap A"
+        assert normal_result["template_data"]["coverage_gap_diagnostics"] == {}

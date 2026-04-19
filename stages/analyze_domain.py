@@ -36,6 +36,7 @@ Each item schema:
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from copy import deepcopy
 from urllib.parse import urlparse
 
 from llm import call_llm
@@ -576,6 +577,30 @@ def _run_domain_pass(
 _RETRY_DELAY_SECONDS = 300  # 5 minutes
 
 
+def _resolve_domain_configs(config: dict) -> dict[str, dict]:
+    """Resolve active desk routing from config while reusing desk-owned metadata."""
+    manifest = config.get("desks") or []
+    if not manifest:
+        return deepcopy(_DOMAIN_CONFIGS)
+
+    resolved: dict[str, dict] = {}
+    for entry in manifest:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        if name not in _DOMAIN_CONFIGS:
+            log.warning(f"analyze_domain: unknown desk in config.desks: {name!r}")
+            continue
+
+        cfg = deepcopy(_DOMAIN_CONFIGS[name])
+        categories = entry.get("categories")
+        if categories is not None:
+            cfg["categories"] = set(categories)
+        resolved[name] = cfg
+
+    return resolved or deepcopy(_DOMAIN_CONFIGS)
+
+
 def run(
     context: dict, config: dict, model_config: dict | None = None, **kwargs
 ) -> dict:
@@ -584,12 +609,13 @@ def run(
     rss_items = raw.get("rss", [])
     markets = raw.get("markets", [])
     compressed_transcripts = context.get("compressed_transcripts", [])
+    domain_configs = _resolve_domain_configs(config)
 
     if not model_config:
         model_config = config.get("llm", {})
 
     domain_analysis = _run_all_domains(
-        rss_items, compressed_transcripts, markets, model_config
+        domain_configs, rss_items, compressed_transcripts, markets, model_config
     )
 
     failed_keys = [k for k, v in domain_analysis.items() if v.get("_failed")]
@@ -600,10 +626,10 @@ def run(
         )
         time.sleep(_RETRY_DELAY_SECONDS)
         for domain_key in failed_keys:
-            log.info(f"  Retrying domain: {domain_key} ({_DOMAIN_CONFIGS[domain_key]['label']})")
+            log.info(f"  Retrying domain: {domain_key} ({domain_configs[domain_key]['label']})")
             result = _run_domain_pass(
                 domain_key,
-                _DOMAIN_CONFIGS[domain_key],
+                domain_configs[domain_key],
                 rss_items,
                 compressed_transcripts,
                 markets if domain_key == "econ" else [],
@@ -620,7 +646,7 @@ def run(
         total_items += len(val.get("items", []))
 
     log.info(
-        f"analyze_domain: {total_items} total items across {len(_DOMAIN_CONFIGS)} domains"
+        f"analyze_domain: {total_items} total items across {len(domain_configs)} domains"
     )
     if still_failed:
         log.error(
@@ -638,6 +664,7 @@ _MAX_PARALLEL_DESKS = 4  # bound concurrency to avoid rate limits
 
 
 def _run_all_domains(
+    domain_configs: dict[str, dict],
     rss_items: list[dict],
     compressed_transcripts: list[dict],
     markets: list[dict],
@@ -646,7 +673,7 @@ def _run_all_domains(
     domain_analysis: dict = {}
 
     def _run_one(domain_key: str) -> tuple[str, dict]:
-        domain_cfg = _DOMAIN_CONFIGS[domain_key]
+        domain_cfg = domain_configs[domain_key]
         log.info(f"  Analyzing domain: {domain_key} ({domain_cfg['label']})")
         result = _run_domain_pass(
             domain_key,
@@ -659,9 +686,7 @@ def _run_all_domains(
         return domain_key, result
 
     with ThreadPoolExecutor(max_workers=_MAX_PARALLEL_DESKS) as pool:
-        futures = {
-            pool.submit(_run_one, key): key for key in _DOMAIN_CONFIGS
-        }
+        futures = {pool.submit(_run_one, key): key for key in domain_configs}
         for future in as_completed(futures):
             domain_key = futures[future]
             try:

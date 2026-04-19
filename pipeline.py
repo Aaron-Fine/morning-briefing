@@ -586,7 +586,7 @@ def run_pipeline(
 
             outputs = _run_with_retry(
                 lambda m=module: m.run(
-                    context, config, model_config, stage_cfg=stage_cfg
+                    context, config, model_config, stage_cfg=stage_cfg, dry_run=dry_run
                 ),
                 stage_name,
                 max_retries=2,

@@ -160,6 +160,7 @@ def run(
     """Assemble template data, render HTML, and return html + template_data artifacts."""
     seam_data = context.get("seam_data", {})
     raw_sources = context.get("raw_sources", {})
+    dry_run = kwargs.get("dry_run", False)
 
     today = now_local()
 
@@ -221,6 +222,7 @@ def run(
     domain_failures = context.get("domain_analysis_failures", [])
     raw_rss_count = len(raw_sources.get("rss", []))
     analysis_unavailable = bool(domain_failures) and not at_a_glance and raw_rss_count > 0
+    coverage_gap_diagnostics = context.get("coverage_gaps", {}) if dry_run else {}
 
     template_data = {
         "date_display": format_display_date(today),
@@ -236,6 +238,7 @@ def run(
         "contested_narratives": seam_data.get("contested_narratives", []),
         "coverage_gaps": seam_data.get("coverage_gaps", []),
         "key_assumptions": seam_data.get("key_assumptions", []),
+        "coverage_gap_diagnostics": coverage_gap_diagnostics,
         "local_items": local_items,
         "market_context": market_context,
         "week_ahead": week_ahead,

@@ -414,6 +414,30 @@ EMAIL_TEMPLATE = _env.from_string("""\
   </div>
   {% endif %}
 
+  {% if coverage_gap_diagnostics and coverage_gap_diagnostics.gaps %}
+  <div class="section">
+    <h2 class="mono-label sec-label">Coverage Gaps Diagnostic</h2>
+    {% for gap in coverage_gap_diagnostics.gaps %}
+    <div class="seam-item">
+      <div class="seam-topic">{{ gap.topic }}</div>
+      <div class="seam-desc">{{ gap.description }}</div>
+      <div class="seam-sources">{{ gap.significance|upper }} · Likely miss: {{ gap.hypothesis }}</div>
+      {% if gap.suggested_source_category %}
+      <div class="seam-desc" style="margin-top:4px;">Suggested source category: {{ gap.suggested_source_category }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% if coverage_gap_diagnostics.recurring_patterns %}
+    <div style="margin-top: 12px;">
+      <div class="mono-label seam-sub">Recurring Patterns</div>
+      {% for pattern in coverage_gap_diagnostics.recurring_patterns %}
+      <div class="seam-desc">{{ pattern }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <!-- FOOTER -->
   <div class="footer">
     Generated at {{ generated_at }}<br>

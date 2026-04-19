@@ -16,6 +16,7 @@ from stages.coverage_gaps import (
     _build_plan_summary,
     _build_recurring_context,
     _empty_result,
+    _normalize_result,
     _load_recent_history,
     _append_history,
     run,
@@ -68,6 +69,53 @@ class TestEmptyResult:
         assert result["date"] == "2026-04-18"
         assert result["gaps"] == []
         assert result["recurring_patterns"] == []
+
+
+class TestNormalizeResult:
+    def test_drops_unexpected_top_level_fields(self):
+        result = _normalize_result(
+            {
+                "schema_version": 99,
+                "date": "2026-04-18",
+                "gaps": [{"topic": "Gap", "description": "Desc", "significance": "high"}],
+                "recurring_patterns": ["Repeated miss"],
+                "topic": "stray",
+                "description": "stray",
+            },
+            "2026-04-18",
+        )
+        assert set(result.keys()) == {
+            "schema_version",
+            "date",
+            "gaps",
+            "recurring_patterns",
+        }
+        assert result["schema_version"] == 1
+
+    def test_normalizes_gap_items(self):
+        result = _normalize_result(
+            {
+                "gaps": [
+                    {
+                        "topic": " Gap ",
+                        "description": " Desc ",
+                        "significance": "urgent",
+                        "hypothesis": " Why ",
+                        "suggested_source_category": " Cat ",
+                    }
+                ]
+            },
+            "2026-04-18",
+        )
+        assert result["gaps"] == [
+            {
+                "topic": "Gap",
+                "description": "Desc",
+                "significance": "low",
+                "hypothesis": "Why",
+                "suggested_source_category": "Cat",
+            }
+        ]
 
 
 class TestHistory:

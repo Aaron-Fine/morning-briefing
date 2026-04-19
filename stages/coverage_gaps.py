@@ -113,6 +113,52 @@ def _empty_result(date: str) -> dict:
     }
 
 
+def _normalize_gap_item(item: dict) -> dict:
+    """Normalize one coverage gap entry to the explicit stage contract."""
+    if not isinstance(item, dict):
+        return {
+            "topic": "",
+            "description": "",
+            "significance": "low",
+            "hypothesis": "",
+            "suggested_source_category": "",
+        }
+
+    significance = str(item.get("significance", "low")).strip().lower()
+    if significance not in {"high", "medium", "low"}:
+        significance = "low"
+
+    return {
+        "topic": str(item.get("topic", "")).strip(),
+        "description": str(item.get("description", "")).strip(),
+        "significance": significance,
+        "hypothesis": str(item.get("hypothesis", "")).strip(),
+        "suggested_source_category": str(
+            item.get("suggested_source_category", "")
+        ).strip(),
+    }
+
+
+def _normalize_result(result: dict | None, date: str) -> dict:
+    """Normalize the stage output to the narrow published contract."""
+    if not isinstance(result, dict):
+        return _empty_result(date)
+
+    return {
+        "schema_version": 1,
+        "date": str(result.get("date", date)).strip() or date,
+        "gaps": [
+            _normalize_gap_item(item)
+            for item in list(result.get("gaps", []) or [])[:5]
+        ],
+        "recurring_patterns": [
+            str(item).strip()
+            for item in list(result.get("recurring_patterns", []) or [])
+            if str(item).strip()
+        ],
+    }
+
+
 def run(
     context: dict, config: dict, model_config: dict | None = None, **kwargs
 ) -> dict:
@@ -158,16 +204,7 @@ def run(
         log.error(f"coverage_gaps: LLM call failed: {e}")
         return {"coverage_gaps": _empty_result(date)}
 
-    # Normalize result
-    if not isinstance(result, dict):
-        result = _empty_result(date)
-    result.setdefault("schema_version", 1)
-    result.setdefault("date", date)
-    result.setdefault("gaps", [])
-    result.setdefault("recurring_patterns", [])
-
-    # Cap gaps at 5
-    result["gaps"] = result["gaps"][:5]
+    result = _normalize_result(result, date)
 
     # Append to history
     _append_history(result)

@@ -120,8 +120,8 @@ CANDIDATE_FEEDS = [
 
     # --- CULTURE / STRUCTURAL ---
     {"url": "https://www.theamericanconservative.com/feed/", "name": "The American Conservative", "category": "culture-structural", "cap": 3},
-    {"url": "https://worksinprogress.co/feed", "name": "Works in Progress", "category": "culture-structural", "cap": 3},
-    {"url": "https://www.thenewatlantis.com/feed/all", "name": "The New Atlantis", "category": "culture-structural", "cap": 3},
+    {"url": "https://worksinprogress.substack.com/feed", "name": "Works in Progress", "category": "culture-structural", "cap": 3},
+    {"url": "https://www.thenewatlantis.com/feed", "name": "The New Atlantis", "category": "culture-structural", "cap": 3},
     {"url": "https://comment.org/feed/", "name": "Comment Magazine", "category": "culture-structural", "cap": 3},
 
     # --- SCIENCE / BIOTECH ---
@@ -131,7 +131,7 @@ CANDIDATE_FEEDS = [
     {"url": "https://endpts.com/feed/", "name": "Endpoints News", "category": "science-biotech", "cap": 3},
 
     # --- LEGAL / INSTITUTIONAL ---
-    {"url": "https://www.lawfaremedia.org/feed", "name": "Lawfare", "category": "legal-institutional", "cap": 5},
+    {"url": "https://feeds.feedburner.com/lawfare", "name": "Lawfare", "category": "legal-institutional", "cap": 5},
     {"url": "https://www.scotusblog.com/feed/", "name": "SCOTUSblog", "category": "legal-institutional", "cap": 3},
     {"url": "https://www.justsecurity.org/feed/", "name": "Just Security", "category": "legal-institutional", "cap": 3},
 
