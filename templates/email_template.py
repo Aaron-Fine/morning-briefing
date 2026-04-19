@@ -131,6 +131,8 @@ EMAIL_TEMPLATE = _env.from_string("""\
   .tag-science  { color: var(--tag-science-text);  background: var(--tag-science-bg); }
   .tag-econ     { color: var(--tag-econ-text);     background: var(--tag-econ-bg); }
   .tag-cyber    { color: var(--tag-cyber-text);    background: var(--tag-cyber-bg); }
+  .tag-energy   { color: var(--tag-energy-text);   background: var(--tag-energy-bg); }
+  .tag-biotech  { color: var(--tag-biotech-text);  background: var(--tag-biotech-bg); }
   .scan-hl { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; line-height: 1.4; }
   .scan-ctx { font-size: 14px; color: var(--text-secondary); line-height: 1.45; }
   .scan-ctx-block { margin-bottom: 6px; padding-left: 8px; border-left: 2px solid transparent; }
