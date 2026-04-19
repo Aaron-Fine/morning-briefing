@@ -20,6 +20,7 @@ Non-critical: returns empty results on failure so the pipeline can continue.
 
 import logging
 import json
+from json import JSONDecodeError
 
 from morning_digest.llm import call_llm
 from utils.prompts import load_prompt
@@ -29,6 +30,13 @@ log = logging.getLogger(__name__)
 
 _SCAN_PROMPT = load_prompt("seams_scan.md")
 _SYNTHESIS_PROMPT = load_prompt("seams_synthesis.md")
+_JSON_REPAIR_PROMPT = """You repair malformed JSON emitted by another model.
+
+Return ONLY valid JSON.
+Do not invent facts.
+If a field is truncated or uncertain, drop the partial item or replace it with a safe empty default.
+Preserve as much valid structure as possible.
+"""
 
 
 def _build_domain_summary(domain_analysis: dict) -> str:
@@ -178,27 +186,80 @@ def _call_turn_json(
     user_content: str,
     model_config: dict | None,
     turn_name: str,
+    fallback_shape: dict,
 ) -> dict:
-    """Call a seams turn, retrying once without streaming on parse failures."""
+    """Call a seams turn, retrying once without streaming and then repairing JSON."""
+    raw_attempts: list[str] = []
+    for stream in (True, False):
+        try:
+            raw = call_llm(
+                prompt,
+                user_content,
+                model_config,
+                max_retries=1,
+                json_mode=False,
+                stream=stream,
+            )
+            raw_attempts.append(raw)
+            return _parse_turn_json(raw)
+        except Exception as exc:
+            if stream:
+                log.warning(
+                    f"seams: {turn_name} turn failed with streaming, retrying once: {exc}"
+                )
+            else:
+                log.warning(
+                    f"seams: {turn_name} turn still failed without streaming: {exc}"
+                )
+
+    if raw_attempts:
+        try:
+            return _repair_turn_json(
+                raw_attempts[-1], model_config, turn_name, fallback_shape
+            )
+        except Exception as exc:
+            log.warning(f"seams: {turn_name} JSON repair failed: {exc}")
+
+    return dict(fallback_shape)
+
+
+def _parse_turn_json(raw: str) -> dict:
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
     try:
-        return call_llm(
-            prompt,
-            user_content,
-            model_config,
-            max_retries=1,
-            json_mode=True,
-            stream=True,
-        )
-    except Exception as exc:
-        log.warning(f"seams: {turn_name} turn failed with streaming, retrying once: {exc}")
-        return call_llm(
-            prompt,
-            user_content,
-            model_config,
-            max_retries=1,
-            json_mode=True,
-            stream=False,
-        )
+        return json.loads(text)
+    except JSONDecodeError:
+        decoder = json.JSONDecoder()
+        parsed, _end = decoder.raw_decode(text)
+        return parsed
+
+
+def _repair_turn_json(
+    raw: str,
+    model_config: dict | None,
+    turn_name: str,
+    fallback_shape: dict,
+) -> dict:
+    repair_config = dict(model_config or {})
+    repair_config["max_tokens"] = min(repair_config.get("max_tokens", 4000), 4000)
+    repair_request = f"""Repair this malformed {turn_name} JSON into valid JSON.
+
+Target shape:
+{json.dumps(fallback_shape, indent=2)}
+
+Malformed JSON:
+{raw}
+"""
+    return call_llm(
+        _JSON_REPAIR_PROMPT,
+        repair_request,
+        repair_config,
+        max_retries=1,
+        json_mode=True,
+        stream=False,
+    )
 
 
 def _empty_seam_result() -> dict:
@@ -255,6 +316,7 @@ def run(
             _scan_user_content(domain_summary, raw_summary, transcript_summary),
             scan_config,
             "scan",
+            _empty_seam_result()["seam_scan"],
         )
         seam_scan = _normalize_seam_scan(seam_scan)
 
@@ -269,6 +331,7 @@ def run(
             ),
             synthesis_config,
             "synthesis",
+            _empty_seam_result()["seam_data"],
         )
 
         # Validate output schema and URLs against known sources

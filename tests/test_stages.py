@@ -282,6 +282,17 @@ class TestAnomalySourceAbsence:
         assert len(result) >= 1
         assert any(a["check"] == "source_absence" for a in result)
 
+    def test_source_absence_summarizes_excess_categories(self):
+        raw_sources = {
+            "rss": [
+                {"url": f"https://example.com/{i}", "category": f"cat{i}"}
+                for i in range(5)
+                for _ in range(3)
+            ]
+        }
+        result = _check_source_absence(raw_sources, {})
+        assert any("additional categories" in a["detail"] for a in result)
+
 
 class TestAnomalyDeepDives:
     def test_dive_is_primary_by_domains_bridged(self):
@@ -391,3 +402,20 @@ class TestAnomalyRepeatedPhrases:
         seam_data = {"contested_narratives": []}
         result = _check_repeated_phrases(cross_domain, seam_data)
         assert result == []
+
+    def test_repeated_phrase_suppresses_overlapping_noise(self):
+        repeated = "word1 word2 word3 word4 word5 word6 word7 word8 word9 word10"
+        cross_domain = {
+            "at_a_glance": [
+                {"headline": repeated, "context": repeated, "cross_domain_note": ""}
+            ],
+            "deep_dives": [{"headline": repeated, "body": f"<p>{repeated}</p>"}],
+        }
+        seam_data = {
+            "contested_narratives": [{"topic": repeated, "description": repeated}]
+        }
+
+        result = _check_repeated_phrases(cross_domain, seam_data)
+
+        assert any(a["check"] == "repeated_phrase" for a in result)
+        assert len(result) <= 3

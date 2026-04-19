@@ -182,7 +182,7 @@ rss:
     # --- DEFENSE / MILITARY ---
     - { url: "https://breakingdefense.com/feed/", name: "Breaking Defense", category: "defense-mil", reliability: "primary-reporting" }
     - { url: "https://www.airandspaceforces.com/feed/", name: "Air & Space Forces", category: "defense-mil", reliability: "primary-reporting" }
-    - { url: "https://spacenews.com/feed/", name: "SpaceNews", category: "defense-mil", reliability: "primary-reporting" }
+    - { url: "https://spacenews.com/feed/", name: "SpaceNews", category: "defense-mil", reliability: "primary-reporting", cooldown_on_429_seconds: 21600 }
     - { url: "https://warontherocks.com/feed/", name: "War on the Rocks", cap: 5, category: "defense-mil", reliability: "analysis-opinion" }
     - { url: "https://defenseacquisition.substack.com/feed", name: "Defense Tech and Acquisition", cap: 5, category: "defense-mil", reliability: "analysis-opinion" }
 
@@ -203,18 +203,18 @@ rss:
 
     # --- ECONOMICS / TRADE ---
     - { url: "https://theovershoot.co/feed", name: "The Overshoot (Matt Klein)", cap: 3, category: "econ-trade", reliability: "analysis-opinion" }
-    - { url: "https://bradsetser.substack.com/feed", name: "Brad Setser", cap: 3, category: "econ-trade", reliability: "analysis-opinion" }
+    - { url: "https://www.cfr.org/series/follow-the-money", name: "Brad Setser", cap: 3, category: "econ-trade", reliability: "analysis-opinion", mode: "html_index" }
     - { url: "https://www.ft.com/rss/home", name: "Financial Times", cap: 5, category: "econ-trade", reliability: "primary-reporting" }
     - { url: "https://www.economist.com/finance-and-economics/rss.xml", name: "The Economist (Finance & Economics)", cap: 5, category: "econ-trade", reliability: "analysis-opinion" }
-    - { url: "https://www.reuters.com/markets/", name: "Reuters Markets", cap: 5, category: "econ-trade", reliability: "primary-reporting" }
+    - { url: "https://www.reuters.com/markets/", name: "Reuters Markets", cap: 5, category: "econ-trade", reliability: "primary-reporting", mode: "html_index", cooldown_on_error_seconds: 21600 }
 
     # --- GLOBAL SOUTH ---
     - { url: "https://www.ipsnews.net/news/headlines/feed/", name: "Inter Press Service", cap: 5, category: "global-south", reliability: "primary-reporting" }
-    - { url: "https://chinaglobalsouth.com/feed/", name: "China Global South Project", cap: 3, category: "global-south", reliability: "analysis-opinion" }
+    - { url: "https://chinaglobalsouth.com/news-feed/", name: "China Global South Project", cap: 3, category: "global-south", reliability: "analysis-opinion", mode: "html_index" }
 
     # --- PERSPECTIVE DIVERSITY ---
     # "Stress test" layer — only surface when contradicting consensus
-    - { url: "https://diff.substack.com/feed", name: "The Diff (Byrne Hobart)", cap: 3, category: "perspective-diversity", reliability: "analysis-opinion" }
+    - { url: "https://diff.substack.com/", name: "The Diff (Byrne Hobart)", cap: 3, category: "perspective-diversity", reliability: "analysis-opinion", mode: "html_index" }
     - { url: "https://slowboring.substack.com/feed", name: "Slow Boring (Matt Yglesias)", cap: 3, category: "perspective-diversity", reliability: "analysis-opinion" }
 
     # --- CYBERSECURITY ---

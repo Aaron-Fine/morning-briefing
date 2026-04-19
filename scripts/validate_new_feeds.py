@@ -23,6 +23,8 @@ import feedparser
 import requests
 import yaml
 
+from sources.rss_feeds import _items_from_html_index
+
 
 def _fetch_feed(url: str, timeout: int = 15) -> dict:
     """Fetch and parse a feed URL. Returns a result dict."""
@@ -57,6 +59,27 @@ def _fetch_feed(url: str, timeout: int = 15) -> dict:
     return {"ok": True, "error": "", "entries": len(feed.entries), "latest": latest}
 
 
+def _fetch_html_index(feed: dict, timeout: int = 15) -> dict:
+    try:
+        resp = requests.get(
+            feed["url"],
+            timeout=timeout,
+            headers={
+                "User-Agent": "MorningDigest/1.0",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            },
+        )
+        resp.raise_for_status()
+    except Exception as e:
+        return {"ok": False, "error": f"HTTP error: {e}", "entries": 0, "latest": ""}
+
+    items = _items_from_html_index(feed, resp.content)
+    if not items:
+        return {"ok": False, "error": "No article links found", "entries": 0, "latest": ""}
+
+    return {"ok": True, "error": "", "entries": len(items), "latest": ""}
+
+
 def validate_feeds(feeds: list[dict]) -> tuple[list[dict], int]:
     """Validate a list of feed dicts. Returns (results, failure_count)."""
     results = []
@@ -68,7 +91,10 @@ def validate_feeds(feeds: list[dict]) -> tuple[list[dict], int]:
         category = feed.get("category", "?")
 
         print(f"  Checking {name}...", end=" ", flush=True)
-        result = _fetch_feed(url)
+        if feed.get("mode") == "html_index":
+            result = _fetch_html_index(feed)
+        else:
+            result = _fetch_feed(url)
 
         status = "OK" if result["ok"] else "FAIL"
         if not result["ok"]:

@@ -1,20 +1,52 @@
 """Fetch and aggregate RSS feeds — direct or via FreshRSS API."""
 
+import json
 import logging
 import signal
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
+from pathlib import Path
 from typing import Optional
+from urllib.parse import urljoin, urlparse
+
 import feedparser
 import requests
 from dateutil import parser as dateparser
 
-from sources._http import http_get_bytes
-
 log = logging.getLogger(__name__)
 
 _MAX_PARALLEL_FEED_FETCHES = 6
+_FETCH_STATE_PATH = Path(__file__).parent.parent / "cache" / "rss_fetch_state.json"
+_USER_AGENT = "MorningDigest/1.0 (morningDigest@lurkers.us)"
+_DEFAULT_429_COOLDOWN_SECONDS = 6 * 60 * 60
+_DEFAULT_BROKEN_FEED_COOLDOWN_SECONDS = 24 * 60 * 60
+_PERSISTENT_ERROR_STATUSES = {400, 401, 404, 410}
+_HTML_INDEX_IGNORE_TITLES = {
+    "home",
+    "latest",
+    "archive",
+    "subscribe",
+    "sign in",
+    "log in",
+    "login",
+    "read more",
+    "view all",
+    "all posts",
+    "news feed",
+}
+_HTML_INDEX_IGNORE_PATH_PARTS = (
+    "/feed",
+    "/tag/",
+    "/topics/",
+    "/author/",
+    "/authors/",
+    "/category/",
+    "/subscribe",
+    "/account",
+    "/search",
+    "/about",
+)
 
 
 def fetch_rss(config: dict) -> list[dict]:
@@ -33,6 +65,36 @@ def fetch_rss(config: dict) -> list[dict]:
 
 class _FeedParseTimeout(Exception):
     pass
+
+
+class _AnchorParser(HTMLParser):
+    """Collect anchor href/text pairs from simple article index pages."""
+
+    def __init__(self):
+        super().__init__()
+        self.links: list[tuple[str, str]] = []
+        self._href: str | None = None
+        self._parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() != "a":
+            return
+        href = dict(attrs).get("href")
+        if href:
+            self._href = href
+            self._parts = []
+
+    def handle_data(self, data: str) -> None:
+        if self._href is not None:
+            self._parts.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() != "a" or self._href is None:
+            return
+        text = " ".join("".join(self._parts).split())
+        self.links.append((self._href, text))
+        self._href = None
+        self._parts = []
 
 
 def _parse_feed_with_timeout(content: bytes, feed_name: str, timeout_secs: int = 10):
@@ -62,12 +124,14 @@ def _fetch_direct(rss_config: dict) -> list[dict]:
     cutoff = datetime.now(timezone.utc) - timedelta(hours=36)
     all_items = []
     consecutive_failures = 0
+    fetch_state = _load_fetch_state()
+    state_changed = False
 
     for start in range(0, len(feeds), _MAX_PARALLEL_FEED_FETCHES):
         batch = feeds[start:start + _MAX_PARALLEL_FEED_FETCHES]
-        batch_contents = _fetch_feed_batch(batch)
+        batch_results = _fetch_feed_batch(batch, fetch_state)
 
-        for feed_conf, feed_content in zip(batch, batch_contents):
+        for feed_conf, fetch_result in zip(batch, batch_results):
             if consecutive_failures >= 5:
                 remaining = len(feeds) - feeds.index(feed_conf)
                 log.warning(
@@ -76,38 +140,34 @@ def _fetch_direct(rss_config: dict) -> list[dict]:
                 )
                 break
 
+            if fetch_result.get("skipped"):
+                continue
+
+            _apply_fetch_state(feed_conf, fetch_result, fetch_state)
+            state_changed = True
+
+            feed_content = fetch_result.get("content")
             if feed_content is None:
                 consecutive_failures += 1
                 continue
 
             consecutive_failures = 0
             try:
-                parsed = _parse_feed_with_timeout(feed_content, feed_conf["name"])
-                cap = feed_conf.get("cap", 15)
-                tag = feed_conf.get("tag", "")
-                for entry in parsed.entries[:cap]:
-                    published = _parse_feed_date(entry)
-                    if published and published < cutoff:
-                        continue
-
-                    item = {
-                        "source": feed_conf["name"],
-                        "title": entry.get("title", "").strip(),
-                        "url": entry.get("link", ""),
-                        "published": published.isoformat() if published else "",
-                        "summary": _clean_summary(entry.get("summary", "")),
-                    }
-                    if tag:
-                        item["tag"] = tag
-                    category = feed_conf.get("category", "")
-                    if category:
-                        item["category"] = category
-                    all_items.append(item)
+                items = _extract_feed_items(
+                    feed_conf,
+                    feed_content,
+                    fetch_result.get("content_type", ""),
+                    cutoff,
+                )
+                all_items.extend(items)
             except Exception as e:
                 log.warning(f"RSS parse failed for {feed_conf['name']}: {e}")
         else:
             continue
         break
+
+    if state_changed:
+        _save_fetch_state(fetch_state)
 
     if all_items:
         log.info(f"RSS: fetched {len(all_items)} items from {len(feeds)} feeds")
@@ -117,18 +177,266 @@ def _fetch_direct(rss_config: dict) -> list[dict]:
     return all_items
 
 
-def _fetch_feed_batch(feeds: list[dict]) -> list[bytes | None]:
+def _fetch_feed_batch(feeds: list[dict], fetch_state: dict) -> list[dict]:
     """Fetch one batch of feed bytes in parallel, preserving input order."""
-    max_workers = min(_MAX_PARALLEL_FEED_FETCHES, len(feeds) or 1)
+    active_feeds: list[dict] = []
+    results_by_name: dict[str, dict] = {}
+
+    for feed_conf in feeds:
+        skipped = _skip_due_to_cooldown(feed_conf, fetch_state)
+        if skipped is not None:
+            results_by_name[feed_conf["name"]] = skipped
+        else:
+            active_feeds.append(feed_conf)
+
+    max_workers = min(_MAX_PARALLEL_FEED_FETCHES, len(active_feeds) or 1)
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        return list(pool.map(_fetch_feed_content, feeds))
+        fetched = list(pool.map(_fetch_feed_content, active_feeds))
+
+    for feed_conf, result in zip(active_feeds, fetched):
+        results_by_name[feed_conf["name"]] = result
+
+    return [results_by_name[feed_conf["name"]] for feed_conf in feeds]
 
 
-def _fetch_feed_content(feed_conf: dict) -> bytes | None:
-    """Fetch raw feed bytes for one configured feed."""
-    return http_get_bytes(
-        feed_conf["url"], timeout=15, label=f"RSS {feed_conf['name']}"
+def _fetch_feed_content(feed_conf: dict) -> dict:
+    """Fetch raw feed bytes or HTML index content for one configured source."""
+    try:
+        resp = requests.get(
+            feed_conf["url"],
+            headers=_request_headers(feed_conf),
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return {
+            "content": resp.content,
+            "content_type": resp.headers.get("Content-Type", ""),
+            "status_code": resp.status_code,
+            "error": "",
+            "skipped": False,
+        }
+    except requests.HTTPError as e:
+        status_code = e.response.status_code if e.response is not None else None
+        error = str(e)
+    except Exception as e:
+        status_code = None
+        error = str(e)
+
+    label = f"RSS {feed_conf['name']}"
+    if status_code is None:
+        log.warning(f"{label}: HTTP GET failed: {error}")
+    else:
+        log.warning(f"{label}: HTTP GET failed: {error}")
+    return {
+        "content": None,
+        "content_type": "",
+        "status_code": status_code,
+        "error": error,
+        "skipped": False,
+    }
+
+
+def _request_headers(feed_conf: dict) -> dict:
+    headers = {"User-Agent": _USER_AGENT}
+    if feed_conf.get("mode") == "html_index":
+        headers.update(
+            {
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Cache-Control": "no-cache",
+            }
+        )
+    return headers
+
+
+def _load_fetch_state() -> dict:
+    if not _FETCH_STATE_PATH.exists():
+        return {}
+    try:
+        return json.loads(_FETCH_STATE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_fetch_state(fetch_state: dict) -> None:
+    _FETCH_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _FETCH_STATE_PATH.write_text(
+        json.dumps(fetch_state, indent=2, sort_keys=True),
+        encoding="utf-8",
     )
+
+
+def _state_key(feed_conf: dict) -> str:
+    return feed_conf["name"]
+
+
+def _skip_due_to_cooldown(feed_conf: dict, fetch_state: dict) -> dict | None:
+    state = fetch_state.get(_state_key(feed_conf), {})
+    cooldown_until = state.get("cooldown_until", 0)
+    now_ts = datetime.now(timezone.utc).timestamp()
+    if cooldown_until <= now_ts:
+        return None
+
+    retry_at = datetime.fromtimestamp(cooldown_until, tz=timezone.utc).isoformat()
+    log.info(
+        f"RSS {feed_conf['name']}: skipping fetch until {retry_at} after recent "
+        f"HTTP {state.get('last_status', '?')}"
+    )
+    return {
+        "content": None,
+        "content_type": "",
+        "status_code": state.get("last_status"),
+        "error": state.get("last_error", ""),
+        "skipped": True,
+    }
+
+
+def _apply_fetch_state(feed_conf: dict, fetch_result: dict, fetch_state: dict) -> None:
+    key = _state_key(feed_conf)
+    state = dict(fetch_state.get(key, {}))
+    state["last_checked"] = datetime.now(timezone.utc).isoformat()
+    state["last_status"] = fetch_result.get("status_code")
+    state["last_error"] = fetch_result.get("error", "")
+
+    status_code = fetch_result.get("status_code")
+    if fetch_result.get("content") is not None:
+        state["cooldown_until"] = 0
+        state["last_success"] = state["last_checked"]
+    elif status_code == 429:
+        cooldown = feed_conf.get(
+            "cooldown_on_429_seconds", _DEFAULT_429_COOLDOWN_SECONDS
+        )
+        state["cooldown_until"] = (
+            datetime.now(timezone.utc).timestamp() + cooldown
+        )
+    elif status_code in _PERSISTENT_ERROR_STATUSES:
+        cooldown = feed_conf.get(
+            "cooldown_on_error_seconds", _DEFAULT_BROKEN_FEED_COOLDOWN_SECONDS
+        )
+        state["cooldown_until"] = (
+            datetime.now(timezone.utc).timestamp() + cooldown
+        )
+    else:
+        state["cooldown_until"] = 0
+
+    fetch_state[key] = state
+
+
+def _extract_feed_items(
+    feed_conf: dict,
+    content: bytes,
+    content_type: str,
+    cutoff: datetime,
+) -> list[dict]:
+    if feed_conf.get("mode") != "html_index":
+        parsed = _parse_feed_with_timeout(content, feed_conf["name"])
+        if parsed.entries:
+            return _items_from_parsed_feed(feed_conf, parsed.entries, cutoff)
+
+    if feed_conf.get("mode") == "html_index" or "html" in content_type.lower():
+        html_items = _items_from_html_index(feed_conf, content)
+        if html_items:
+            return html_items
+
+    return []
+
+
+def _items_from_parsed_feed(
+    feed_conf: dict,
+    entries: list,
+    cutoff: datetime,
+) -> list[dict]:
+    items = []
+    cap = feed_conf.get("cap", 15)
+    tag = feed_conf.get("tag", "")
+    category = feed_conf.get("category", "")
+
+    for entry in entries[:cap]:
+        published = _parse_feed_date(entry)
+        if published and published < cutoff:
+            continue
+
+        item = {
+            "source": feed_conf["name"],
+            "title": entry.get("title", "").strip(),
+            "url": entry.get("link", ""),
+            "published": published.isoformat() if published else "",
+            "summary": _clean_summary(entry.get("summary", "")),
+        }
+        if tag:
+            item["tag"] = tag
+        if category:
+            item["category"] = category
+        items.append(item)
+
+    return items
+
+
+def _items_from_html_index(feed_conf: dict, content: bytes) -> list[dict]:
+    parser = _AnchorParser()
+    parser.feed(content.decode("utf-8", errors="ignore"))
+
+    base_url = feed_conf["url"]
+    base_netloc = urlparse(base_url).netloc
+    tag = feed_conf.get("tag", "")
+    category = feed_conf.get("category", "")
+    cap = feed_conf.get("cap", 15)
+    items = []
+    seen_urls: set[str] = set()
+
+    for href, title in parser.links:
+        if not _looks_like_article_link(base_netloc, href, title):
+            continue
+        absolute_url = urljoin(base_url, href)
+        if absolute_url in seen_urls:
+            continue
+        seen_urls.add(absolute_url)
+
+        item = {
+            "source": feed_conf["name"],
+            "title": title.strip(),
+            "url": absolute_url,
+            "published": "",
+            "summary": "",
+        }
+        if tag:
+            item["tag"] = tag
+        if category:
+            item["category"] = category
+        items.append(item)
+        if len(items) >= cap:
+            break
+
+    return items
+
+
+def _looks_like_article_link(base_netloc: str, href: str, title: str) -> bool:
+    if not href or not title:
+        return False
+    normalized_title = " ".join(title.split())
+    if len(normalized_title) < 18 or len(normalized_title) > 180:
+        return False
+    if len(normalized_title.split()) < 3:
+        return False
+    title_lower = normalized_title.lower()
+    if title_lower in _HTML_INDEX_IGNORE_TITLES:
+        return False
+    if any(ignored in title_lower for ignored in ("subscribe", "sign in", "log in")):
+        return False
+
+    absolute = urljoin(f"https://{base_netloc}", href)
+    parsed = urlparse(absolute)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    if not parsed.netloc.endswith(base_netloc):
+        return False
+    if parsed.path in {"", "/"}:
+        return False
+    if any(part in parsed.path.lower() for part in _HTML_INDEX_IGNORE_PATH_PARTS):
+        return False
+    if parsed.path.endswith(".xml"):
+        return False
+    return True
 
 
 def _fetch_from_freshrss(rss_config: dict) -> list[dict]:
