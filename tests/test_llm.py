@@ -1,4 +1,4 @@
-"""Tests for llm.py — LLM client module."""
+"""Tests for morning_digest.llm — LLM client module."""
 
 import sys
 import os
@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from llm import _parse_response, call_llm
+from morning_digest.llm import _parse_response, call_llm
 
 
 class TestParseResponse:
@@ -64,7 +64,7 @@ class TestParseResponse:
 
 
 class TestCallLlm:
-    @patch("llm._call_fireworks")
+    @patch("morning_digest.llm._call_fireworks")
     def test_defaults_to_fireworks(self, mock_fireworks):
         mock_fireworks.return_value = {"result": "ok"}
         result = call_llm(
@@ -75,7 +75,7 @@ class TestCallLlm:
         mock_fireworks.assert_called_once()
         assert result == {"result": "ok"}
 
-    @patch("llm._call_anthropic")
+    @patch("morning_digest.llm._call_anthropic")
     def test_calls_anthropic_when_specified(self, mock_anthropic):
         mock_anthropic.return_value = {"result": "ok"}
         result = call_llm(
@@ -86,7 +86,7 @@ class TestCallLlm:
         mock_anthropic.assert_called_once()
         assert result == {"result": "ok"}
 
-    @patch("llm._call_fireworks")
+    @patch("morning_digest.llm._call_fireworks")
     def test_passes_max_retries(self, mock_fireworks):
         mock_fireworks.return_value = "response"
         call_llm(
@@ -98,7 +98,7 @@ class TestCallLlm:
         call_args = mock_fireworks.call_args
         assert call_args.args[3] == 5
 
-    @patch("llm._call_fireworks")
+    @patch("morning_digest.llm._call_fireworks")
     def test_passes_json_mode(self, mock_fireworks):
         mock_fireworks.return_value = '{"ok": true}'
         call_llm(
@@ -110,7 +110,7 @@ class TestCallLlm:
         call_args = mock_fireworks.call_args
         assert call_args.args[4] is False
 
-    @patch("llm._call_fireworks")
+    @patch("morning_digest.llm._call_fireworks")
     def test_passes_stream(self, mock_fireworks):
         mock_fireworks.return_value = "response"
         call_llm(
@@ -122,7 +122,7 @@ class TestCallLlm:
         call_args = mock_fireworks.call_args
         assert call_args.args[5] is False
 
-    @patch("llm._call_fireworks")
+    @patch("morning_digest.llm._call_fireworks")
     def test_default_provider_is_fireworks(self, mock_fireworks):
         mock_fireworks.return_value = "response"
         call_llm(

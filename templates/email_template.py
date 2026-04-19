@@ -64,6 +64,8 @@ EMAIL_TEMPLATE = _env.from_string("""\
     --tag-science-text:  #7e5109; --tag-science-bg:  #fef5e7;
     --tag-econ-text:     #1a5276; --tag-econ-bg:     #d4efdf;
     --tag-cyber-text:    #633974; --tag-cyber-bg:    #f5eef8;
+    --tag-energy-text:   #784212; --tag-energy-bg:   #fdebd0;
+    --tag-biotech-text:  #0e6251; --tag-biotech-bg:  #d1f2eb;
 
     /* Weather display */
     --wx-bg:         #f7f5f0;
@@ -129,6 +131,8 @@ EMAIL_TEMPLATE = _env.from_string("""\
   .tag-science  { color: var(--tag-science-text);  background: var(--tag-science-bg); }
   .tag-econ     { color: var(--tag-econ-text);     background: var(--tag-econ-bg); }
   .tag-cyber    { color: var(--tag-cyber-text);    background: var(--tag-cyber-bg); }
+  .tag-energy   { color: var(--tag-energy-text);   background: var(--tag-energy-bg); }
+  .tag-biotech  { color: var(--tag-biotech-text);  background: var(--tag-biotech-bg); }
   .scan-hl { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; line-height: 1.4; }
   .scan-ctx { font-size: 14px; color: var(--text-secondary); line-height: 1.45; }
   .scan-ctx-block { margin-bottom: 6px; padding-left: 8px; border-left: 2px solid transparent; }
@@ -213,7 +217,7 @@ EMAIL_TEMPLATE = _env.from_string("""\
 
   <!-- WEATHER -->
    {% if weather_html %}
-   <div class="bar" style="padding:12px 32px;">{{ weather_html|safe }}</div>
+   <div class="bar" style="padding:12px 32px;">{{ weather_html }}</div>
   {% elif weather and weather.current_temp_f is not none %}
   <div class="bar">
     <span>{{ weather.city }}, {{ weather.state }} — {{ weather.condition }}{% if weather.aqi %} · AQI {{ weather.aqi }} ({{ weather.aqi_label }}){% endif %}</span>
@@ -409,6 +413,30 @@ EMAIL_TEMPLATE = _env.from_string("""\
       <div class="seam-sources">Confidence: {{ ka.confidence }}{% if ka.confidence_basis %} — {{ ka.confidence_basis }}{% endif %}</div>
     </div>
     {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if coverage_gap_diagnostics and coverage_gap_diagnostics.gaps %}
+  <div class="section">
+    <h2 class="mono-label sec-label">Coverage Gaps Diagnostic</h2>
+    {% for gap in coverage_gap_diagnostics.gaps %}
+    <div class="seam-item">
+      <div class="seam-topic">{{ gap.topic }}</div>
+      <div class="seam-desc">{{ gap.description }}</div>
+      <div class="seam-sources">{{ gap.significance|upper }} · Likely miss: {{ gap.hypothesis }}</div>
+      {% if gap.suggested_source_category %}
+      <div class="seam-desc" style="margin-top:4px;">Suggested source category: {{ gap.suggested_source_category }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% if coverage_gap_diagnostics.recurring_patterns %}
+    <div style="margin-top: 12px;">
+      <div class="mono-label seam-sub">Recurring Patterns</div>
+      {% for pattern in coverage_gap_diagnostics.recurring_patterns %}
+      <div class="seam-desc">{{ pattern }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
   </div>
   {% endif %}
 

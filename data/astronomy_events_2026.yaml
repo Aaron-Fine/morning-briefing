@@ -1,0 +1,49 @@
+# Major 2026 sky events.
+# For future years, consider an ephemeris library like skyfield.
+
+- date: 2026-01-03
+  description: Quadrantids meteor shower peaks
+- date: 2026-01-10
+  description: Full Wolf Moon
+- date: 2026-02-09
+  description: Full Snow Moon
+- date: 2026-03-03
+  description: Jupiter-Mercury conjunction
+- date: 2026-03-11
+  description: Full Worm Moon
+- date: 2026-03-29
+  description: Partial solar eclipse (visible from parts of N. America)
+- date: 2026-04-09
+  description: Full Pink Moon
+- date: 2026-04-22
+  description: Lyrids meteor shower peaks
+- date: 2026-05-06
+  description: Eta Aquariids meteor shower peaks
+- date: 2026-05-08
+  description: Full Flower Moon
+- date: 2026-06-07
+  description: Full Strawberry Moon
+- date: 2026-07-06
+  description: Full Buck Moon
+- date: 2026-07-28
+  description: Delta Aquariids meteor shower peaks
+- date: 2026-08-04
+  description: Full Sturgeon Moon
+- date: 2026-08-12
+  description: "Perseids meteor shower peaks \u2014 best viewing after midnight"
+- date: 2026-08-12
+  description: Total lunar eclipse (visible from Americas)
+- date: 2026-09-03
+  description: Full Corn Moon
+- date: 2026-10-02
+  description: Full Harvest Moon
+- date: 2026-10-21
+  description: Orionids meteor shower peaks
+- date: 2026-11-01
+  description: Full Beaver Moon
+- date: 2026-11-17
+  description: Leonids meteor shower peaks
+- date: 2026-12-01
+  description: Full Cold Moon
+- date: 2026-12-13
+  description: "Geminids meteor shower peaks \u2014 best of the year"

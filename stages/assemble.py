@@ -19,14 +19,14 @@ Inputs (Phase 0 fallback):
 Outputs: html (str), template_data (dict), digest_json (dict)
 
 Security Layer 4 (Jinja2 autoescape) is enforced here: deep dive body HTML is
-sanitized by validate.py and then wrapped in Markup() before template rendering.
+sanitized by morning_digest.validate and then wrapped in Markup() before template rendering.
 """
 
 import logging
-from datetime import datetime
 from markupsafe import Markup
 
 from templates.email_template import render_email
+from utils.time import format_display_date, format_display_time, now_local, tz_abbrev
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +42,8 @@ _TAG_LABELS = {
     "cyber": "Cyber",
     "local": "Local",
     "science": "Science",
+    "energy": "Energy",
+    "biotech": "Biotech",
 }
 
 
@@ -158,8 +160,9 @@ def run(
     """Assemble template data, render HTML, and return html + template_data artifacts."""
     seam_data = context.get("seam_data", {})
     raw_sources = context.get("raw_sources", {})
+    dry_run = kwargs.get("dry_run", False)
 
-    today = datetime.now()
+    today = now_local()
 
     # --- Select pipeline mode ---
     if context.get("cross_domain_output"):
@@ -219,16 +222,11 @@ def run(
     domain_failures = context.get("domain_analysis_failures", [])
     raw_rss_count = len(raw_sources.get("rss", []))
     analysis_unavailable = bool(domain_failures) and not at_a_glance and raw_rss_count > 0
+    coverage_gap_diagnostics = context.get("coverage_gaps", {}) if dry_run else {}
 
     template_data = {
-        "date_display": today.strftime("%A, %B %-d, %Y"),
-        "generated_at": (
-            today.strftime("%-I:%M %p")
-            + " "
-            + config.get("location", {})
-            .get("timezone", "America/Denver")
-            .split("/")[-1]
-        ),
+        "date_display": format_display_date(today),
+        "generated_at": f"{format_display_time(today)} {tz_abbrev(today)}",
         "rss_source_names": rss_source_names,
         "yt_source_names": yt_source_names,
         "spiritual": spiritual,
@@ -240,6 +238,7 @@ def run(
         "contested_narratives": seam_data.get("contested_narratives", []),
         "coverage_gaps": seam_data.get("coverage_gaps", []),
         "key_assumptions": seam_data.get("key_assumptions", []),
+        "coverage_gap_diagnostics": coverage_gap_diagnostics,
         "local_items": local_items,
         "market_context": market_context,
         "week_ahead": week_ahead,

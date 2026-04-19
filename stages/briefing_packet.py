@@ -8,8 +8,9 @@ Also writes to output/latest_briefing_packet.json for easy access.
 
 import json
 import logging
-from datetime import datetime
 from pathlib import Path
+
+from utils.time import artifact_date
 
 log = logging.getLogger(__name__)
 
@@ -114,7 +115,7 @@ def _build_metadata(context: dict, config: dict) -> dict:
             models_used[stage["name"]] = model_cfg["model"]
 
     return {
-        "date": run_meta.get("run_date", datetime.now().strftime("%Y-%m-%d")),
+        "date": run_meta.get("run_date", artifact_date()),
         "source_counts": source_counts,
         "models_used": models_used,
         "stage_timings": run_meta.get("stage_timings", {}),
@@ -170,7 +171,7 @@ def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
     domain_analysis = context.get("domain_analysis", {})
     raw_sources = context.get("raw_sources", {})
     seam_data = context.get("seam_data", {})
-    run_date = datetime.now().strftime("%Y-%m-%d")
+    run_date = artifact_date()
 
     digest_summary = {
         "date": run_date,

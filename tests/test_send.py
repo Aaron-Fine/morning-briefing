@@ -12,6 +12,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from stages.send import _send_digest, _send_failure_notification, run
+from utils.time import format_display_date
 
 
 class TestSendDigest:
@@ -209,7 +210,7 @@ class TestSendFailureNotification:
         _send_failure_notification(self._make_config())
 
         msg = mock_server.sendmail.call_args[0][2]
-        today = datetime.now().strftime("%A, %B %-d, %Y")
+        today = format_display_date()
         assert today in msg
 
     @patch.dict(

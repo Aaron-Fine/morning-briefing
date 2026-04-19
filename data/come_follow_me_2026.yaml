@@ -1,0 +1,360 @@
+# 2026 Come Follow Me schedule (Old Testament cycle).
+# Based on the 2022 OT cycle.
+# Verify against churchofjesuschrist.org/study/come-follow-me for 2026-specific adjustments.
+
+- start: 2026-01-05
+  end: 2026-01-11
+  num: 1
+  reading: "Moses 1; Abraham 3"
+  title: This Is My Work and My Glory
+  key_scripture: "Moses 1:39"
+
+- start: 2026-01-12
+  end: 2026-01-18
+  num: 2
+  reading: "Genesis 1-2; Moses 2-3; Abraham 4-5"
+  title: In the Beginning
+  key_scripture: "Moses 2:1"
+
+- start: 2026-01-19
+  end: 2026-01-25
+  num: 3
+  reading: "Genesis 3-4; Moses 4-5"
+  title: The Fall
+  key_scripture: "Moses 5:11"
+
+- start: 2026-01-26
+  end: 2026-02-01
+  num: 4
+  reading: "Genesis 5; Moses 6"
+  title: Walk with God
+  key_scripture: "Moses 6:57"
+
+- start: 2026-02-02
+  end: 2026-02-08
+  num: 5
+  reading: Moses 7
+  title: Zion
+  key_scripture: "Moses 7:18"
+
+- start: 2026-02-09
+  end: 2026-02-15
+  num: 6
+  reading: "Genesis 6-11; Moses 8"
+  title: The True Ark
+  key_scripture: "Genesis 6:9"
+
+- start: 2026-02-16
+  end: 2026-02-22
+  num: 7
+  reading: "Genesis 12-17; Abraham 1-2"
+  title: The Great Promise
+  key_scripture: "Abraham 2:11"
+
+- start: 2026-02-23
+  end: 2026-03-01
+  num: 8
+  reading: Genesis 18-23
+  title: Is Any Thing Too Hard for the Lord?
+  key_scripture: "Genesis 18:14"
+
+- start: 2026-03-02
+  end: 2026-03-08
+  num: 9
+  reading: Genesis 24-33
+  title: Let God Prevail
+  key_scripture: "Genesis 32:28"
+
+- start: 2026-03-09
+  end: 2026-03-15
+  num: 10
+  reading: Genesis 37-41
+  title: The Lord Was with Joseph
+  key_scripture: "Genesis 39:2"
+
+- start: 2026-03-16
+  end: 2026-03-22
+  num: 11
+  reading: Genesis 42-50
+  title: God Meant It unto Good
+  key_scripture: "Genesis 50:20"
+
+- start: 2026-03-23
+  end: 2026-03-29
+  num: 12
+  reading: Exodus 1-6
+  title: I Have Remembered My Covenant
+  key_scripture: "Exodus 3:14"
+
+- start: 2026-03-30
+  end: 2026-04-05
+  num: 13
+  reading: Easter / General Conference
+  title: Easter and General Conference
+  key_scripture: "John 11:25"
+
+- start: 2026-04-06
+  end: 2026-04-12
+  num: 14
+  reading: Exodus 7-13
+  title: I Will Pass over You
+  key_scripture: "Exodus 12:13"
+
+- start: 2026-04-13
+  end: 2026-04-19
+  num: 15
+  reading: Exodus 14-17
+  title: "Stand Still, and See the Salvation of the Lord"
+  key_scripture: "Exodus 14:13"
+
+- start: 2026-04-20
+  end: 2026-04-26
+  num: 16
+  reading: Exodus 18-20
+  title: All That the Lord Hath Spoken We Will Do
+  key_scripture: "Exodus 19:5-6"
+
+- start: 2026-04-27
+  end: 2026-05-03
+  num: 17
+  reading: Exodus 21-24
+  title: We Will Be Obedient
+  key_scripture: "Exodus 24:7"
+
+- start: 2026-05-04
+  end: 2026-05-10
+  num: 18
+  reading: "Exodus 25-27; 30-31"
+  title: Holiness to the Lord
+  key_scripture: "Exodus 25:8"
+
+- start: 2026-05-11
+  end: 2026-05-17
+  num: 19
+  reading: "Exodus 28-29; Leviticus 8"
+  title: A Kingdom of Priests
+  key_scripture: "Exodus 28:3"
+
+- start: 2026-05-18
+  end: 2026-05-24
+  num: 20
+  reading: Exodus 32-34
+  title: My Presence Shall Go with Thee
+  key_scripture: "Exodus 33:14"
+
+- start: 2026-05-25
+  end: 2026-05-31
+  num: 21
+  reading: "Exodus 35-40; Leviticus 1; 16; 19"
+  title: Holiness to the Lord
+  key_scripture: "Leviticus 19:2"
+
+- start: 2026-06-01
+  end: 2026-06-07
+  num: 22
+  reading: "Numbers 11-14; 20-24"
+  title: Rebel Not Ye against the Lord
+  key_scripture: "Numbers 14:9"
+
+- start: 2026-06-08
+  end: 2026-06-14
+  num: 23
+  reading: "Deuteronomy 6-8; 15; 18; 29-30; 34"
+  title: Beware Lest Thou Forget the Lord
+  key_scripture: "Deuteronomy 6:5"
+
+- start: 2026-06-15
+  end: 2026-06-21
+  num: 24
+  reading: "Joshua 1-8; 23-24"
+  title: Be Strong and of a Good Courage
+  key_scripture: "Joshua 1:9"
+
+- start: 2026-06-22
+  end: 2026-06-28
+  num: 25
+  reading: "Judges 2-4; 6-8; 13-16"
+  title: The Lord Raised Up a Deliverer
+  key_scripture: "Judges 2:16"
+
+- start: 2026-06-29
+  end: 2026-07-05
+  num: 26
+  reading: "Ruth; 1 Samuel 1-3"
+  title: The Lord Looketh on the Heart
+  key_scripture: "Ruth 1:16"
+
+- start: 2026-07-06
+  end: 2026-07-12
+  num: 27
+  reading: "1 Samuel 8-10; 13; 15-18"
+  title: "The Battle Is the Lord's"
+  key_scripture: "1 Samuel 17:47"
+
+- start: 2026-07-13
+  end: 2026-07-19
+  num: 28
+  reading: "1 Samuel 23-24; 31; 2 Samuel 5-7; 11-12"
+  title: Create in Me a Clean Heart
+  key_scripture: "Psalm 51:10"
+
+- start: 2026-07-20
+  end: 2026-07-26
+  num: 29
+  reading: 1 Kings 1-7
+  title: The Lord Gave Solomon Wisdom
+  key_scripture: "1 Kings 3:9"
+
+- start: 2026-07-27
+  end: 2026-08-02
+  num: 30
+  reading: 1 Kings 8-13
+  title: This Is the House of the Lord
+  key_scripture: "1 Kings 8:30"
+
+- start: 2026-08-03
+  end: 2026-08-09
+  num: 31
+  reading: 1 Kings 17-19
+  title: How Long Halt Ye between Two Opinions?
+  key_scripture: "1 Kings 18:21"
+
+- start: 2026-08-10
+  end: 2026-08-16
+  num: 32
+  reading: 2 Kings 2-7
+  title: There Is a Prophet in Israel
+  key_scripture: "2 Kings 5:8"
+
+- start: 2026-08-17
+  end: 2026-08-23
+  num: 33
+  reading: 2 Kings 17-25
+  title: Turn Again to the Lord
+  key_scripture: "2 Chronicles 36:15-16"
+
+- start: 2026-08-24
+  end: 2026-08-30
+  num: 34
+  reading: "Ezra 1; 3-7; Nehemiah 2; 4-6; 8"
+  title: We Will Build unto the Lord
+  key_scripture: "Ezra 1:3"
+
+- start: 2026-08-31
+  end: 2026-09-06
+  num: 35
+  reading: Esther
+  title: The Lord Preserveth the Faithful
+  key_scripture: "Esther 4:14"
+
+- start: 2026-09-07
+  end: 2026-09-13
+  num: 36
+  reading: "Job 1-3; 12-14; 19; 21-24; 38-40; 42"
+  title: "The Lord Gave, and the Lord Hath Taken Away"
+  key_scripture: "Job 19:25"
+
+- start: 2026-09-14
+  end: 2026-09-20
+  num: 37
+  reading: "Psalms 1-2; 8; 19-33"
+  title: The Lord Is My Shepherd
+  key_scripture: "Psalm 23:1"
+
+- start: 2026-09-21
+  end: 2026-09-27
+  num: 38
+  reading: "Psalms 34-41; 46-51; 61-66; 69-72"
+  title: Create in Me a Clean Heart
+  key_scripture: "Psalm 51:10"
+
+- start: 2026-09-28
+  end: 2026-10-04
+  num: 39
+  reading: General Conference
+  title: General Conference
+  key_scripture: "Psalm 46:10"
+
+- start: 2026-10-05
+  end: 2026-10-11
+  num: 40
+  reading: "Psalms 73-77; 84-86; 90-92; 95-100; 102-104; 110; 116-117; 119"
+  title: O Give Thanks unto the Lord
+  key_scripture: "Psalm 100:3"
+
+- start: 2026-10-12
+  end: 2026-10-18
+  num: 41
+  reading: "Psalms 120-134; 136-139; 146-150"
+  title: Let Every Thing That Hath Breath Praise the Lord
+  key_scripture: "Psalm 150:6"
+
+- start: 2026-10-19
+  end: 2026-10-25
+  num: 42
+  reading: "Proverbs 1-4; 15-16; 22; 31; Ecclesiastes 1-3; 11-12"
+  title: Happy Is the Man That Findeth Wisdom
+  key_scripture: "Proverbs 3:5-6"
+
+- start: 2026-10-26
+  end: 2026-11-01
+  num: 43
+  reading: Isaiah 1-12
+  title: A Great Light
+  key_scripture: "Isaiah 9:6"
+
+- start: 2026-11-02
+  end: 2026-11-08
+  num: 44
+  reading: "Isaiah 13-14; 24-30; 35"
+  title: "The Lord's Hand Is Stretched Out Still"
+  key_scripture: "Isaiah 25:8"
+
+- start: 2026-11-09
+  end: 2026-11-15
+  num: 45
+  reading: Isaiah 36-41
+  title: Be Not Afraid
+  key_scripture: "Isaiah 41:10"
+
+- start: 2026-11-16
+  end: 2026-11-22
+  num: 46
+  reading: Isaiah 42-49
+  title: A Light to the Gentiles
+  key_scripture: "Isaiah 49:16"
+
+- start: 2026-11-23
+  end: 2026-11-29
+  num: 47
+  reading: Isaiah 50-57
+  title: He Was Wounded for Our Transgressions
+  key_scripture: "Isaiah 53:5"
+
+- start: 2026-11-30
+  end: 2026-12-06
+  num: 48
+  reading: Isaiah 58-66
+  title: "Arise, Shine; for Thy Light Is Come"
+  key_scripture: "Isaiah 60:1"
+
+- start: 2026-12-07
+  end: 2026-12-13
+  num: 49
+  reading: "Jeremiah 1-3; 7; 16-18; 20"
+  title: Before Thou Camest Forth I Sanctified Thee
+  key_scripture: "Jeremiah 1:5"
+
+- start: 2026-12-14
+  end: 2026-12-20
+  num: 50
+  reading: "Jeremiah 30-33; 36; Lamentations 1; 3"
+  title: I Will Write It in Their Hearts
+  key_scripture: "Jeremiah 31:33"
+
+- start: 2026-12-21
+  end: 2026-12-27
+  num: 51
+  reading: "Ezekiel 1-3; 33-34; 36-37; 47; Daniel 1-2; 6"
+  title: I Will Put My Spirit within You
+  key_scripture: "Ezekiel 37:27"

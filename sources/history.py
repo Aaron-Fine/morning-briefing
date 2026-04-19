@@ -1,9 +1,9 @@
 """Fetch 'On This Day' historical events from Wikipedia."""
 
 import logging
-from datetime import datetime
 
 from sources._http import http_get_json
+from utils.time import today_local
 
 log = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ def fetch_on_this_day(config: dict) -> dict:
     history_config = config.get("history", {})
     event_count = history_config.get("event_count", 8)
 
-    today = datetime.now()
+    today = today_local()
     empty = {"selected": [], "events": [], "month": today.month, "day": today.day}
 
     data = http_get_json(

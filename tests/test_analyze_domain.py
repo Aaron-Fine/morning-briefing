@@ -16,7 +16,9 @@ from stages.analyze_domain import (
     _fmt_transcripts,
     _fmt_markets,
     _empty_domain_result,
+    _resolve_domain_configs,
     _run_domain_pass,
+    run,
     _DOMAIN_CONFIGS,
 )
 
@@ -215,6 +217,24 @@ class TestEmptyDomainResult:
         assert result == {"items": []}
 
 
+class TestResolveDomainConfigs:
+    def test_uses_config_manifest_categories(self):
+        resolved = _resolve_domain_configs(
+            {
+                "desks": [
+                    {"name": "geopolitics", "categories": ["custom-cat"]},
+                    {"name": "econ", "categories": ["econ-trade"]},
+                ]
+            }
+        )
+        assert list(resolved.keys()) == ["geopolitics", "econ"]
+        assert resolved["geopolitics"]["categories"] == {"custom-cat"}
+
+    def test_falls_back_to_builtin_configs(self):
+        resolved = _resolve_domain_configs({})
+        assert resolved.keys() == _DOMAIN_CONFIGS.keys()
+
+
 class TestRunDomainPass:
     def _make_model_config(self):
         return {"provider": "fireworks"}
@@ -290,7 +310,7 @@ class TestRunDomainPass:
                 [],
                 self._make_model_config(),
             )
-        assert result == {"items": []}
+        assert result == {"items": [], "_failed": True}
         assert "LLM call failed" in caplog.text
 
     @patch("stages.analyze_domain.call_llm")
@@ -428,3 +448,25 @@ class TestRunDomainPass:
         )
         assert mock_llm.call_args[1]["json_mode"] is True
         assert mock_llm.call_args[1]["stream"] is True
+
+
+class TestAnalyzeDomainRetries:
+    @patch("stages.analyze_domain._run_all_domains")
+    @patch("stages.analyze_domain._run_domain_pass")
+    def test_failed_domains_retry_without_sleep(
+        self, mock_run_domain_pass, mock_run_all_domains
+    ):
+        mock_run_all_domains.return_value = {
+            "ai_tech": {"items": [], "_failed": True},
+            "econ": {"items": [], "market_context": ""},
+        }
+        mock_run_domain_pass.return_value = {"items": []}
+
+        result = run(
+            {"raw_sources": {"rss": [], "markets": []}, "compressed_transcripts": []},
+            {"llm": {}},
+            model_config={"provider": "fireworks"},
+        )
+
+        mock_run_domain_pass.assert_called_once()
+        assert result["domain_analysis_failures"] == []

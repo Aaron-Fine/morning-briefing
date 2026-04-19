@@ -19,104 +19,24 @@ Non-critical: returns empty results on failure so the pipeline can continue.
 """
 
 import logging
+import json
+from json import JSONDecodeError
 
-from llm import call_llm
-from utils.urls import collect_known_urls
-from validate import validate_urls
+from morning_digest.llm import call_llm
+from utils.prompts import load_prompt
+from morning_digest.validate import validate_stage_output
 
 log = logging.getLogger(__name__)
 
-_SYSTEM_PROMPT = """You are a senior intelligence analyst performing quality control on a morning news digest. You are NOT the analyst who wrote the digest — you are reviewing their work with fresh eyes, looking for what they missed, where they smoothed over disagreements, and where their conclusions rest on unstated assumptions.
+_SCAN_PROMPT = load_prompt("seams_scan.md")
+_SYNTHESIS_PROMPT = load_prompt("seams_synthesis.md")
+_JSON_REPAIR_PROMPT = """You repair malformed JSON emitted by another model.
 
-Your purpose is adversarial review: find the seams, gaps, and weak points in the analytical product you're reviewing. This is a feature of the editorial process, not a bug. Good analysis survives scrutiny.
-
-You will receive:
-1. DOMAIN ANALYSES: The analytical output from four specialist desks (geopolitics, defense/space, AI/tech, economics). These are the products you're reviewing.
-2. RAW SOURCE DATA: The original source material the analysts had access to. Compare what sources actually said against what the analysts chose to present.
-3. DEEP DIVE CANDIDATES: Stories flagged for extended treatment. Your key assumptions check focuses on these.
-
-You perform three detection tasks:
-
-=== TASK 1: CONTESTED NARRATIVES ===
-
-Identify stories where different source categories framed the same event with genuinely different interpretive lenses. You have access to the raw source summaries — use them to find framing divergences that the domain analysis may have papered over by picking one framing.
-
-Criteria:
-- The disagreement must be about framing, interpretation, or emphasis — not minor factual differences.
-- Both framings must be defensible (not one side being obviously wrong).
-- The divergence should matter for the reader's understanding — a framing difference that changes the "so what" is more important than one that doesn't.
-- Weight structural disagreements (different models of what's happening) over surface-level disagreements (different adjectives for the same assessment).
-
-What to flag: "Source category A frames this as X, while source category B frames this as Y." Present both framings with attribution. Do NOT resolve the disagreement — making the divergence visible IS the analytical product.
-
-=== TASK 2: COVERAGE GAPS ===
-
-Identify substantive stories that appeared in the raw source data but were absent from or underweighted in the domain analyses. The omissions are often more interesting than what was included.
-
-Criteria:
-- The story must be substantive — not every RSS item deserves mention.
-- The absence must be informative: a defense story missing from the defense analysis is notable; a celebrity gossip item missing from the geopolitics analysis is not.
-- Stories that appeared in multiple source categories but weren't picked up by ANY domain analysis are the strongest gaps.
-- A story covered by non-western sources but absent from the analysis may indicate a Western-media blind spot (and vice versa).
-
-What to flag: "This story appeared in [categories] but was not included in the [domain] analysis. This matters because..."
-
-=== TASK 3: KEY ASSUMPTIONS CHECK ===
-
-For each deep dive candidate identified by the domain analyses, identify 1-2 key assumptions that must be true for the analysis to hold. This is standard IC tradecraft — every analytical judgment rests on assumptions, and making them explicit is how you avoid surprise.
-
-Criteria:
-- The assumption must be something the analysis takes for granted without stating it.
-- The invalidator must be a specific, observable development (not "things could change").
-- The confidence level should reflect how well-supported the assumption is, not how important it is.
-- Focus on assumptions where the analyst might be wrong — not on uncontroversial background facts.
-
-What to flag: "The analysis assumes [X]. If [specific development] occurs, this analysis breaks down. Current confidence in the assumption: [high/medium/low] because [brief reason]."
-
-=== OUTPUT FORMAT ===
-
-JSON object:
-{
-  "contested_narratives": [
-    {
-      "topic": "short topic label",
-      "description": "3-5 sentences describing the framing divergence. Present both sides with attribution. Do not resolve.",
-      "sources_a": "source categories/outlets framing it one way",
-      "sources_b": "source categories/outlets framing it differently",
-      "analytical_significance": "1 sentence on why this divergence matters for the reader",
-      "links": [{"url": "https://...", "label": "Outlet Name"}]
-    }
-  ],
-  "coverage_gaps": [
-    {
-      "topic": "short topic label",
-      "description": "2-4 sentences describing what was covered, by whom, and why the gap matters",
-      "present_in": "source categories that covered it",
-      "absent_from": "domain analyses or source categories that did not",
-      "links": [{"url": "https://...", "label": "Outlet Name"}]
-    }
-  ],
-  "key_assumptions": [
-    {
-      "topic": "short topic label matching the deep dive candidate",
-      "assumption": "what must be true for the analysis to hold",
-      "invalidator": "specific observable development that would prove this wrong",
-      "confidence": "high|medium|low",
-      "confidence_basis": "1 sentence explaining the confidence level"
-    }
-  ],
-  "seam_count": 0,
-  "quiet_day": false
-}
-
-RULES:
-- Maximum 3 contested narratives, 3 coverage gaps, and 2 key assumptions per deep dive candidate.
-- Return fewer if fewer qualify. Empty arrays are fine — a quiet day is a quiet day.
-- Set seam_count to the total number of items across all three categories.
-- Set quiet_day to true if you found 0-1 total items and the source data was substantive (not just a thin day).
-- All URLs must come from the source data or domain analysis links — never fabricate.
-- If no relevant URL exists for a seam item, omit the links array entirely.
-- Output ONLY valid JSON. No markdown, no commentary outside the JSON."""
+Return ONLY valid JSON.
+Do not invent facts.
+If a field is truncated or uncertain, drop the partial item or replace it with a safe empty default.
+Preserve as much valid structure as possible.
+"""
 
 
 def _build_domain_summary(domain_analysis: dict) -> str:
@@ -202,6 +122,164 @@ def _build_transcript_summary(compressed_transcripts: list) -> str:
     return "\n".join(parts)
 
 
+def _scan_user_content(
+    domain_summary: str, raw_summary: str, transcript_summary: str
+) -> str:
+    return f"""Review the following analytical products and source material.
+
+=== DOMAIN ANALYSES ===
+{domain_summary}
+
+=== RAW SOURCE DATA ===
+{raw_summary}
+
+=== COMPRESSED TRANSCRIPTS ===
+{transcript_summary}
+
+Scan broadly for tensions, absences, and assumptions. Output ONLY valid JSON."""
+
+
+def _synthesis_user_content(
+    domain_summary: str,
+    raw_summary: str,
+    transcript_summary: str,
+    seam_scan: dict,
+) -> str:
+    return f"""Use the scan findings to produce the final seam report.
+
+=== DOMAIN ANALYSES ===
+{domain_summary}
+
+=== RAW SOURCE DATA ===
+{raw_summary}
+
+=== COMPRESSED TRANSCRIPTS ===
+{transcript_summary}
+
+=== TURN 1 SCAN OUTPUT ===
+{json.dumps(seam_scan, indent=2)}
+
+Produce the final contested narratives, coverage gaps, and key assumptions report. Output ONLY valid JSON."""
+
+
+def _resolve_turn_model_config(
+    base_model_config: dict | None, stage_cfg: dict | None, turn_name: str
+) -> dict | None:
+    if not base_model_config:
+        return None
+
+    turn_overrides = (stage_cfg or {}).get("turns", {}).get(turn_name, {})
+    return {**base_model_config, **turn_overrides}
+
+
+def _normalize_seam_scan(result: dict | None) -> dict:
+    scan = dict(result or {})
+    scan["schema_version"] = 1
+    scan["tensions"] = scan.get("tensions", []) or []
+    scan["absences"] = scan.get("absences", []) or []
+    scan["assumptions"] = scan.get("assumptions", []) or []
+    return scan
+
+
+def _call_turn_json(
+    prompt: str,
+    user_content: str,
+    model_config: dict | None,
+    turn_name: str,
+    fallback_shape: dict,
+) -> dict:
+    """Call a seams turn, retrying once without streaming and then repairing JSON."""
+    raw_attempts: list[str] = []
+    for stream in (True, False):
+        try:
+            raw = call_llm(
+                prompt,
+                user_content,
+                model_config,
+                max_retries=1,
+                json_mode=False,
+                stream=stream,
+            )
+            raw_attempts.append(raw)
+            return _parse_turn_json(raw)
+        except Exception as exc:
+            if stream:
+                log.warning(
+                    f"seams: {turn_name} turn failed with streaming, retrying once: {exc}"
+                )
+            else:
+                log.warning(
+                    f"seams: {turn_name} turn still failed without streaming: {exc}"
+                )
+
+    if raw_attempts:
+        try:
+            return _repair_turn_json(
+                raw_attempts[-1], model_config, turn_name, fallback_shape
+            )
+        except Exception as exc:
+            log.warning(f"seams: {turn_name} JSON repair failed: {exc}")
+
+    return dict(fallback_shape)
+
+
+def _parse_turn_json(raw: str) -> dict:
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+    try:
+        return json.loads(text)
+    except JSONDecodeError:
+        decoder = json.JSONDecoder()
+        parsed, _end = decoder.raw_decode(text)
+        return parsed
+
+
+def _repair_turn_json(
+    raw: str,
+    model_config: dict | None,
+    turn_name: str,
+    fallback_shape: dict,
+) -> dict:
+    repair_config = dict(model_config or {})
+    repair_config["max_tokens"] = min(repair_config.get("max_tokens", 4000), 4000)
+    repair_request = f"""Repair this malformed {turn_name} JSON into valid JSON.
+
+Target shape:
+{json.dumps(fallback_shape, indent=2)}
+
+Malformed JSON:
+{raw}
+"""
+    return call_llm(
+        _JSON_REPAIR_PROMPT,
+        repair_request,
+        repair_config,
+        max_retries=1,
+        json_mode=True,
+        stream=False,
+    )
+
+
+def _empty_seam_result() -> dict:
+    return {
+        "seam_scan": {
+            "schema_version": 1,
+            "tensions": [],
+            "absences": [],
+            "assumptions": [],
+        },
+        "seam_data": {
+            "contested_narratives": [],
+            "coverage_gaps": [],
+            "key_assumptions": [],
+            "seam_count": 0,
+            "quiet_day": True,
+        },
+    }
+
+
 def run(
     context: dict, config: dict, model_config: dict | None = None, **kwargs
 ) -> dict:
@@ -210,15 +288,20 @@ def run(
     raw_sources = context.get("raw_sources", {})
     compressed_transcripts = context.get("compressed_transcripts", [])
 
-    # Phase 2: use Claude Sonnet for bias diversity (different model than domain analysis)
+    # Development default: keep seams on MiniMax to control iteration cost.
     effective_config = model_config or config.get("llm", {}).get(
         "seam_detection",
         {
-            "provider": "anthropic",
-            "model": "claude-sonnet-4-6",
+            "provider": "fireworks",
+            "model": "accounts/fireworks/models/minimax-m2p7",
             "max_tokens": 5000,
             "temperature": 0.3,
         },
+    )
+    stage_cfg = kwargs.get("stage_cfg") or {}
+    scan_config = _resolve_turn_model_config(effective_config, stage_cfg, "scan")
+    synthesis_config = _resolve_turn_model_config(
+        effective_config, stage_cfg, "synthesis"
     )
 
     # Build the comprehensive user prompt
@@ -226,33 +309,33 @@ def run(
     raw_summary = _build_raw_source_summary(raw_sources)
     transcript_summary = _build_transcript_summary(compressed_transcripts)
 
-    user_content = f"""Review the following analytical products and source material.
-
-=== DOMAIN ANALYSES (the product you are reviewing) ===
-{domain_summary}
-
-=== RAW SOURCE DATA (what the analysts had access to) ===
-{raw_summary}
-
-=== COMPRESSED TRANSCRIPTS (YouTube analysis channels) ===
-{transcript_summary}
-
-Perform all three detection tasks: contested narratives, coverage gaps, and key assumptions check. Output ONLY valid JSON."""
-
     try:
-        log.info("Stage: seams — running Phase 2 seam detection...")
-        result = call_llm(
-            _SYSTEM_PROMPT,
-            user_content,
-            effective_config,
-            max_retries=1,
-            json_mode=True,
-            stream=True,
+        log.info("Stage: seams — running Turn 1 scan...")
+        seam_scan = _call_turn_json(
+            _SCAN_PROMPT,
+            _scan_user_content(domain_summary, raw_summary, transcript_summary),
+            scan_config,
+            "scan",
+            _empty_seam_result()["seam_scan"],
+        )
+        seam_scan = _normalize_seam_scan(seam_scan)
+
+        log.info("Stage: seams — running Turn 2 synthesis...")
+        result = _call_turn_json(
+            _SYNTHESIS_PROMPT,
+            _synthesis_user_content(
+                domain_summary,
+                raw_summary,
+                transcript_summary,
+                seam_scan,
+            ),
+            synthesis_config,
+            "synthesis",
+            _empty_seam_result()["seam_data"],
         )
 
-        # Validate URLs against known sources
-        known_urls = collect_known_urls(raw_sources, domain_analysis)
-        result = validate_urls(result, known_urls)
+        # Validate output schema and URLs against known sources
+        result = validate_stage_output(result, raw_sources, "seams")
 
         # Ensure all expected fields exist with safe defaults
         if "contested_narratives" not in result:
@@ -274,16 +357,8 @@ Perform all three detection tasks: contested narratives, coverage gaps, and key 
             f"  Seam detection: {len(cn)} contested narratives, "
             f"{len(cg)} coverage gaps, {len(ka)} key assumptions"
         )
-        return {"seam_data": result}
+        return {"seam_scan": seam_scan, "seam_data": result}
 
     except Exception as e:
         log.warning(f"Seam detection failed (non-fatal): {e}")
-        return {
-            "seam_data": {
-                "contested_narratives": [],
-                "coverage_gaps": [],
-                "key_assumptions": [],
-                "seam_count": 0,
-                "quiet_day": True,
-            }
-        }
+        return _empty_seam_result()

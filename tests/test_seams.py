@@ -2,6 +2,7 @@
 
 import sys
 import os
+import json
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -284,7 +285,14 @@ class TestCollectKnownUrls:
 class TestSeamsRun:
     @patch("stages.seams.call_llm")
     def test_successful_run(self, mock_llm):
-        mock_llm.return_value = {
+        mock_llm.side_effect = [
+            json.dumps({
+                "schema_version": 1,
+                "tensions": [{"topic": "Test topic"}],
+                "absences": [{"topic": "Gap topic"}],
+                "assumptions": [],
+            }),
+            json.dumps({
             "contested_narratives": [
                 {
                     "topic": "Test topic",
@@ -313,7 +321,8 @@ class TestSeamsRun:
                 }
             ],
             "key_assumptions": [],
-        }
+            }),
+        ]
         context = {
             "domain_analysis": {
                 "geopolitics": {
@@ -344,22 +353,24 @@ class TestSeamsRun:
             },
             "compressed_transcripts": [],
         }
-        config = {"llm": {"seam_detection": {"provider": "anthropic"}}}
+        config = {"llm": {"seam_detection": {"provider": "fireworks"}}}
         result = run(context, config)
+        assert "seam_scan" in result
         assert "seam_data" in result
         seam_data = result["seam_data"]
+        assert result["seam_scan"]["schema_version"] == 1
         assert len(seam_data["contested_narratives"]) == 2
         assert len(seam_data["coverage_gaps"]) == 1
         assert seam_data["seam_count"] == 3
         assert seam_data["quiet_day"] is False
+        assert mock_llm.call_count == 2
 
     @patch("stages.seams.call_llm")
     def test_quiet_day_detection(self, mock_llm):
-        mock_llm.return_value = {
-            "contested_narratives": [],
-            "coverage_gaps": [],
-            "key_assumptions": [],
-        }
+        mock_llm.side_effect = [
+            json.dumps({"schema_version": 1, "tensions": [], "absences": [], "assumptions": []}),
+            json.dumps({"contested_narratives": [], "coverage_gaps": [], "key_assumptions": []}),
+        ]
         context = {
             "domain_analysis": {"geopolitics": {"items": []}},
             "raw_sources": {"rss": []},
@@ -380,6 +391,7 @@ class TestSeamsRun:
         }
         config = {"llm": {}}
         result = run(context, config)
+        assert result["seam_scan"]["tensions"] == []
         assert "seam_data" in result
         seam_data = result["seam_data"]
         assert seam_data["contested_narratives"] == []
@@ -390,7 +402,10 @@ class TestSeamsRun:
 
     @patch("stages.seams.call_llm")
     def test_missing_fields_get_defaults(self, mock_llm):
-        mock_llm.return_value = {}
+        mock_llm.side_effect = [
+            json.dumps({"schema_version": 1, "tensions": [], "absences": [], "assumptions": []}),
+            json.dumps({}),
+        ]
         context = {
             "domain_analysis": {"geopolitics": {"items": []}},
             "raw_sources": {"rss": []},
@@ -406,23 +421,26 @@ class TestSeamsRun:
 
     @patch("stages.seams.call_llm")
     def test_url_validation_applied(self, mock_llm):
-        mock_llm.return_value = {
-            "contested_narratives": [
-                {
-                    "topic": "Test",
-                    "description": "Desc",
-                    "sources_a": "A",
-                    "sources_b": "B",
-                    "analytical_significance": "Sig",
-                    "links": [
-                        {"url": "https://example.com/valid", "label": "Valid"},
-                        {"url": "https://unknown.com/fake", "label": "Fake"},
-                    ],
-                }
-            ],
-            "coverage_gaps": [],
-            "key_assumptions": [],
-        }
+        mock_llm.side_effect = [
+            json.dumps({"schema_version": 1, "tensions": [], "absences": [], "assumptions": []}),
+            json.dumps({
+                "contested_narratives": [
+                    {
+                        "topic": "Test",
+                        "description": "Desc",
+                        "sources_a": "A",
+                        "sources_b": "B",
+                        "analytical_significance": "Sig",
+                        "links": [
+                            {"url": "https://example.com/valid", "label": "Valid"},
+                            {"url": "https://unknown.com/fake", "label": "Fake"},
+                        ],
+                    }
+                ],
+                "coverage_gaps": [],
+                "key_assumptions": [],
+            }),
+        ]
         context = {
             "domain_analysis": {"geopolitics": {"items": []}},
             "raw_sources": {
@@ -446,3 +464,23 @@ class TestSeamsRun:
         assert len(links) == 2
         assert links[0]["url"] == "https://example.com/valid"
         assert links[1]["url"] == ""
+
+    @patch("stages.seams.call_llm")
+    def test_repair_path_salvages_truncated_scan(self, mock_llm):
+        mock_llm.side_effect = [
+            '{"schema_version": 1, "tensions": [',
+            '{"schema_version": 1, "tensions": [',
+            {"schema_version": 1, "tensions": [], "absences": [], "assumptions": []},
+            json.dumps({"contested_narratives": [], "coverage_gaps": [], "key_assumptions": []}),
+        ]
+        context = {
+            "domain_analysis": {"geopolitics": {"items": []}},
+            "raw_sources": {"rss": []},
+            "compressed_transcripts": [],
+        }
+        config = {"llm": {}}
+
+        result = run(context, config)
+
+        assert result["seam_scan"]["schema_version"] == 1
+        assert result["seam_data"]["seam_count"] == 0

@@ -26,7 +26,8 @@ a TODO (see TODO.md). They are not referenced in the legend until restored.
 """
 
 import logging
-from datetime import datetime
+
+from utils.time import format_display_date
 
 log = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ def _build_header_html(weather: dict) -> str:
     aqi_label = weather.get("aqi_label", "")
     wind = weather.get("wind_mph")
     humidity = weather.get("humidity")
-    date_str = datetime.now().strftime("%A, %B %d")
+    date_str = format_display_date()
 
     temp_str = f"{temp}°F" if temp is not None else "—°F"
     wind_str = f"Wind {wind} mph" if wind else "Wind calm"

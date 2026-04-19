@@ -3,7 +3,6 @@
 
 schedule:
   cron: "0 6 * * *"  # 6:00 AM daily
-  timezone: "America/Denver"
 
 delivery:
   method: smtp
@@ -16,11 +15,10 @@ delivery:
   subject_template: "Morning Digest — {date}"
 
 llm:
-  model: "accounts/fireworks/models/kimi-k2p5"
+  model: "accounts/fireworks/models/minimax-m2p7"
   max_tokens: 12000
   temperature: 0.4
   # Set FIREWORKS_API_KEY as env var
-  # Set ANTHROPIC_API_KEY as env var (used by seam detection and final assembly in later phases)
 
 # Pipeline stage manifest — defines execution order and per-stage model config.
 # Stages with no model config are deterministic (no LLM call).
@@ -33,7 +31,7 @@ pipeline:
     - name: compress
       model:
         provider: fireworks
-        model: "accounts/fireworks/models/kimi-k2p5"
+        model: "accounts/fireworks/models/minimax-m2p7"
         max_tokens: 2000
         temperature: 0.2
 
@@ -53,8 +51,8 @@ pipeline:
 
     - name: prepare_spiritual
       model:
-        provider: anthropic
-        model: "claude-haiku-4-5-20251001"
+        provider: fireworks
+        model: "accounts/fireworks/models/minimax-m2p7"
         max_tokens: 512
         temperature: 0.5
 
@@ -63,17 +61,39 @@ pipeline:
 
     - name: seams
       model:
-        provider: anthropic
-        model: "claude-sonnet-4-6"
+        provider: fireworks
+        model: "accounts/fireworks/models/minimax-m2p7"
         max_tokens: 5000
         temperature: 0.3
+      turns:
+        scan:
+          max_tokens: 4000
+          temperature: 0.4
+        synthesis:
+          max_tokens: 5000
+          temperature: 0.3
 
     # --- Phase 3: Cross-domain synthesis ("editor-in-chief" pass) ---
     - name: cross_domain
       model:
-        provider: anthropic
-        model: "claude-opus-4-7"
+        provider: fireworks
+        model: "accounts/fireworks/models/minimax-m2p7"
         max_tokens: 16000
+        temperature: 0.3
+      turns:
+        plan:
+          max_tokens: 4000
+          temperature: 0.4
+        execute:
+          max_tokens: 16000
+          temperature: 0.3
+
+    - name: coverage_gaps
+      model:
+        provider: fireworks
+        model: "accounts/fireworks/models/minimax-m2p7"
+        max_tokens: 3000
+        temperature: 0.5
 
     - name: assemble
       # No model needed — template rendering
@@ -87,13 +107,23 @@ pipeline:
     - name: send
       # No model needed — SMTP delivery
 
+# Desk manifest — maps analysis desks to RSS feed categories.
+# Each desk runs a focused LLM pass on its subset of sources.
+desks:
+  - { name: "geopolitics", categories: ["non-western", "western-analysis", "substack-independent", "global-south", "perspective-diversity"] }
+  - { name: "defense_space", categories: ["defense-mil"] }
+  - { name: "ai_tech", categories: ["ai-tech", "cyber"] }
+  - { name: "energy_materials", categories: ["energy-materials"] }
+  - { name: "culture_structural", categories: ["culture-structural"] }
+  - { name: "science_biotech", categories: ["science-biotech"] }
+  - { name: "econ", categories: ["econ-trade"] }
+
 location:
   city: "Logan"
   state: "UT"
   region: "Cache Valley"
   latitude: 41.737
   longitude: -111.834
-  timezone: "America/Denver"
 
 # --- SOURCE CONFIGURATION ---
 
@@ -152,7 +182,7 @@ rss:
     # --- DEFENSE / MILITARY ---
     - { url: "https://breakingdefense.com/feed/", name: "Breaking Defense", category: "defense-mil", reliability: "primary-reporting" }
     - { url: "https://www.airandspaceforces.com/feed/", name: "Air & Space Forces", category: "defense-mil", reliability: "primary-reporting" }
-    - { url: "https://spacenews.com/feed/", name: "SpaceNews", category: "defense-mil", reliability: "primary-reporting" }
+    - { url: "https://spacenews.com/feed/", name: "SpaceNews", category: "defense-mil", reliability: "primary-reporting", cooldown_on_429_seconds: 21600 }
     - { url: "https://warontherocks.com/feed/", name: "War on the Rocks", cap: 5, category: "defense-mil", reliability: "analysis-opinion" }
     - { url: "https://defenseacquisition.substack.com/feed", name: "Defense Tech and Acquisition", cap: 5, category: "defense-mil", reliability: "analysis-opinion" }
 
@@ -173,23 +203,60 @@ rss:
 
     # --- ECONOMICS / TRADE ---
     - { url: "https://theovershoot.co/feed", name: "The Overshoot (Matt Klein)", cap: 3, category: "econ-trade", reliability: "analysis-opinion" }
-    - { url: "https://bradsetser.substack.com/feed", name: "Brad Setser", cap: 3, category: "econ-trade", reliability: "analysis-opinion" }
+    - { url: "https://www.cfr.org/series/follow-the-money", name: "Brad Setser", cap: 3, category: "econ-trade", reliability: "analysis-opinion", mode: "html_index" }
     - { url: "https://www.ft.com/rss/home", name: "Financial Times", cap: 5, category: "econ-trade", reliability: "primary-reporting" }
     - { url: "https://www.economist.com/finance-and-economics/rss.xml", name: "The Economist (Finance & Economics)", cap: 5, category: "econ-trade", reliability: "analysis-opinion" }
-    - { url: "https://www.reuters.com/markets/", name: "Reuters Markets", cap: 5, category: "econ-trade", reliability: "primary-reporting" }
+    - { url: "https://www.reuters.com/markets/", name: "Reuters Markets", cap: 5, category: "econ-trade", reliability: "primary-reporting", mode: "html_index", cooldown_on_error_seconds: 21600 }
 
     # --- GLOBAL SOUTH ---
     - { url: "https://www.ipsnews.net/news/headlines/feed/", name: "Inter Press Service", cap: 5, category: "global-south", reliability: "primary-reporting" }
-    - { url: "https://chinaglobalsouth.com/feed/", name: "China Global South Project", cap: 3, category: "global-south", reliability: "analysis-opinion" }
+    - { url: "https://chinaglobalsouth.com/news-feed/", name: "China Global South Project", cap: 3, category: "global-south", reliability: "analysis-opinion", mode: "html_index" }
 
     # --- PERSPECTIVE DIVERSITY ---
     # "Stress test" layer — only surface when contradicting consensus
-    - { url: "https://diff.substack.com/feed", name: "The Diff (Byrne Hobart)", cap: 3, category: "perspective-diversity", reliability: "analysis-opinion" }
+    - { url: "https://diff.substack.com/", name: "The Diff (Byrne Hobart)", cap: 3, category: "perspective-diversity", reliability: "analysis-opinion", mode: "html_index" }
     - { url: "https://slowboring.substack.com/feed", name: "Slow Boring (Matt Yglesias)", cap: 3, category: "perspective-diversity", reliability: "analysis-opinion" }
 
     # --- CYBERSECURITY ---
     - { url: "https://ventureinsecurity.net/feed", name: "Venture in Security", cap: 3, category: "cyber", reliability: "analysis-opinion" }
     - { url: "https://risky.biz/feeds/risky-business-news/", name: "Risky Business", cap: 3, category: "cyber", reliability: "analysis-opinion" }
+
+    # --- ENERGY / MATERIALS ---
+    # Physical substrate of the economy: power, raw materials, grid, industrial capacity
+    - { url: "https://utilitydive.com/feeds/news/", name: "Utility Dive", cap: 5, category: "energy-materials", reliability: "primary-reporting" }
+    - { url: "https://www.mining.com/feed/", name: "Mining.com", cap: 5, category: "energy-materials", reliability: "primary-reporting" }
+    - { url: "https://oilprice.com/rss/main", name: "OilPrice.com", cap: 5, category: "energy-materials", reliability: "primary-reporting" }
+    - { url: "https://www.carbonbrief.org/feed", name: "Carbon Brief", cap: 5, category: "energy-materials", reliability: "analysis-opinion" }
+
+    # --- CULTURE / STRUCTURAL ---
+    # Institutional shifts only — not entertainment, celebrity, or discourse-chasing
+    - { url: "https://www.theamericanconservative.com/feed/", name: "The American Conservative", cap: 3, category: "culture-structural", reliability: "analysis-opinion" }
+    - { url: "https://worksinprogress.substack.com/feed", name: "Works in Progress", cap: 3, category: "culture-structural", reliability: "analysis-opinion" }
+    - { url: "https://www.thenewatlantis.com/feed", name: "The New Atlantis", cap: 3, category: "culture-structural", reliability: "analysis-opinion" }
+    - { url: "https://comment.org/feed/", name: "Comment Magazine", cap: 3, category: "culture-structural", reliability: "analysis-opinion" }
+
+    # --- SCIENCE / BIOTECH ---
+    # Frontier science and biotech with geopolitical or economic implications
+    - { url: "https://www.nature.com/nature.rss", name: "Nature", cap: 5, category: "science-biotech", reliability: "primary-reporting" }
+    - { url: "https://www.science.org/rss/news_current.xml", name: "Science Magazine", cap: 5, category: "science-biotech", reliability: "primary-reporting" }
+    - { url: "https://www.statnews.com/feed/", name: "STAT News", cap: 5, category: "science-biotech", reliability: "primary-reporting" }
+    - { url: "https://endpts.com/feed/", name: "Endpoints News", cap: 3, category: "science-biotech", reliability: "primary-reporting" }
+
+    # --- LEGAL / INSTITUTIONAL ---
+    - { url: "https://feeds.feedburner.com/lawfare", name: "Lawfare", cap: 5, category: "legal-institutional", reliability: "analysis-opinion" }
+    - { url: "https://www.scotusblog.com/feed/", name: "SCOTUSblog", cap: 3, category: "legal-institutional", reliability: "analysis-opinion" }
+    - { url: "https://www.justsecurity.org/feed/", name: "Just Security", cap: 3, category: "legal-institutional", reliability: "analysis-opinion" }
+
+    # --- REGIONAL / WESTERN US ---
+    - { url: "https://www.deseret.com/arc/outboundfeeds/rss/category/utah/", name: "Deseret News (Utah)", cap: 5, category: "regional-west", reliability: "primary-reporting" }
+    - { url: "https://www.sltrib.com/arc/outboundfeeds/news/?outputType=xml", name: "Salt Lake Tribune (Utah)", cap: 5, category: "regional-west", reliability: "primary-reporting" }
+    - { url: "https://www.sltrib.com/arc/outboundfeeds/religion/?outputType=xml", name: "Salt Lake Tribune (Religion)", cap: 5, category: "regional-west", reliability: "primary-reporting" }
+    - { url: "https://www.sltrib.com/arc/outboundfeeds/culture/?outputType=xml", name: "Salt Lake Tribune (Culture)", cap: 5, category: "regional-west", reliability: "primary-reporting" }
+    - { url: "https://www.kuer.org/news.rss", name: "KUER public radio", cap: 5, category: "regional-west", reliability: "primary-reporting" }
+
+    # --- DEMOGRAPHICS ---
+    - { url: "https://www.pewresearch.org/feed/", name: "Pew Research Center", cap: 3, category: "demographics", reliability: "primary-reporting" }
+    - { url: "https://ifstudies.org/blog/rss", name: "Institute for Family Studies", cap: 3, category: "demographics", reliability: "primary-reporting" }
 
 come_follow_me:
   # Scrape weekly from churchofjesuschrist.org

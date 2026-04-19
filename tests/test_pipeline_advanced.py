@@ -13,6 +13,8 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from pipeline import (
+    _STAGE_METADATA,
+    _get_stage_meta,
     _run_with_retry,
     _artifact_dir,
     _save_artifact,
@@ -148,6 +150,17 @@ class TestGetStageModelConfig:
         result = _get_stage_model_config(cfg)
         assert result is None
 
+    def test_merges_global_defaults_with_stage_overrides(self):
+        cfg = {"name": "prepare_spiritual", "model": {"provider": "anthropic", "model": "x"}}
+        config = {"llm": {"max_tokens": 12000, "temperature": 0.4}}
+        result = _get_stage_model_config(cfg, stage_name="prepare_spiritual", config=config)
+        assert result == {
+            "max_tokens": 12000,
+            "temperature": 0.4,
+            "provider": "anthropic",
+            "model": "x",
+        }
+
 
 class TestArtifactDir:
     """Tests for _artifact_dir function."""
@@ -241,9 +254,35 @@ class TestNonCriticalStagesConsistency:
     def test_non_critical_stages_are_valid_names(self):
         for stage in _NON_CRITICAL_STAGES:
             key = _stage_artifact_key(stage)
-            assert key != stage or stage == "briefing_packet", (
-                f"Non-critical stage '{stage}' has no explicit artifact key mapping"
+            assert key is not None, (
+                f"Non-critical stage '{stage}' has no artifact key in metadata"
             )
+
+
+class TestStageMetadataConsistency:
+    def test_known_stages_have_metadata_entries(self):
+        known_stages = [
+            "collect",
+            "compress",
+            "analyze_domain",
+            "prepare_calendar",
+            "prepare_weather",
+            "prepare_spiritual",
+            "prepare_local",
+            "seams",
+            "cross_domain",
+            "assemble",
+            "anomaly",
+            "briefing_packet",
+            "send",
+        ]
+        for stage in known_stages:
+            assert stage in _STAGE_METADATA
+
+    def test_metadata_context_keys_include_primary_artifact(self):
+        for stage in _STAGE_METADATA:
+            meta = _get_stage_meta(stage)
+            assert meta["artifact_key"] in meta["context_keys"] or stage == "assemble"
 
 
 class TestStageArtifactKeyMapping:

@@ -1,6 +1,6 @@
 # Morning Digest — TODO
 
-_Last updated: 2026-04-17_
+Last updated: 2026-04-18
 
 > **Design-intent note.** When triaging items marked "stale" or "unused,"
 > first ask whether the feature was *intentional but silently broken* (e.g.
@@ -24,8 +24,6 @@ _Last updated: 2026-04-17_
 
 ### High — Design (architecture)
 
-- **Stage-specific branches in `pipeline.py`.** `pipeline.py:301` (cross_domain loads prev-day), `:316` (cross_domain gets `force_friday`), `:361` (assemble writes HTML files) — orchestrator keeps growing per-stage special cases. Give stages a standard lifecycle (`pre_run(context, run_meta)` + `post_run(outputs, artifact_dir)` hooks) and move these into `stages/cross_domain.py` and `stages/assemble.py`.
-- **Central registries should be per-stage metadata.** `_stage_artifact_key` (`pipeline.py:401`), `_empty_stage_output` (`:421`), `_NON_CRITICAL_STAGES` (`:41`) all force pipeline.py edits when adding a stage. Let each `stages/<name>.py` export `ARTIFACT_KEY`, `EMPTY_OUTPUT`, `CRITICAL`; read those from the orchestrator.
 - **Retry policy is global.** `max_retries=2` + fixed backoff in `_run_with_retry` (`pipeline.py:165`). LLM stages and scraper stages want different budgets. Put retry config per stage in `config.yaml`.
 - **`config.yaml` is doing four jobs** (pipeline manifest, LLM routing, source catalog, delivery prefs). 246 lines. Split into `config/pipeline.yaml`, `config/sources.yaml`, `config/delivery.yaml` and merge at load.
 - **Stage I/O is untyped dicts.** `context.get("domain_analysis", {})` everywhere. Pydantic models for `DomainAnalysis`, `CrossDomainOutput`, `SeamData` would catch schema drift — that seam is the most likely silent-regression spot.
@@ -35,26 +33,26 @@ _Last updated: 2026-04-17_
 
 ### High — Performance
 
-- **Parallelize `analyze_domain` domain passes.** `stages/analyze_domain.py` calls LLM once per domain (ai_tech, geopolitics, econ-trade, defense-space) sequentially. Four independent LLM calls run ~4× slower than they should. Move to `concurrent.futures.ThreadPoolExecutor` keyed on domain name. Keep `_failed` flag handling per-pass so one failure doesn't poison the others.
-- **Parallelize `collect.py` sources.** `stages/collect.py` fetches RSS, HN, GitHub trending, launches, astronomy, markets, econ calendar, holidays, CFM, history, YouTube transcripts serially. Most are independent HTTP calls. A `ThreadPoolExecutor` with ~6 workers would cut wall time substantially. Be careful to preserve deterministic ordering in outputs.
-- **Parallelize RSS fetch loop.** `sources/rss_feeds._fetch_direct` pulls feeds one-at-a-time. With ~30 feeds at ~1s each this is the biggest single contributor to collect latency. Move to `ThreadPoolExecutor`. Preserve the "5 consecutive failures → network down → abort" circuit breaker by tracking failures atomically.
-- **Parallelize transcript compression.** `stages/compress.py` runs the transcript compression LLM call once per transcript. These are independent; parallelize them.
+- ~~**Tracked in `plan.md` Slice 10: parallelize `analyze_domain`.**~~ Done — 7 desk passes run via ThreadPoolExecutor (max 4 workers) with per-desk failure isolation.
 - **Remove uncoordinated 3-layer retry stack.** Retries exist at the pipeline level (30-min retry in `entrypoint.py`), the LLM helper (`llm._retry_loop`, ~3 attempts with backoff), and per-domain (`analyze_domain` retries the whole domain after 5 min). Worst case: a single flaky call produces `3 × 2 × N` attempts before giving up. Consolidate: LLM helper retries transient 5xx only, domain/pipeline treat a failed LLM call as "done, failed", no nested retry.
-- **Remove `time.sleep(300)` in `analyze_domain`.** The 5-min sleep-and-retry for failed domains blocks the pipeline. Either (a) drop it in favor of the pipeline-level 30-min retry, or (b) do the retry asynchronously so other domains continue.
 
 ### Medium — Consolidation
 
-- **Consolidate `_TAG_LABELS`.** Defined in `cross_domain.py`, `assemble.py`, and `validate.py` (as `VALID_TAG_LABELS`). Contract tests catch drift but the duplication itself is the bug. Move to `utils/tags.py` and import everywhere.
+- ~~**Tracked in `plan.md` Slice 6: consolidate tag vocabulary helpers.**~~ Done — `energy` and `biotech` tags added to all 5 synchronized surfaces (validate, cross_domain, assemble, CSS, TAG_KEYWORDS). Contract tests verify consistency.
 - **Consolidate AQI breakpoint ladder.** The `if aqi <= 50: "Good" / <= 100: "Moderate" / ...` ladder appears in `sources/weather.py::_aqi_to_label` and twice more in `modules/weather_display.py` (label + color). Extract to `utils/aqi.py` with `aqi_label(aqi)` and `aqi_color(aqi)`.
-- **Extract retry backoff helper.** `llm.py::_retry_loop` and `pipeline.py` both implement exponential backoff with jitter. Once the 3-layer retry stack is consolidated (see above), keep one implementation in `utils/retry.py`.
+- **Extract retry backoff helper.** `morning_digest/llm.py::_retry_loop` and `pipeline.py` both implement exponential backoff with jitter. Once the 3-layer retry stack is consolidated (see above), keep one implementation in `utils/retry.py`.
 - **Extract artifact helpers.** `_ARTIFACTS_BASE` path + date-directory iteration is duplicated in `pipeline.py` and `stages/anomaly.py`. Move to `utils/artifacts.py` (`artifact_dir(date)`, `iter_recent_dirs(n)`, `load_artifact(date, key)`).
-- **Audit `utils.urls` usage.** `collect_known_urls`, `normalize_url`, and URL-equality logic are used in `cross_domain`, `analyze_domain`, `anomaly`, `briefing_packet`. Some still use raw `urlparse().netloc` comparison. Standardize on the `utils.urls` helpers everywhere.
+- **Investigate recurring dry-run source warnings.** Current end-to-end dry-runs complete successfully, but `output/digest.log` consistently shows non-fatal source issues for SpaceNews (`429`), Brad Setser (`404`), Reuters Markets (`401`), China Global South Project (`410`), and The Diff (`400`). Decide case by case whether to:
+  - fix the feed URL,
+  - add provider-specific throttling/backoff,
+  - replace the source,
+  - or downgrade/remove the source if it is no longer viable.
 
 ### Low — Correctness / cleanup
 
-- **Naive `datetime.now()` mixed with tz-aware.** ~10 locations use `datetime.now()` without a tz, then compare against tz-aware datetimes elsewhere. Audit and standardize on `datetime.now(timezone.utc)`. Ruff rule DTZ005 would catch these automatically if enabled.
+- **Tracked in `plan.md` Slice 0: timezone/date audit.** The current plan now covers `TZ` authority, shared helper adoption, artifact dates, and user-visible date formatting across the codebase.
 - **Phase 0 dead code in `assemble.py`.** The "empty fallback" branch is only reachable when Phase 3 (`cross_domain`) produces nothing, which hasn't happened since the `_failed` flag landed. Verify unreachable and delete, or keep but document the invariant.
-- **`test_analyze_domain` `_empty_domain_result` drift.** Tests assert `{"items": []}` but the function now returns `{"items": [], "_failed": False}` (from the resilience fix). Update the assertions to match current contract.
+- **Tracked in `plan.md` Slice 0: `_empty_domain_result` contract drift.** Keep follow-up notes here only if additional edge cases appear during implementation.
 
 ---
 
@@ -68,12 +66,27 @@ _Last updated: 2026-04-17_
 - **Tests: +9 new cases** covering legend, per-bar overlay, color selection, high-AQI right-alignment, and `AQI_SCALE_MAX` contract. Total weather suite: 97 passing.
 - **TODO revision**: added design-intent preamble; removed "collapse At-a-Glance Thread block" item (undermines intentional three-voice rhetorical layering); added "Restore Normal/Record/Forecast Hi-Lo bar overlays" item (same Gmail-strip fate as AQI, same fix pattern); softened Google Fonts `@import` item from "wasted bytes" to "audit in both clients first."
 
+### 2026-04-18 — Verification follow-up cleanup
+
+- **Closed stale TODO items for completed plan work.** Removed open entries for stage metadata cleanup, `collect.py` parallelization, transcript compression parallelization, and the old `utils.urls` standardization tracker now that those changes have landed.
+- **`coverage_gaps` contract now enforced.** The stage normalizes to the published schema and strips stray top-level fields before writing artifacts/history.
+- **`coverage_gaps` diagnostics now render in dry-run only.** They are available for diagnostics without leaking into the normal send path.
+- **Desk manifest is now live at runtime.** `analyze_domain` resolves active desk routing from `config.yaml` instead of leaving `desks:` as documentation-only config.
+- **Feed validator drift corrected.** `scripts/validate_new_feeds.py` now validates the same feed URLs that are actually committed in `config.yaml`.
+- **README made model-agnostic.** Provider/model swaps should no longer require documentation cleanup just to keep the architecture and setup sections truthful.
+
+### 2026-04-18 — Performance follow-up
+
+- **Parallelized the direct RSS fetch loop.** `sources/rss_feeds._fetch_direct` now fetches raw feed bytes in small parallel batches (`ThreadPoolExecutor`, max 6 workers) while preserving feed-order parsing and the existing "5 consecutive failures" circuit-breaker semantics.
+- **Removed the blocking 5-minute analyze-domain sleep.** Failed domain passes now retry immediately after the initial parallel wave instead of pausing the whole pipeline for 300 seconds.
+- **Tests added for both changes.** New coverage verifies ordered RSS circuit-breaker behavior, successful item collection after parallel fetch, and that failed domain retries do not call `time.sleep`.
+
 ### 2026-04-16 — Review sweep quick wins
 
 - **Extracted `sources/_http.py` helper.** Canonical User-Agent (`MorningDigest/1.0 (morningDigest@lurkers.us)`) and default timeout (15s). `http_get_json`, `http_get_text`, `http_get_bytes` all return `None` on any failure. Migrated: `markets`, `launches`, `history`, `github_trending`, `hackernews`, `astronomy`, `economic_calendar`, `rss_feeds` (bytes path), `weather` (all 6 endpoints). Only `rss_feeds`'s FreshRSS POST path still uses `requests` directly. Tests updated to patch `http_get_json` instead of `requests.get`.
 - **Fix: `entrypoint.py` retry logic.** After a pipeline crash the loop previously busy-spun instead of waiting. Now sleeps `RETRY_DELAY_SECS` (30 min) before the next attempt.
 - **Fix: `cross_domain._empty_output` missing `worth_reading` key.** Template rendered `{}` for the section on failure. Added `"worth_reading": []` to the default dict.
-- **Fix: `validate.py` dead `_config` lookup.** Removed unused config loading that never influenced output; inlined `min_items=3, max_items=20`.
+- **Fix: `morning_digest/validate.py` dead `_config` lookup.** Removed unused config loading that never influenced output; inlined `min_items=3, max_items=20`.
 - **Fix: `assemble.py` fallback defaults.** Was 14 deep dives / 10 at-a-glance; `config.yaml` says 7/5. Fallbacks now match config.
 - **Fix: `rss_feeds._parse_feed_date` timezone.** Naive datetimes from `dateparser` now coerced to UTC-aware before comparison. Previously crashed on feeds without explicit offset.
 - **Fix: `weather.py` None-mirror bug.** Forecast days with both `high_f` and `low_f` missing are now skipped entirely instead of rendering as `None/None`.

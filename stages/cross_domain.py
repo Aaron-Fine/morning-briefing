@@ -22,9 +22,11 @@ Outputs: cross_domain_output (dict) containing at_a_glance, deep_dives,
 
 import json
 import logging
-from urllib.parse import urlparse
 
-from llm import call_llm
+from morning_digest.llm import call_llm
+from utils.prompts import load_prompt
+from utils.urls import collect_known_urls, extract_domains, url_domain_allowed
+from morning_digest.validate import validate_stage_output
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +41,8 @@ _VALID_TAGS = {
     "cyber",
     "local",
     "science",
+    "energy",
+    "biotech",
 }
 
 _TAG_LABELS = {
@@ -52,6 +56,8 @@ _TAG_LABELS = {
     "cyber": "Cyber",
     "local": "Local",
     "science": "Science",
+    "energy": "Energy",
+    "biotech": "Biotech",
 }
 
 # Keyword → standard tag mapping for post-processing normalization.
@@ -123,12 +129,33 @@ _TAG_KEYWORDS: list[tuple[str, str]] = [
     ("gdp", "econ"),
     ("labor", "econ"),
     ("wage", "econ"),
-    ("energy", "econ"),
-    ("oil", "econ"),
     ("food", "econ"),
     ("supply chain", "econ"),
     ("wto", "econ"),
     ("imf", "econ"),
+    # energy
+    ("energy", "energy"),
+    ("oil", "energy"),
+    ("gas", "energy"),
+    ("grid", "energy"),
+    ("utility", "energy"),
+    ("mining", "energy"),
+    ("critical mineral", "energy"),
+    ("lithium", "energy"),
+    ("solar", "energy"),
+    ("wind power", "energy"),
+    ("nuclear power", "energy"),
+    ("electricity", "energy"),
+    # biotech
+    ("biotech", "biotech"),
+    ("pharmaceutical", "biotech"),
+    ("drug approval", "biotech"),
+    ("clinical trial", "biotech"),
+    ("gene therapy", "biotech"),
+    ("crispr", "biotech"),
+    ("vaccine", "biotech"),
+    ("fda", "biotech"),
+    ("nih", "biotech"),
     # science
     ("science", "science"),
     ("climate", "science"),
@@ -173,107 +200,9 @@ def _normalize_tag(raw: str) -> str:
     return "domestic"
 
 
-_SYSTEM_PROMPT = """You are the editor-in-chief of Aaron's Morning Digest. You receive domain analyses from four specialist desks (geopolitics, defense/space, AI/tech, economics) and a quality-control review from a seam detection analyst. Your job is NOT to rewrite their work — it's to find connections they couldn't see from within their domain, select the day's deep dives, and weave the pieces into a coherent editorial product.
-
-VOICE: Write as an informed colleague — direct, analytical, occasionally wry. Use first person when offering interpretation. Use topic sentences. Never hedge with "it remains to be seen" or "only time will tell." Attribute uncertainty to specific actors ("analysts disagree on whether...") rather than to the abstract situation. Favor the structure: what happened → why it matters → what to watch for.
-
-=== YOUR THREE TASKS ===
-
-TASK 1: CROSS-DOMAIN CONNECTION DISCOVERY
-
-Read all connection_hooks from the domain analyses. Look for:
-- Causal chains: A development in one domain caused or will cause effects in another (a trade policy that changes a defense posture, an AI capability that shifts a geopolitical balance).
-- Shared actors: The same entity (company, country, organization) appears in multiple domain analyses — what do their actions across domains tell you that no single domain reveals?
-- Contradictions: One domain's analysis implies X while another's implies not-X. If the econ desk says a policy is stabilizing and the defense desk says it's destabilizing, that tension is the story.
-- Second-order effects: A development in domain A that most people would see as contained within A actually has implications for domain B that the specialists didn't flag.
-
-For each connection you find, add a cross_domain_note to the relevant at-a-glance item. Keep notes to 1-2 sentences. The note should say what the connection IS, not just that a connection exists.
-
-TASK 2: DEEP DIVE SELECTION AND WRITING
-
-Select 1-3 deep dives from the candidates flagged by domain passes. Prioritize:
-1. Stories with cross-domain connections (these make the best dives because they reveal something no single domain saw).
-2. Stories where seam detection found contested narratives or key assumption vulnerabilities.
-3. Stories aligned with Aaron's primary interests: defense/space technology, AI implications for national security, geopolitical shifts affecting US posture.
-
-For each selected deep dive, write a body (4-8 paragraphs in HTML) that:
-- Does NOT repeat the at-a-glance facts and analysis — reference them and go deeper.
-- Focuses on "what this connects to that isn't obvious from the headline."
-- Uses the domain analysis's facts as foundation and builds the connective insight on top.
-- Includes source attribution for all claims.
-- Ends with specific indicators to watch ("If X happens, it means Y").
-- Uses <p>, <em>, <strong> tags for structure. No <h1>-<h6> tags.
-
-Also include 2-4 further_reading links drawn from the domain analysis links.
-
-TASK 3: EDITORIAL ASSEMBLY
-
-Produce the final at_a_glance list by:
-- Taking all non-deep-dive items from all four domain analyses.
-- Ordering by editorial importance: widely-reported stories first, then corroborated, then single-source. Within each tier, lead with stories that have cross-domain connections.
-- Adding cross_domain_note where applicable.
-- Capping at 7 items (quality over quantity — the editor will enforce this cap).
-
-DEDUPLICATION RULES (critical):
-- If a story appears as an at-a-glance item AND is selected for a deep dive: the at-a-glance entry keeps its original facts/analysis, and the deep dive must NOT repeat them. The deep dive adds the connective and deeper analysis only.
-- If a story appears in seam detection (contested narrative): the at-a-glance item should note "See Perspective Seams for competing framings" rather than restating the contested framing.
-- Each story appears in at most two sections. Each appearance must add distinct analytical value.
-- Never say the same thing twice across sections.
-
-=== OUTPUT FORMAT ===
-
-JSON object:
-{
-  "at_a_glance": [
-    {
-      "tag": "MUST be exactly one of: war, domestic, econ, ai, tech, defense, space, cyber, local, science — no other values",
-      "tag_label": "human-readable label matching the tag (e.g. war→Conflict, domestic→Politics, econ→Economy, ai→AI, tech→Technology, defense→Defense, space→Space, cyber→Cyber, local→Local, science→Science)",
-      "headline": "from domain analysis (may be lightly edited for consistency)",
-      "facts": "from domain analysis (preserved as-is)",
-      "analysis": "from domain analysis (preserved as-is)",
-      "source_depth": "single-source|corroborated|widely-reported",
-      "cross_domain_note": "1-2 sentences on cross-domain connection, or null if none",
-      "links": [{"url": "exact URL", "label": "Source Name"}],
-      "connection_hooks": [{"entity": "...", "region": "...", "theme": "...", "policy": "..."}]
-    }
-  ],
-  "deep_dives": [
-    {
-      "headline": "deep dive headline",
-      "body": "<p>HTML body text, 4-8 paragraphs...</p>",
-      "why_it_matters": "1-2 sentence summary of why this story matters beyond the headline",
-      "further_reading": [{"url": "exact URL", "label": "Source Name: Article Title"}],
-      "source_depth": "from the original domain item",
-      "domains_bridged": ["geopolitics", "defense_space"]
-    }
-  ],
-  "cross_domain_connections": [
-    {
-      "description": "1-2 sentence description of the connection",
-      "domains": ["domain_a", "domain_b"],
-      "entities": ["shared entity names"],
-      "theme": "thematic thread"
-    }
-  ],
-  "market_context": "from econ domain analysis, preserved as-is",
-  "worth_reading": [   // 3 long-form pieces worth slow reading today
-    {
-      "title": "article title",
-      "url": "exact URL from sources",
-      "source": "source name",
-      "description": "2-3 sentence summary of why this piece is worth setting aside time for",
-      "read_time": "estimated read time, e.g. '15 min read'"
-    }
-  ]
-}
-
-RULES:
-- All URLs must come from the domain analysis links or raw source URLs — never fabricate.
-- Preserve domain analysts' facts and analysis verbatim in at_a_glance items — your editorial contribution is the ordering, cross_domain_notes, and deep dive writing.
-- If no stories warrant a deep dive, return an empty deep_dives array. Do not force one.
-- cross_domain_connections is metadata for the briefing packet — include all connections you identified, even minor ones.
-- TAG FIELD: use ONLY these exact values: war, domestic, econ, ai, tech, defense, space, cyber, local, science. No hyphens, no compound tags, no topic descriptions. Every at_a_glance item must have one of these ten values.
-- Output ONLY valid JSON. No markdown fences, no commentary outside the JSON."""
+_PLAN_PROMPT = load_prompt("cross_domain_plan.md")
+_EXECUTE_PROMPT = load_prompt("cross_domain_execute.md")
+_SYSTEM_PROMPT = _EXECUTE_PROMPT
 
 
 def _build_input(
@@ -281,7 +210,6 @@ def _build_input(
     seam_data: dict,
     raw_sources: dict,
     previous_cross_domain: dict | None = None,
-    force_friday: bool = False,
 ) -> str:
     """Build the user content for the cross-domain synthesis prompt."""
     parts = []
@@ -335,67 +263,121 @@ def _build_input(
                 "If none of today's stories connect to yesterday, ignore this section entirely."
             )
 
-    # Always request worth_reading picks
     parts.append(
         "\n=== WORTH READING ===\n"
-        "Select 3 substantial long-form pieces from the source data worth reading today. "
-        "Prioritize depth, lasting relevance, and pieces that reward slow reading "
-        "over breaking news. Include the worth_reading array in your JSON output."
+        "Prioritize substantial long-form pieces from the source data that reward slow reading "
+        "over incremental breaking news. Include a worth_reading section in the final output."
     )
 
-    parts.append(
-        "\n\nPerform cross-domain synthesis: discover connections, select deep dives, "
-        "assemble the editorial product. Output ONLY valid JSON."
-    )
     return "\n".join(parts)
 
 
-def run(
-    context: dict, config: dict, model_config: dict | None = None, **kwargs
+def _plan_user_content(
+    domain_analysis: dict,
+    seam_data: dict,
+    raw_sources: dict,
+    previous_cross_domain: dict | None = None,
+) -> str:
+    base = _build_input(domain_analysis, seam_data, raw_sources, previous_cross_domain)
+    return (
+        f"{base}\n\n"
+        "Build the editorial plan: select the strongest cross-domain connections, "
+        "choose the deep dives, choose worth-reading pieces, and record rejected alternatives. "
+        "Output ONLY valid JSON."
+    )
+
+
+def _execute_user_content(
+    domain_analysis: dict,
+    seam_data: dict,
+    raw_sources: dict,
+    cross_domain_plan: dict,
+    previous_cross_domain: dict | None = None,
+) -> str:
+    base = _build_input(domain_analysis, seam_data, raw_sources, previous_cross_domain)
+    return (
+        f"{base}\n\n=== EDITORIAL PLAN ===\n"
+        f"{json.dumps(cross_domain_plan, indent=2)}\n\n"
+        "Execute the plan into the final cross-domain digest output. "
+        "Output ONLY valid JSON."
+    )
+
+
+def _resolve_turn_model_config(
+    base_model_config: dict | None, stage_cfg: dict | None, turn_name: str
+) -> dict | None:
+    if not base_model_config:
+        return None
+
+    turn_overrides = (stage_cfg or {}).get("turns", {}).get(turn_name, {})
+    return {**base_model_config, **turn_overrides}
+
+
+def _normalize_cross_domain_plan(
+    result: dict | None,
+    *,
+    deep_dive_count: int,
+    worth_reading_count: int,
+    connection_count: int,
 ) -> dict:
-    """Run cross-domain synthesis and return the editorial product."""
-    domain_analysis = context.get("domain_analysis", {})
-    seam_data = context.get("seam_data", {})
-    raw_sources = context.get("raw_sources", {})
-
-    effective_config = model_config or config.get("llm", {})
-
-    # Check if we have domain analysis to work with
-    has_items = any(
-        isinstance(v, dict) and v.get("items") for v in domain_analysis.values()
+    plan = dict(result or {})
+    plan["schema_version"] = 1
+    plan["cross_domain_connections"] = (
+        list(plan.get("cross_domain_connections", []) or [])[:connection_count]
     )
-    if not has_items:
-        log.warning("cross_domain: no domain analysis items — returning passthrough")
-        return {"cross_domain_output": _empty_output(domain_analysis)}
-
-    user_content = _build_input(
-        domain_analysis,
-        seam_data,
-        raw_sources,
-        context.get("previous_cross_domain"),
-        force_friday=kwargs.get("force_friday", False),
+    plan["deep_dives"] = list(plan.get("deep_dives", []) or [])[:deep_dive_count]
+    plan["worth_reading"] = (
+        list(plan.get("worth_reading", []) or [])[:worth_reading_count]
     )
+    plan["rejected_alternatives"] = list(plan.get("rejected_alternatives", []) or [])
+    if "planning_scope" in plan and not isinstance(plan["planning_scope"], dict):
+        plan.pop("planning_scope")
+    plan.setdefault(
+        "planning_scope",
+        {
+            "deep_dive_count": deep_dive_count,
+            "worth_reading_count": worth_reading_count,
+            "connection_count": connection_count,
+        },
+    )
+    return plan
 
+
+def _call_turn_json(
+    prompt: str,
+    user_content: str,
+    model_config: dict | None,
+    turn_name: str,
+) -> dict:
     try:
-        log.info("Stage: cross_domain — running editor-in-chief synthesis...")
-        result = call_llm(
-            _SYSTEM_PROMPT,
+        return call_llm(
+            prompt,
             user_content,
-            effective_config,
+            model_config,
             max_retries=2,
             json_mode=True,
             stream=True,
         )
-    except Exception as e:
-        log.error(f"cross_domain: LLM call failed: {e}")
-        return {"cross_domain_output": _empty_output(domain_analysis)}
+    except Exception as exc:
+        log.warning(
+            f"cross_domain: {turn_name} turn failed with streaming, retrying once: {exc}"
+        )
+        return call_llm(
+            prompt,
+            user_content,
+            model_config,
+            max_retries=2,
+            json_mode=True,
+            stream=False,
+        )
 
-    # Normalize result
-    if not isinstance(result, dict):
-        log.warning("cross_domain: LLM returned non-dict, falling back to passthrough")
-        return {"cross_domain_output": _empty_output(domain_analysis)}
 
-    # Ensure required fields
+def _validated_output(
+    result: dict,
+    domain_analysis: dict,
+    raw_sources: dict,
+    config: dict,
+) -> dict:
     result.setdefault("at_a_glance", [])
     result.setdefault("deep_dives", [])
     result.setdefault("cross_domain_connections", [])
@@ -404,52 +386,31 @@ def run(
         econ = domain_analysis.get("econ", {})
         result["market_context"] = econ.get("market_context", "")
 
-    # Build the set of known source domains for URL validation.
-    # Domain-level matching (not exact URL) allows the LLM to reference real articles
-    # even when URL format differs slightly from what was ingested (UTM params, etc.).
-    known_urls: set[str] = set()
-    for item in raw_sources.get("rss", []):
-        if item.get("url"):
-            known_urls.add(item["url"])
-    for item in raw_sources.get("local_news", []):
-        if item.get("url"):
-            known_urls.add(item["url"])
-    for t in raw_sources.get("analysis_transcripts", []):
-        if t.get("url"):
-            known_urls.add(t["url"])
-    known_domains: set[str] = {
-        urlparse(u).netloc for u in known_urls if urlparse(u).netloc
-    }
+    known_urls = collect_known_urls(raw_sources, domain_analysis)
+    known_domains = extract_domains(known_urls)
 
-    def _url_allowed(url: str) -> bool:
-        return not url or urlparse(url).netloc in known_domains
-
-    # Normalize tags to the standard vocabulary
     for item in result["at_a_glance"]:
         item["tag"] = _normalize_tag(item.get("tag", ""))
         item["tag_label"] = _TAG_LABELS.get(item["tag"], item.get("tag_label", ""))
 
-    # Validate URLs in at_a_glance, deep_dives, and worth_reading
     for item in result["at_a_glance"]:
         item["links"] = [
-            lnk for lnk in item.get("links", []) if _url_allowed(lnk.get("url", ""))
+            lnk for lnk in item.get("links", []) if url_domain_allowed(lnk.get("url", ""), known_domains)
         ]
     for dive in result["deep_dives"]:
         dive["further_reading"] = [
             lnk
             for lnk in dive.get("further_reading", [])
-            if _url_allowed(lnk.get("url", ""))
+            if url_domain_allowed(lnk.get("url", ""), known_domains)
         ]
     for read in result["worth_reading"]:
-        if not _url_allowed(read.get("url", "")):
+        if not url_domain_allowed(read.get("url", ""), known_domains):
             read["url"] = ""
 
-    # Enforce at-a-glance item cap from config
     digest_cfg = config.get("digest", {})
     glance_cfg = digest_cfg.get("at_a_glance", {})
     max_items = glance_cfg.get("max_items", 7)
     if len(result["at_a_glance"]) > max_items:
-        # Sort by source_depth priority, then by cross_domain_note presence
         depth_priority = {"widely-reported": 0, "corroborated": 1, "single-source": 2}
         result["at_a_glance"].sort(
             key=lambda i: (
@@ -464,6 +425,97 @@ def run(
             f"to {max_items} items (dropped {len(dropped)} lower-priority items)"
         )
 
+    return result
+
+
+def run(
+    context: dict, config: dict, model_config: dict | None = None, **kwargs
+) -> dict:
+    """Run cross-domain synthesis and return the editorial product."""
+    domain_analysis = context.get("domain_analysis", {})
+    seam_data = context.get("seam_data", {})
+    raw_sources = context.get("raw_sources", {})
+
+    effective_config = model_config or config.get("llm", {})
+    stage_cfg = kwargs.get("stage_cfg") or {}
+    plan_config = _resolve_turn_model_config(effective_config, stage_cfg, "plan")
+    execute_config = _resolve_turn_model_config(effective_config, stage_cfg, "execute")
+
+    digest_cfg = config.get("digest", {})
+    deep_dive_count = digest_cfg.get("deep_dives", {}).get("count", 2)
+    worth_reading_count = digest_cfg.get("worth_reading", {}).get("count", 3)
+    connection_count = 3
+
+    # Check if we have domain analysis to work with
+    has_items = any(
+        isinstance(v, dict) and v.get("items") for v in domain_analysis.values()
+    )
+    if not has_items:
+        log.warning("cross_domain: no domain analysis items — returning passthrough")
+        return {"cross_domain_output": _empty_output(domain_analysis)}
+
+    try:
+        cross_domain_plan = context.get("cross_domain_plan")
+        if context.get("cross_domain_from_plan") and isinstance(cross_domain_plan, dict):
+            log.info("Stage: cross_domain — reusing same-day cross_domain_plan")
+        else:
+            log.info("Stage: cross_domain — running Turn 1 planning...")
+            cross_domain_plan = _call_turn_json(
+                load_prompt(
+                    "cross_domain_plan.md",
+                    {
+                        "deep_dive_count": deep_dive_count,
+                        "worth_reading_count": worth_reading_count,
+                        "connection_count": connection_count,
+                    },
+                ),
+                _plan_user_content(
+                    domain_analysis,
+                    seam_data,
+                    raw_sources,
+                    context.get("previous_cross_domain"),
+                ),
+                plan_config,
+                "plan",
+            )
+            cross_domain_plan = _normalize_cross_domain_plan(
+                cross_domain_plan,
+                deep_dive_count=deep_dive_count,
+                worth_reading_count=worth_reading_count,
+                connection_count=connection_count,
+            )
+
+        log.info("Stage: cross_domain — running Turn 2 execution...")
+        result = _call_turn_json(
+            load_prompt(
+                "cross_domain_execute.md",
+                {
+                    "deep_dive_count": deep_dive_count,
+                    "worth_reading_count": worth_reading_count,
+                },
+            ),
+            _execute_user_content(
+                domain_analysis,
+                seam_data,
+                raw_sources,
+                cross_domain_plan,
+                context.get("previous_cross_domain"),
+            ),
+            execute_config,
+            "execute",
+        )
+    except Exception as e:
+        log.error(f"cross_domain: LLM call failed: {e}")
+        return {"cross_domain_output": _empty_output(domain_analysis)}
+
+    # Normalize result
+    if not isinstance(result, dict):
+        log.warning("cross_domain: LLM returned non-dict, falling back to passthrough")
+        return {"cross_domain_output": _empty_output(domain_analysis)}
+
+    result = _validated_output(result, domain_analysis, raw_sources, config)
+    result = validate_stage_output(result, raw_sources, "cross_domain")
+
     n_glance = len(result["at_a_glance"])
     n_dives = len(result["deep_dives"])
     n_connections = len(result["cross_domain_connections"])
@@ -472,7 +524,10 @@ def run(
         f"{n_connections} cross-domain connections"
     )
 
-    return {"cross_domain_output": result}
+    return {
+        "cross_domain_plan": cross_domain_plan,
+        "cross_domain_output": result,
+    }
 
 
 def _empty_output(domain_analysis: dict) -> dict:

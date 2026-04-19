@@ -1,4 +1,4 @@
-"""Tests for sanitize.py — input sanitization layer."""
+"""Tests for morning_digest.sanitize — input sanitization layer."""
 
 import sys
 import os
@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from sanitize import (
+from morning_digest.sanitize import (
     _strip_html,
     _strip_injection_lines,
     _escape_json_structure,

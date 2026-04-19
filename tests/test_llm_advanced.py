@@ -1,4 +1,4 @@
-"""Advanced tests for llm.py — retry logic, streaming edge cases, and error handling."""
+"""Advanced tests for morning_digest.llm — retry logic and error handling."""
 
 import sys
 import os
@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from llm import _retry_loop, _parse_response
+from morning_digest.llm import _retry_loop, _parse_response
 
 
 class TestRetryLoop:
@@ -146,7 +146,7 @@ class TestRetryLoop:
         def mock_sleep(seconds):
             wait_times.append(seconds)
 
-        with patch("llm.time.sleep", mock_sleep):
+        with patch("morning_digest.llm.time.sleep", mock_sleep):
             _retry_loop(fn, max_retries=3, retryable_errors=(ValueError,), model="test")
 
         # Expected: 2^(0+1)*5=10, 2^(1+1)*5=20

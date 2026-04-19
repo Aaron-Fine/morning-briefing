@@ -29,6 +29,8 @@ VALID_TAGS = {
     "science",
     "econ",
     "cyber",
+    "energy",
+    "biotech",
 }
 VALID_TAG_LABELS = {
     "war": "Conflict",
@@ -41,6 +43,8 @@ VALID_TAG_LABELS = {
     "science": "Science",
     "econ": "Economy",
     "cyber": "Cyber",
+    "energy": "Energy",
+    "biotech": "Biotech",
 }
 
 # HTML tags allowed in deep dive body fields after sanitization
@@ -109,7 +113,7 @@ def _validate_at_a_glance(items: list, known_urls: set[str], source_data: dict) 
     for item in items:
         if not isinstance(item, dict):
             continue
-        for link in item.get("links", []):
+        for link in item.get("links") or []:
             label = link.get("label", "")
             # Extract outlet name (format: "Source: Title" or just label)
             source = label.split(":")[0].strip() if ":" in label else label
@@ -140,8 +144,8 @@ def _validate_at_a_glance(items: list, known_urls: set[str], source_data: dict) 
         # Required fields with safe defaults
         tag = item.get("tag", "")
         if tag not in VALID_TAGS:
-            log.warning(f"validate: unknown tag '{tag}' → 'uncategorized'")
-            tag = "uncategorized"
+            log.warning(f"validate: unknown tag '{tag}' → 'domestic'")
+            tag = "domestic"
 
         headline = str(item.get("headline", "")).strip()
 
@@ -149,15 +153,14 @@ def _validate_at_a_glance(items: list, known_urls: set[str], source_data: dict) 
         if headline.lower() in source_titles:
             log.info(f"validate: verbatim echo detected in headline: {headline[:60]!r}")
 
-        cleaned.append(
-            {
-                "tag": tag,
-                "tag_label": item.get("tag_label", tag.capitalize()),
-                "headline": headline,
-                "context": str(item.get("context", "")),
-                "links": validate_urls(item.get("links", []), known_urls),
-            }
-        )
+        # Schema-preserving: copy all fields, then overwrite validated ones
+        entry = dict(item)
+        entry["tag"] = tag
+        entry["tag_label"] = item.get("tag_label") or VALID_TAG_LABELS.get(tag, tag.capitalize())
+        entry["headline"] = headline
+        entry["context"] = str(item.get("context", ""))
+        entry["links"] = validate_urls(item.get("links") or [], known_urls)
+        cleaned.append(entry)
 
     return cleaned
 
@@ -177,16 +180,15 @@ def _validate_deep_dives(dives: list, known_urls: set[str]) -> list:
             log.info(
                 f"validate: stripped disallowed HTML tags from deep dive body (dive {i})"
             )
-        cleaned.append(
-            {
-                "headline": str(dive.get("headline", "")),
-                "body": body_clean,
-                "why_it_matters": str(dive.get("why_it_matters", "")),
-                "further_reading": validate_urls(
-                    dive.get("further_reading", []), known_urls
-                ),
-            }
+        # Schema-preserving: copy all fields, then overwrite validated ones
+        entry = dict(dive)
+        entry["headline"] = str(dive.get("headline", ""))
+        entry["body"] = body_clean
+        entry["why_it_matters"] = str(dive.get("why_it_matters", ""))
+        entry["further_reading"] = validate_urls(
+            dive.get("further_reading", []), known_urls
         )
+        cleaned.append(entry)
     return cleaned
 
 

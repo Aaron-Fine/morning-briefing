@@ -27,6 +27,10 @@ class TestCollectRun:
     @patch("stages.collect.fetch_weather")
     @patch("stages.collect.fetch_markets")
     @patch("stages.collect.fetch_upcoming_launches")
+    @patch("stages.collect.fetch_hackernews")
+    @patch("stages.collect.fetch_github_trending")
+    @patch("stages.collect.fetch_astronomy")
+    @patch("stages.collect.fetch_on_this_day")
     @patch("stages.collect.get_upcoming_church_events")
     @patch("stages.collect.get_upcoming_holidays")
     @patch("stages.collect.fetch_economic_calendar")
@@ -43,6 +47,10 @@ class TestCollectRun:
         mock_econ_cal,
         mock_holidays,
         mock_church,
+        mock_history,
+        mock_astronomy,
+        mock_github,
+        mock_hn,
         mock_launches,
         mock_markets,
         mock_weather,
@@ -50,6 +58,10 @@ class TestCollectRun:
         mock_weather.return_value = {"temp": 72}
         mock_markets.return_value = []
         mock_launches.return_value = []
+        mock_hn.return_value = []
+        mock_github.return_value = []
+        mock_astronomy.return_value = {}
+        mock_history.return_value = {}
         mock_church.return_value = []
         mock_holidays.return_value = []
         mock_econ_cal.return_value = []
@@ -68,6 +80,10 @@ class TestCollectRun:
         mock_weather.assert_called_once_with(config)
         mock_markets.assert_called_once_with(config)
         mock_launches.assert_called_once()
+        mock_hn.assert_called_once_with(config)
+        mock_github.assert_called_once_with(config)
+        mock_astronomy.assert_called_once_with(config)
+        mock_history.assert_called_once_with(config)
         mock_church.assert_called_once()
         mock_holidays.assert_called_once_with(days=10)
         mock_econ_cal.assert_called_once_with(config)
@@ -79,6 +95,10 @@ class TestCollectRun:
     @patch("stages.collect.fetch_weather")
     @patch("stages.collect.fetch_markets")
     @patch("stages.collect.fetch_upcoming_launches")
+    @patch("stages.collect.fetch_hackernews")
+    @patch("stages.collect.fetch_github_trending")
+    @patch("stages.collect.fetch_astronomy")
+    @patch("stages.collect.fetch_on_this_day")
     @patch("stages.collect.get_upcoming_church_events")
     @patch("stages.collect.get_upcoming_holidays")
     @patch("stages.collect.fetch_economic_calendar")
@@ -95,12 +115,20 @@ class TestCollectRun:
         mock_econ_cal,
         mock_holidays,
         mock_church,
+        mock_history,
+        mock_astronomy,
+        mock_github,
+        mock_hn,
         mock_launches,
         mock_markets,
         mock_weather,
     ):
         mock_weather.return_value = {"temp": 72}
         mock_launches.return_value = []
+        mock_hn.return_value = []
+        mock_github.return_value = []
+        mock_astronomy.return_value = {}
+        mock_history.return_value = {}
         mock_church.return_value = []
         mock_holidays.return_value = []
         mock_econ_cal.return_value = []
@@ -122,6 +150,10 @@ class TestCollectRun:
     @patch("stages.collect.fetch_weather")
     @patch("stages.collect.fetch_markets")
     @patch("stages.collect.fetch_upcoming_launches")
+    @patch("stages.collect.fetch_hackernews")
+    @patch("stages.collect.fetch_github_trending")
+    @patch("stages.collect.fetch_astronomy")
+    @patch("stages.collect.fetch_on_this_day")
     @patch("stages.collect.get_upcoming_church_events")
     @patch("stages.collect.get_upcoming_holidays")
     @patch("stages.collect.fetch_economic_calendar")
@@ -138,6 +170,10 @@ class TestCollectRun:
         mock_econ_cal,
         mock_holidays,
         mock_church,
+        mock_history,
+        mock_astronomy,
+        mock_github,
+        mock_hn,
         mock_launches,
         mock_markets,
         mock_weather,
@@ -145,6 +181,10 @@ class TestCollectRun:
         mock_weather.return_value = {"temp": 72}
         mock_markets.return_value = []
         mock_launches.return_value = []
+        mock_hn.return_value = []
+        mock_github.return_value = []
+        mock_astronomy.return_value = {}
+        mock_history.return_value = {}
         mock_church.return_value = []
         mock_holidays.return_value = []
         mock_econ_cal.return_value = []
@@ -166,6 +206,10 @@ class TestCollectRun:
     @patch("stages.collect.fetch_weather")
     @patch("stages.collect.fetch_markets")
     @patch("stages.collect.fetch_upcoming_launches")
+    @patch("stages.collect.fetch_hackernews")
+    @patch("stages.collect.fetch_github_trending")
+    @patch("stages.collect.fetch_astronomy")
+    @patch("stages.collect.fetch_on_this_day")
     @patch("stages.collect.get_upcoming_church_events")
     @patch("stages.collect.get_upcoming_holidays")
     @patch("stages.collect.fetch_economic_calendar")
@@ -182,6 +226,10 @@ class TestCollectRun:
         mock_econ_cal,
         mock_holidays,
         mock_church,
+        mock_history,
+        mock_astronomy,
+        mock_github,
+        mock_hn,
         mock_launches,
         mock_markets,
         mock_weather,
@@ -189,6 +237,10 @@ class TestCollectRun:
         mock_weather.return_value = {"temp": 72}
         mock_markets.return_value = []
         mock_launches.return_value = []
+        mock_hn.return_value = []
+        mock_github.return_value = []
+        mock_astronomy.return_value = {}
+        mock_history.return_value = {}
         mock_church.return_value = []
         mock_holidays.return_value = []
         mock_econ_cal.return_value = []
@@ -208,6 +260,10 @@ class TestCollectRun:
     @patch("stages.collect.fetch_weather")
     @patch("stages.collect.fetch_markets")
     @patch("stages.collect.fetch_upcoming_launches")
+    @patch("stages.collect.fetch_hackernews")
+    @patch("stages.collect.fetch_github_trending")
+    @patch("stages.collect.fetch_astronomy")
+    @patch("stages.collect.fetch_on_this_day")
     @patch("stages.collect.get_upcoming_church_events")
     @patch("stages.collect.get_upcoming_holidays")
     @patch("stages.collect.fetch_economic_calendar")
@@ -224,6 +280,10 @@ class TestCollectRun:
         mock_econ_cal,
         mock_holidays,
         mock_church,
+        mock_history,
+        mock_astronomy,
+        mock_github,
+        mock_hn,
         mock_launches,
         mock_markets,
         mock_weather,
@@ -231,6 +291,10 @@ class TestCollectRun:
         mock_weather.return_value = {"temp": 72}
         mock_markets.return_value = []
         mock_launches.return_value = []
+        mock_hn.return_value = []
+        mock_github.return_value = []
+        mock_astronomy.return_value = {}
+        mock_history.return_value = {}
         mock_church.return_value = []
         mock_holidays.return_value = []
         mock_econ_cal.return_value = []
@@ -254,6 +318,10 @@ class TestCollectRun:
     @patch("stages.collect.fetch_weather")
     @patch("stages.collect.fetch_markets")
     @patch("stages.collect.fetch_upcoming_launches")
+    @patch("stages.collect.fetch_hackernews")
+    @patch("stages.collect.fetch_github_trending")
+    @patch("stages.collect.fetch_astronomy")
+    @patch("stages.collect.fetch_on_this_day")
     @patch("stages.collect.get_upcoming_church_events")
     @patch("stages.collect.get_upcoming_holidays")
     @patch("stages.collect.fetch_economic_calendar")
@@ -270,6 +338,10 @@ class TestCollectRun:
         mock_econ_cal,
         mock_holidays,
         mock_church,
+        mock_history,
+        mock_astronomy,
+        mock_github,
+        mock_hn,
         mock_launches,
         mock_markets,
         mock_weather,
@@ -277,6 +349,10 @@ class TestCollectRun:
         mock_weather.return_value = {"temp": 72}
         mock_markets.return_value = []
         mock_launches.return_value = []
+        mock_hn.return_value = []
+        mock_github.return_value = []
+        mock_astronomy.return_value = {}
+        mock_history.return_value = {}
         mock_church.return_value = []
         mock_holidays.return_value = []
         mock_econ_cal.return_value = []
@@ -336,6 +412,10 @@ class TestCollectRun:
                 "analysis_transcripts": 1,
                 "rss_items": 2,
                 "local_news_items": 0,
+                "hackernews_items": 0,
+                "github_trending_items": 0,
+                "astronomy_events": 0,
+                "history_items": 0,
             },
         }
 
@@ -344,10 +424,15 @@ class TestCollectRun:
         assert result["raw_sources"]["source_counts"]["analysis_transcripts"] == 1
         assert result["raw_sources"]["source_counts"]["rss_items"] == 2
         assert result["raw_sources"]["source_counts"]["local_news_items"] == 0
+        assert result["raw_sources"]["source_counts"]["hackernews_items"] == 0
 
     @patch("stages.collect.fetch_weather")
     @patch("stages.collect.fetch_markets")
     @patch("stages.collect.fetch_upcoming_launches")
+    @patch("stages.collect.fetch_hackernews")
+    @patch("stages.collect.fetch_github_trending")
+    @patch("stages.collect.fetch_astronomy")
+    @patch("stages.collect.fetch_on_this_day")
     @patch("stages.collect.get_upcoming_church_events")
     @patch("stages.collect.get_upcoming_holidays")
     @patch("stages.collect.fetch_economic_calendar")
@@ -364,6 +449,10 @@ class TestCollectRun:
         mock_econ_cal,
         mock_holidays,
         mock_church,
+        mock_history,
+        mock_astronomy,
+        mock_github,
+        mock_hn,
         mock_launches,
         mock_markets,
         mock_weather,
@@ -371,6 +460,10 @@ class TestCollectRun:
         mock_weather.return_value = {"temp": 72}
         mock_markets.return_value = []
         mock_launches.return_value = []
+        mock_hn.return_value = []
+        mock_github.return_value = []
+        mock_astronomy.return_value = {}
+        mock_history.return_value = {}
         mock_church.return_value = []
         mock_holidays.return_value = []
         mock_econ_cal.return_value = []

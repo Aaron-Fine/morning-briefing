@@ -82,6 +82,35 @@ class TestNextRunTime:
             expected_date = mock_now.date() + timedelta(days=1)
             assert result.date() == expected_date
 
+    def test_spring_forward_transition(self):
+        tz = ZoneInfo("America/Denver")
+        hour, minute = 3, 0
+        mock_now = datetime(2026, 3, 8, 1, 30, 0, tzinfo=tz)
+
+        with patch("entrypoint.datetime") as mock_dt:
+            mock_dt.now.return_value = mock_now
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+            result = _next_run_time(hour, minute, tz)
+            assert result.date() == mock_now.date()
+            assert result.hour == hour
+            assert result.minute == minute
+
+    def test_fall_back_transition(self):
+        tz = ZoneInfo("America/Denver")
+        hour, minute = 1, 30
+        mock_now = datetime(2026, 11, 1, 2, 15, 0, tzinfo=tz)
+
+        with patch("entrypoint.datetime") as mock_dt:
+            mock_dt.now.return_value = mock_now
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+            result = _next_run_time(hour, minute, tz)
+            expected_date = mock_now.date() + timedelta(days=1)
+            assert result.date() == expected_date
+            assert result.hour == hour
+            assert result.minute == minute
+
 
 class TestEntrypointMain:
     @patch("entrypoint.run")
@@ -118,9 +147,7 @@ class TestEntrypointMain:
         mock_sleep.side_effect = fake_sleep
         mock_dt.now.return_value = datetime(2026, 4, 10, 12, 0, 0)
         # Mock config to avoid reading real config.yaml
-        mock_yaml_load.return_value = {
-            "schedule": {"cron": "0 6 * * *", "timezone": "UTC"}
-        }
+        mock_yaml_load.return_value = {"schedule": {"cron": "0 6 * * *"}}
 
         with pytest.raises(KeyboardInterrupt):
             main()

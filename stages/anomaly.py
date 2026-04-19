@@ -26,6 +26,8 @@ _TERTIARY_TAGS = {"local", "science", "tech"}
 
 # Domain names produced by cross_domain that map to primary interests
 _PRIMARY_DOMAINS = {"geopolitics", "defense_space", "ai_tech"}
+_MAX_SOURCE_ABSENCE_ANOMALIES = 4
+_MAX_REPEATED_PHRASE_ANOMALIES = 6
 
 # Keywords used to infer whether a deep dive headline covers a primary topic
 # when tag / domains_bridged are absent (Phase 1 fallback)
@@ -84,16 +86,36 @@ def _check_source_absence(raw_sources: dict, domain_analysis: dict) -> list:
         if cat and netloc:
             raw_domains_by_category.setdefault(cat, set()).add(netloc)
 
+    missing_categories = []
     for cat, count in raw_by_category.items():
         if count < 3:
             continue
         cat_domains = raw_domains_by_category.get(cat, set())
         if not cat_domains & covered_domains:
-            anomalies.append({
-                "check": "source_absence",
-                "severity": "warning",
-                "detail": f"Category '{cat}' had {count} raw items but contributed 0 items to domain analysis",
-            })
+            missing_categories.append((cat, count))
+
+    missing_categories.sort(key=lambda item: (-item[1], item[0]))
+    for cat, count in missing_categories[:_MAX_SOURCE_ABSENCE_ANOMALIES]:
+        anomalies.append({
+            "check": "source_absence",
+            "severity": "warning",
+            "detail": (
+                f"Category '{cat}' had {count} raw items but contributed 0 items "
+                "to domain analysis"
+            ),
+        })
+
+    remaining = missing_categories[_MAX_SOURCE_ABSENCE_ANOMALIES:]
+    if remaining:
+        summary = ", ".join(f"{cat} ({count})" for cat, count in remaining[:5])
+        anomalies.append({
+            "check": "source_absence",
+            "severity": "warning",
+            "detail": (
+                f"{len(remaining)} additional categories had raw items with no "
+                f"domain-analysis coverage: {summary}"
+            ),
+        })
 
     return anomalies
 
@@ -207,8 +229,14 @@ def _check_repeated_phrases(cross_domain_output: dict, seam_data: dict) -> list:
 
     glance_texts = []
     for item in cross_domain_output.get("at_a_glance", []):
-        # at_a_glance items use "context" (combined facts+analysis) not "facts"/"analysis"
-        parts = [item.get("headline", ""), item.get("context", ""), item.get("cross_domain_note", "")]
+        # Phase 3 items have facts/analysis/cross_domain_note as separate fields;
+        # Phase 1 items may have a combined "context" field instead.
+        facts = item.get("facts", "")
+        analysis = item.get("analysis", "")
+        cross_note = item.get("cross_domain_note", "")
+        context_fallback = item.get("context", "")
+        body = f"{facts} {analysis} {cross_note}".strip() or context_fallback
+        parts = [item.get("headline", ""), body]
         glance_texts.append(" ".join(p for p in parts if p))
     if glance_texts:
         sections["at_a_glance"] = " ".join(glance_texts)
@@ -239,6 +267,8 @@ def _check_repeated_phrases(cross_domain_output: dict, seam_data: dict) -> list:
     window = 10
     section_names = list(section_words.keys())
     found: set[str] = set()
+    representative_phrases: list[str] = []
+    suppressed_count = 0
 
     for i, sec_a in enumerate(section_names):
         words_a = section_words[sec_a]
@@ -257,16 +287,46 @@ def _check_repeated_phrases(cross_domain_output: dict, seam_data: dict) -> list:
                 for k in range(len(words_b) - window + 1)
             }
             repeated = ngrams_a & ngrams_b
-            for phrase in repeated:
+            for phrase in sorted(repeated):
                 if phrase not in found:
                     found.add(phrase)
+                    if _is_redundant_phrase(phrase, representative_phrases):
+                        suppressed_count += 1
+                        continue
+                    representative_phrases.append(phrase)
+                    if len(representative_phrases) > _MAX_REPEATED_PHRASE_ANOMALIES:
+                        suppressed_count += 1
+                        representative_phrases.pop()
+                        continue
                     anomalies.append({
                         "check": "repeated_phrase",
                         "severity": "warning",
-                        "detail": f"10-word phrase appears in both '{sec_a}' and '{sec_b}': \"{phrase}\"",
+                        "detail": (
+                            f"10-word phrase appears in both '{sec_a}' and '{sec_b}': "
+                            f"\"{phrase}\""
+                        ),
                     })
 
+    if suppressed_count:
+        anomalies.append({
+            "check": "repeated_phrase",
+            "severity": "warning",
+            "detail": (
+                f"Suppressed {suppressed_count} additional overlapping repeated-phrase "
+                "matches"
+            ),
+        })
+
     return anomalies
+
+
+def _is_redundant_phrase(phrase: str, existing_phrases: list[str]) -> bool:
+    phrase_words = set(phrase.split())
+    for existing in existing_phrases:
+        existing_words = set(existing.split())
+        if len(phrase_words & existing_words) >= 8:
+            return True
+    return False
 
 
 def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:

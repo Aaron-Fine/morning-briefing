@@ -1,12 +1,15 @@
 """Stage: analyze_domain — Domain-specific analytical passes.
 
-Runs four focused LLM analysis passes on filtered subsets of raw_sources:
-  1. geopolitics  — world news, conflict, non-western + western-analysis + substack
-  2. defense_space — defense, military, missile defense, space
-  3. ai_tech      — AI/LLMs, cybersecurity, consumer tech
-  4. econ         — economics, trade, markets
+Runs seven focused LLM analysis passes on filtered subsets of raw_sources:
+  1. geopolitics       — world news, conflict, non-western + western-analysis + substack
+  2. defense_space     — defense, military, missile defense, space
+  3. ai_tech           — AI/LLMs, cybersecurity, consumer tech
+  4. energy_materials  — power, raw materials, grid, industrial capacity
+  5. culture_structural — institutional shifts, structural change
+  6. science_biotech   — frontier science and biotech with strategic implications
+  7. econ              — economics, trade, markets
 
-All four passes share the same output schema (Security Layer 2 applied: untrusted
+All passes share the same output schema (Security Layer 2 applied: untrusted
 source content is delimited with <untrusted_sources> tags).
 
 Input:  context["raw_sources"], context["compressed_transcripts"]
@@ -14,6 +17,9 @@ Output: {"domain_analysis": {
     "geopolitics": {"items": [...]},
     "defense_space": {"items": [...]},
     "ai_tech": {"items": [...]},
+    "energy_materials": {"items": [...]},
+    "culture_structural": {"items": [...]},
+    "science_biotech": {"items": [...]},
     "econ": {"items": [...], "market_context": "..."},
 }}
 
@@ -28,11 +34,13 @@ Each item schema:
 """
 
 import logging
-import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from copy import deepcopy
 from urllib.parse import urlparse
 
-from llm import call_llm
-from sanitize import sanitize_source_content
+from morning_digest.llm import call_llm
+from morning_digest.sanitize import sanitize_source_content
+from utils.prompts import load_prompt
 
 log = logging.getLogger(__name__)
 
@@ -163,6 +171,130 @@ _DOMAIN_CONFIGS = {
             "because of the number.\n"
             "- Note when an AI story has defense/national security implications — this "
             "creates a cross-domain connection hook."
+        ),
+    },
+    "energy_materials": {
+        "label": "Energy & Materials",
+        "categories": {"energy-materials"},
+        "transcript_channels": set(),
+        "tags": "energy|econ",
+        "tag_labels": "Energy|Economy",
+        "normal_items": 2,
+        "max_items": 4,
+        "min_items": 1,
+        "domain_instructions": (
+            "SOURCE TREATMENT:\n"
+            "- Utility Dive, Mining.com, OilPrice.com: primary reporting on energy markets, "
+            "grid infrastructure, and raw materials. Attribute figures, production data, "
+            "and regulatory actions to the specific source.\n"
+            "- Carbon Brief: analysis-opinion on energy transition and climate science "
+            "with strong data visualization. Label as analysis, not reporting.\n\n"
+            "SCOPE — the physical substrate of the economy:\n"
+            "- Power generation, grid capacity, transmission constraints\n"
+            "- Raw materials: critical minerals, mining, supply chain bottlenecks\n"
+            "- Oil, gas, and energy commodity markets\n"
+            "- Industrial capacity and manufacturing inputs\n"
+            "- Energy transition infrastructure (solar, wind, nuclear, storage)\n\n"
+            "EXPLICITLY EXCLUDE:\n"
+            "- Climate policy framed as generic partisan politics (that belongs to geopolitics)\n"
+            "- Consumer energy prices as lifestyle news\n"
+            "- ESG discourse without concrete industrial implications\n\n"
+            "ANALYTICAL PRIORITIES:\n"
+            "- Focus on physical constraints: what can actually be built, mined, or "
+            "transmitted, and on what timeline. Announced capacity is not installed capacity.\n"
+            "- Note supply chain dependencies: who controls critical mineral processing, "
+            "where are the single points of failure.\n"
+            "- Connect energy developments to their downstream effects on defense "
+            "(military energy dependence), AI (data center power demand), and trade "
+            "(energy as geopolitical leverage).\n"
+            "- Distinguish between spot price movements and structural supply/demand shifts. "
+            "A price spike from a refinery outage is different from a structural deficit."
+        ),
+    },
+    "culture_structural": {
+        "label": "Culture & Structural Shifts",
+        "categories": {"culture-structural"},
+        "transcript_channels": {"Folding Ideas"},
+        "tags": "domestic|science",
+        "tag_labels": "Politics|Science",
+        "normal_items": 2,
+        "max_items": 3,
+        "min_items": 0,
+        "domain_instructions": (
+            "SOURCE TREATMENT:\n"
+            "- The American Conservative: right-of-center institutional analysis. Valuable "
+            "for perspectives on institutional legitimacy and cultural conservatism. "
+            "Label as analysis-opinion.\n"
+            "- Works in Progress: longform research on progress, institutions, and policy. "
+            "Data-driven but opinionated. Label as analysis-opinion.\n"
+            "- The New Atlantis: technology, society, and the ethics of science. "
+            "Thoughtful but has a specific intellectual tradition. Label as analysis-opinion.\n"
+            "- Comment Magazine: institutional health and civic culture. "
+            "Label as analysis-opinion.\n"
+            "- Folding Ideas (YouTube): media criticism and platform dynamics. "
+            "Treat as expert cultural analysis.\n\n"
+            "SCOPE — structural institutional shifts only:\n"
+            "- Changes in institutional trust, legitimacy, or function\n"
+            "- Demographic-institutional interactions (e.g., aging workforce reshaping "
+            "institutions)\n"
+            "- Technology reshaping social structures (platforms, media, education)\n"
+            "- Shifts in how institutions produce or validate knowledge\n\n"
+            "EXPLICITLY EXCLUDE:\n"
+            "- Celebrity news, entertainment gossip\n"
+            "- Isolated social media incidents or viral moments\n"
+            "- Generic discourse-chasing or culture war play-by-play\n"
+            "- Book/movie/show reviews unless they signal institutional shifts\n\n"
+            "ANALYTICAL PRIORITIES:\n"
+            "- Focus on leading indicators: what structural changes today predict "
+            "institutional behavior tomorrow.\n"
+            "- Distinguish between noise (a viral tweet) and signal (a measurable shift "
+            "in institutional behavior or public trust).\n"
+            "- Note when sources from different political traditions agree on a structural "
+            "diagnosis — convergence across ideological lines is a strong signal.\n"
+            "- This desk has min_items: 0. If nothing meets the bar, return an empty items "
+            "list. Do not stretch thin material to fill a quota."
+        ),
+    },
+    "science_biotech": {
+        "label": "Science & Biotech",
+        "categories": {"science-biotech"},
+        "transcript_channels": set(),
+        "tags": "biotech|science",
+        "tag_labels": "Biotech|Science",
+        "normal_items": 2,
+        "max_items": 4,
+        "min_items": 1,
+        "domain_instructions": (
+            "SOURCE TREATMENT:\n"
+            "- Nature, Science Magazine: gold-standard primary research reporting. "
+            "Attribute specific findings with journal names and, when available, "
+            "lead researcher names.\n"
+            "- STAT News: biotech and pharma industry reporting. Strong on FDA actions, "
+            "clinical trials, and industry dynamics. Primary reporting.\n"
+            "- Endpoints News: biotech deal flow and drug development pipeline. "
+            "Primary reporting with industry focus.\n\n"
+            "SCOPE — frontier science and biotech with strategic implications:\n"
+            "- Breakthrough research with geopolitical or economic consequences\n"
+            "- Drug approvals, clinical trial results with market impact\n"
+            "- Biodefense and biosecurity developments\n"
+            "- Research competition between nations (US-China biotech race)\n"
+            "- Science policy and funding decisions that shape research direction\n\n"
+            "EXPLICITLY EXCLUDE:\n"
+            "- General health news or medical advice\n"
+            "- Routine clinical updates without strategic significance\n"
+            "- Wellness trends or consumer health products\n"
+            "- Individual patient stories unless they illustrate systemic issues\n\n"
+            "ANALYTICAL PRIORITIES:\n"
+            "- Distinguish between a promising result and a proven one. Phase 1 trial "
+            "success is not the same as FDA approval. Note where findings sit in the "
+            "validation pipeline.\n"
+            "- Connect scientific developments to their strategic implications: a gene "
+            "therapy breakthrough matters because of who controls the IP, what it costs, "
+            "and who gets access.\n"
+            "- Note when science has defense implications (dual-use research, biodefense, "
+            "synthetic biology) — these create cross-domain connection hooks.\n"
+            "- Flag when scientific consensus is shifting on an important question, not "
+            "just when a single study makes a claim."
         ),
     },
     "econ": {
@@ -336,7 +468,9 @@ def _fmt_markets(markets: list[dict]) -> str:
 
 def _empty_domain_result(domain_key: str, failed: bool = False) -> dict:
     """Return a safe empty result for a domain pass."""
-    result = {"items": [], "_failed": failed}
+    result = {"items": []}
+    if failed:
+        result["_failed"] = True
     if domain_key == "econ":
         result["market_context"] = ""
     return result
@@ -361,12 +495,17 @@ def _run_domain_pass(
 
     schema = _ECON_OUTPUT_SCHEMA if domain_key == "econ" else _OUTPUT_SCHEMA
 
-    system_prompt = (
-        f"You are a {cfg['label']} analyst for Aaron's Morning Digest.\n\n"
-        f"{cfg['domain_instructions']}\n\n"
-        f"{schema}\n\n"
-        f"{_SHARED_RULES}\n\n"
-        f"Produce {cfg['normal_items']}-{cfg['max_items']} items (minimum {cfg['min_items']})."
+    system_prompt = load_prompt(
+        "analyze_domain_system.md",
+        {
+            "label": cfg["label"],
+            "domain_instructions": cfg["domain_instructions"],
+            "schema": schema,
+            "shared_rules": _SHARED_RULES,
+            "normal_items": cfg["normal_items"],
+            "max_items": cfg["max_items"],
+            "min_items": cfg["min_items"],
+        },
     )
 
     source_block_parts = [f"RSS/WEB SOURCES ({cfg['label']}):"]
@@ -434,37 +573,58 @@ def _run_domain_pass(
 # ---------------------------------------------------------------------------
 
 
-_RETRY_DELAY_SECONDS = 300  # 5 minutes
+def _resolve_domain_configs(config: dict) -> dict[str, dict]:
+    """Resolve active desk routing from config while reusing desk-owned metadata."""
+    manifest = config.get("desks") or []
+    if not manifest:
+        return deepcopy(_DOMAIN_CONFIGS)
+
+    resolved: dict[str, dict] = {}
+    for entry in manifest:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        if name not in _DOMAIN_CONFIGS:
+            log.warning(f"analyze_domain: unknown desk in config.desks: {name!r}")
+            continue
+
+        cfg = deepcopy(_DOMAIN_CONFIGS[name])
+        categories = entry.get("categories")
+        if categories is not None:
+            cfg["categories"] = set(categories)
+        resolved[name] = cfg
+
+    return resolved or deepcopy(_DOMAIN_CONFIGS)
 
 
 def run(
     context: dict, config: dict, model_config: dict | None = None, **kwargs
 ) -> dict:
-    """Run all four domain analysis passes and return domain_analysis artifact."""
+    """Run all domain analysis passes and return domain_analysis artifact."""
     raw = context.get("raw_sources", {})
     rss_items = raw.get("rss", [])
     markets = raw.get("markets", [])
     compressed_transcripts = context.get("compressed_transcripts", [])
+    domain_configs = _resolve_domain_configs(config)
 
     if not model_config:
         model_config = config.get("llm", {})
 
     domain_analysis = _run_all_domains(
-        rss_items, compressed_transcripts, markets, model_config
+        domain_configs, rss_items, compressed_transcripts, markets, model_config
     )
 
     failed_keys = [k for k, v in domain_analysis.items() if v.get("_failed")]
     if failed_keys:
         log.warning(
             f"analyze_domain: {len(failed_keys)} domain(s) failed ({', '.join(failed_keys)}), "
-            f"retrying in {_RETRY_DELAY_SECONDS}s..."
+            "retrying immediately without blocking the pipeline..."
         )
-        time.sleep(_RETRY_DELAY_SECONDS)
         for domain_key in failed_keys:
-            log.info(f"  Retrying domain: {domain_key} ({_DOMAIN_CONFIGS[domain_key]['label']})")
+            log.info(f"  Retrying domain: {domain_key} ({domain_configs[domain_key]['label']})")
             result = _run_domain_pass(
                 domain_key,
-                _DOMAIN_CONFIGS[domain_key],
+                domain_configs[domain_key],
                 rss_items,
                 compressed_transcripts,
                 markets if domain_key == "econ" else [],
@@ -481,7 +641,7 @@ def run(
         total_items += len(val.get("items", []))
 
     log.info(
-        f"analyze_domain: {total_items} total items across {len(_DOMAIN_CONFIGS)} domains"
+        f"analyze_domain: {total_items} total items across {len(domain_configs)} domains"
     )
     if still_failed:
         log.error(
@@ -495,14 +655,20 @@ def run(
     }
 
 
+_MAX_PARALLEL_DESKS = 4  # bound concurrency to avoid rate limits
+
+
 def _run_all_domains(
+    domain_configs: dict[str, dict],
     rss_items: list[dict],
     compressed_transcripts: list[dict],
     markets: list[dict],
     model_config: dict,
 ) -> dict:
     domain_analysis: dict = {}
-    for domain_key, domain_cfg in _DOMAIN_CONFIGS.items():
+
+    def _run_one(domain_key: str) -> tuple[str, dict]:
+        domain_cfg = domain_configs[domain_key]
         log.info(f"  Analyzing domain: {domain_key} ({domain_cfg['label']})")
         result = _run_domain_pass(
             domain_key,
@@ -512,5 +678,17 @@ def _run_all_domains(
             markets if domain_key == "econ" else [],
             model_config,
         )
-        domain_analysis[domain_key] = result
+        return domain_key, result
+
+    with ThreadPoolExecutor(max_workers=_MAX_PARALLEL_DESKS) as pool:
+        futures = {pool.submit(_run_one, key): key for key in domain_configs}
+        for future in as_completed(futures):
+            domain_key = futures[future]
+            try:
+                key, result = future.result()
+                domain_analysis[key] = result
+            except Exception as e:
+                log.error(f"  analyze_domain[{domain_key}]: parallel execution failed: {e}")
+                domain_analysis[domain_key] = _empty_domain_result(domain_key, failed=True)
+
     return domain_analysis

@@ -21,6 +21,9 @@ from sources.rss_feeds import (
     fetch_rss,
     _clean_summary,
     _parse_feed_date,
+    _fetch_direct,
+    _items_from_html_index,
+    _skip_due_to_cooldown,
 )
 
 
@@ -237,3 +240,82 @@ class TestRssFeeds:
         )
         mock_direct.assert_called_once()
         assert len(result) == 1
+
+    @patch("sources.rss_feeds._fetch_feed_batch")
+    def test_fetch_direct_preserves_ordered_circuit_breaker(self, mock_batch):
+        feeds = [
+            {"name": f"Feed {i}", "url": f"https://example.com/{i}", "category": "test"}
+            for i in range(6)
+        ]
+        mock_batch.return_value = [
+            {"content": None, "content_type": "", "status_code": 500, "error": "boom", "skipped": False},
+            {"content": None, "content_type": "", "status_code": 500, "error": "boom", "skipped": False},
+            {"content": None, "content_type": "", "status_code": 500, "error": "boom", "skipped": False},
+            {"content": None, "content_type": "", "status_code": 500, "error": "boom", "skipped": False},
+            {"content": None, "content_type": "", "status_code": 500, "error": "boom", "skipped": False},
+            {"content": b"<rss />", "content_type": "application/rss+xml", "status_code": 200, "error": "", "skipped": False},
+        ]
+
+        result = _fetch_direct({"feeds": feeds})
+
+        assert result == []
+        mock_batch.assert_called_once()
+
+    @patch("sources.rss_feeds._parse_feed_with_timeout")
+    @patch("sources.rss_feeds._fetch_feed_batch")
+    def test_fetch_direct_collects_items_after_parallel_fetch(self, mock_batch, mock_parse):
+        feeds = [
+            {"name": "Feed A", "url": "https://example.com/a", "category": "alpha"},
+            {"name": "Feed B", "url": "https://example.com/b", "category": "beta"},
+        ]
+        mock_batch.return_value = [
+            {"content": b"a", "content_type": "application/rss+xml", "status_code": 200, "error": "", "skipped": False},
+            {"content": b"b", "content_type": "application/rss+xml", "status_code": 200, "error": "", "skipped": False},
+        ]
+        mock_parse.side_effect = [
+            MagicMock(entries=[{"title": "A1", "link": "https://example.com/a1", "summary": "Alpha"}]),
+            MagicMock(entries=[{"title": "B1", "link": "https://example.com/b1", "summary": "Beta"}]),
+        ]
+
+        result = _fetch_direct({"feeds": feeds})
+
+        assert len(result) == 2
+        assert {item["source"] for item in result} == {"Feed A", "Feed B"}
+
+    def test_items_from_html_index_extracts_article_links(self):
+        html = b"""
+        <html><body>
+          <a href="/p/good-post">This is a plausible article title</a>
+          <a href="/subscribe">Subscribe</a>
+          <a href="https://example.com/p/second-post">Another valid article headline</a>
+        </body></html>
+        """
+        feed = {
+            "name": "HTML Feed",
+            "url": "https://example.com/",
+            "category": "test",
+            "mode": "html_index",
+            "cap": 5,
+        }
+
+        items = _items_from_html_index(feed, html)
+
+        assert len(items) == 2
+        assert items[0]["url"] == "https://example.com/p/good-post"
+        assert items[1]["url"] == "https://example.com/p/second-post"
+
+    def test_skip_due_to_cooldown_returns_skip_result(self):
+        feed = {"name": "Cool Feed", "url": "https://example.com/feed.xml"}
+        state = {
+            "Cool Feed": {
+                "cooldown_until": datetime.now(timezone.utc).timestamp() + 300,
+                "last_status": 429,
+                "last_error": "too many requests",
+            }
+        }
+
+        result = _skip_due_to_cooldown(feed, state)
+
+        assert result is not None
+        assert result["skipped"] is True
+        assert result["status_code"] == 429

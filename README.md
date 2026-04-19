@@ -10,7 +10,7 @@ Every morning at 6:00 AM MT, this container:
 
 1. **Collects** data from multiple sources:
    - YouTube analysis channels (yt-dlp — transcripts from configured channels, no API key)
-   - RSS feeds (25+ categorized feeds: non-western press, defense/military, geopolitics, AI/tech, economics, cybersecurity, and more)
+   - RSS feeds (50+ categorized feeds: non-western press, defense/military, geopolitics, AI/tech, economics, energy/materials, science/biotech, legal/institutional, cybersecurity, demographics, and more)
    - Local news RSS (Cache Valley Daily, Herald Journal)
    - NWS weather (primary) with Open-Meteo fallback, AirNow AQI, NOAA normals/records
    - Finnhub market quotes (SPY, DIA, XAR, XLE)
@@ -20,11 +20,12 @@ Every morning at 6:00 AM MT, this container:
 
 2. **Processes** sources through a staged AI pipeline (`pipeline.py`):
    - **collect** — Fetches all sources (RSS, YouTube transcripts, weather, markets, CFM)
-   - **compress** — Pre-compresses YouTube transcripts to ~400–800 word summaries (Kimi K2.5)
-   - **analyze_domain** — Four specialist desks: geopolitics, defense/space, AI/tech, economics (Kimi K2.5)
-    - **prepare_*** — Calendar, weather (SVG display), spiritual, local news enrichment passes
-   - **seams** — Contested narratives, coverage gaps, key assumptions detection (Claude Sonnet)
-   - **cross_domain** — Editor-in-chief synthesis: cross-domain connections, deep dive selection and writing, weekend reads on Fridays (Claude Sonnet)
+   - **compress** — Pre-compresses YouTube transcripts to ~400–800 word summaries
+   - **analyze_domain** — Seven specialist desks run in parallel: geopolitics, defense/space, AI/tech, energy/materials, culture/structural, science/biotech, economics
+   - **prepare_*** — Calendar, weather (HTML email-safe chart), spiritual, local news enrichment passes
+   - **seams** — Two-turn adversarial review: scan for tensions/absences/assumptions, then synthesize into contested narratives, coverage gaps, key assumptions
+   - **cross_domain** — Two-turn editor-in-chief synthesis: plan (editorial decisions) then execute (at-a-glance, deep dives, worth reading)
+   - **coverage_gaps** — Diagnostic blind-spot detection with recurring pattern history; stored as artifacts and shown only in dry-run diagnostics
    - **assemble** — Renders HTML digest from all stage outputs
    - **anomaly** — Post-assembly behavioral checks: category skew, source absence, unusual deep dives, length drift, repeated phrases
    - **briefing_packet** — Builds compressed JSON context for follow-up chat (writes `output/latest_briefing_packet.json`)
@@ -36,21 +37,38 @@ Every morning at 6:00 AM MT, this container:
 
 ## Architecture
 
+### Data Sources
+
+```mermaid
+graph LR
+    YT[YouTube channels] --> C[collect]
+    RSS[RSS Feeds 50+] --> C
+    WX[Weather API] --> C
+    MKT[Finnhub] --> C
+    LN[Local News RSS] --> C
+    CFM[CFM Schedule] --> C
+    CAL[Calendar] --> C
+    C --> pipeline.py
 ```
-┌──────────────────┐
-│ YouTube channels │──(transcripts)──┐
-│ RSS Feeds (25+)  │─────────────────┤
-│ Weather API      │─────────────────┤   ┌─────────────────────────────────────────────────────┐
-│ Finnhub          │─────────────────┼──▶│                   pipeline.py                       │
-│ Local News RSS   │─────────────────┤   │  collect → compress → analyze_domain → seams        │
-│ CFM Schedule     │─────────────────┤   │  → cross_domain → assemble → anomaly → briefing     │
-│ Calendar         │─────────────────┘   │  → send                                             │
-└──────────────────┘                     └──────────────┬──────────────────────────────────────┘
-                                                        │
-                              ┌─────────────────────────┼────────────────────────┐
-                              ▼                         ▼                        ▼
-                    Kimi K2.5 (Fireworks)      Claude Sonnet (Anthropic)       Email (SMTP)
-                    compress, analyze_domain    seams, cross_domain
+
+### Pipeline Flow
+
+```mermaid
+graph TD
+    collect --> compress
+    compress --> analyze_domain
+    analyze_domain -->|"7 desks in parallel"| prepare["prepare_*"]
+    prepare --> seams
+    seams -->|"scan → synthesis"| cross_domain
+    cross_domain -->|"plan → execute"| coverage_gaps
+    coverage_gaps --> assemble
+    assemble --> anomaly
+    anomaly --> briefing_packet
+    briefing_packet --> send
+
+    subgraph LLM Providers
+        CFG["Configured provider(s) in config.yaml"]
+    end
 ```
 
 ## Quick Start
@@ -59,8 +77,7 @@ Every morning at 6:00 AM MT, this container:
 
 | Key | Where | Free? |
 |-----|-------|-------|
-| Fireworks AI API | [fireworks.ai/account/api-keys](https://fireworks.ai/account/api-keys) | Pay-per-use (~$0.20–0.40/day) |
-| Anthropic API | [console.anthropic.com](https://console.anthropic.com) | Pay-per-use (~$0.10–0.20/day) |
+| LLM provider API key(s) | Your configured provider account(s) | Depends on provider/model |
 | Finnhub API | [finnhub.io](https://finnhub.io) | Free tier |
 | Gmail App Password | [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) | Yes |
 
@@ -87,9 +104,6 @@ docker compose run --rm morning-digest python pipeline.py --sources-only
 # Full pipeline: collect + AI + render HTML, saved to output/last_digest.html (no email)
 docker compose run --rm morning-digest python pipeline.py --dry-run
 
-# Force a Friday-style digest (includes weekend reads)
-docker compose run --rm morning-digest python pipeline.py --dry-run --force-friday
-
 # Production: full pipeline + send email
 docker compose run --rm morning-digest python pipeline.py
 ```
@@ -104,7 +118,7 @@ See the [Unraid section](#unraid) below.
 
 **All pipeline commands run inside Docker** — yt-dlp, Python packages, and other dependencies live only in the container image.
 
-### If the container is stopped (one-off run):
+### If the container is stopped (one-off run)
 
 ```bash
 docker compose run --rm morning-digest python pipeline.py --sources-only
@@ -112,29 +126,30 @@ docker compose run --rm morning-digest python pipeline.py --dry-run
 docker compose run --rm morning-digest python pipeline.py
 ```
 
-### If the container is already running (scheduled mode):
+### If the container is already running (scheduled mode)
 
 ```bash
 docker exec -it morning-digest python pipeline.py --dry-run
 ```
 
-### All pipeline flags:
+### All pipeline flags
 
 ```bash
 python pipeline.py                         # full run (collect + AI + send)
 python pipeline.py --dry-run               # full run, save HTML only (no email)
 python pipeline.py --sources-only          # collect and dump output/sources.json, stop before AI
-python pipeline.py --force-friday          # force Friday mode (weekend reads)
 python pipeline.py --lookback-hours 72     # override YouTube lookback window
 python pipeline.py --stage cross_domain    # re-run from a specific stage (loads prior artifacts)
+python pipeline.py --stage cross_domain --from-plan  # reuse today's editorial plan, re-run execution only
 ```
 
-### Checking output:
+### Checking output
 
 After a `--dry-run`:
+
 - `output/last_digest.html` — full rendered digest (open in browser)
 - `output/latest_briefing_packet.json` — compressed context packet for follow-up chat
-- `output/artifacts/YYYY-MM-DD/` — per-stage JSON artifacts (raw_sources, domain_analysis, seam_data, cross_domain_output, anomaly_report, etc.)
+- `output/artifacts/YYYY-MM-DD/` — per-stage JSON artifacts (`raw_sources`, `domain_analysis`, `seam_scan`, `cross_domain_plan`, `coverage_gaps`, `anomaly_report`, etc.)
 - `output/digest.log` — pipeline log with stage timings
 
 ---
@@ -146,12 +161,14 @@ After a `--dry-run`:
 This is the cleanest approach if you have the [Compose Manager](https://forums.unraid.net/topic/114415-plugin-docker-compose-manager/) plugin installed.
 
 **1. Copy the project to appdata:**
+
 ```bash
 mkdir -p /mnt/user/appdata/morning-digest
 cp -r . /mnt/user/appdata/morning-digest/
 ```
 
 **2. Create your `.env` file:**
+
 ```bash
 cd /mnt/user/appdata/morning-digest
 cp .env.example .env
@@ -161,6 +178,7 @@ nano .env   # fill in your keys
 **3. Edit `config.yaml`** — set your `delivery.to_address` and adjust preferences.
 
 **4. In the Unraid UI:**
+
 - Go to **Docker → Compose** tab
 - Click **Add Stack**
 - Name it `morning-digest`
@@ -170,6 +188,7 @@ nano .env   # fill in your keys
 **5. Test it:**
 
 Open an Unraid terminal and run:
+
 ```bash
 cd /mnt/user/appdata/morning-digest
 docker compose run --rm morning-digest python pipeline.py --dry-run
@@ -184,6 +203,7 @@ Then check `output/last_digest.html` — copy the path and open it in a browser 
 If you don't use the Compose plugin, you'll need to pre-build the image.
 
 **1. Build the image on your machine (or on Unraid via terminal):**
+
 ```bash
 cd /mnt/user/appdata/morning-digest
 docker build -t morning-digest:latest .
@@ -203,8 +223,7 @@ docker build -t morning-digest:latest .
 | Variable | Value |
 |----------|-------|
 | `TZ` | `America/Denver` |
-| `FIREWORKS_API_KEY` | your Fireworks key |
-| `ANTHROPIC_API_KEY` | your Anthropic key |
+| Provider API key(s) | keys required by the models/providers configured in `config.yaml` |
 | `FINNHUB_API_KEY` | your Finnhub key |
 | `SMTP_USER` | your email address |
 | `SMTP_PASSWORD` | your Gmail App Password (or SMTP password) |
@@ -232,6 +251,7 @@ docker compose up -d
 ```
 
 If using the Unraid Docker UI (Option B):
+
 ```bash
 docker build -t morning-digest:latest .
 # Then in Unraid Docker UI: Force Update the container
@@ -249,15 +269,33 @@ docker build -t morning-digest:latest .
 
 **`pipeline.stages`** — Ordered list of pipeline stages with optional per-stage model config. Each stage maps to `stages/<name>.py`.
 
-**`llm.model`** — Default AI model (Fireworks, used by compress + analyze_domain). Default: `accounts/fireworks/models/kimi-k2p5`
+**`llm.model`** — Default AI model. Individual stages can override provider/model settings in `pipeline.stages`.
 
-**`digest.weekend_reads`** — Friday edition weekend reads (enabled by default). Long-form pieces are selected by the `cross_domain` stage automatically when today is Friday; no manual triggering required.
+**`digest.worth_reading`** — long-form pieces worth setting aside time for. Selected by the `cross_domain` stage as part of the normal daily digest.
 
-**`topics.primary / secondary / tertiary`** — Topic priority tiers. Primary always gets coverage; tertiary only when something significant happens.
+**`topics.primary / secondary / tertiary`** — Topic priority tiers used to steer editorial selection in the digest.
 
 **`youtube.analysis_channels`** — Channels whose transcripts are fetched, compressed, and fed into synthesis. Uses `handle` (the `@username` on YouTube).
 
 **`youtube.lookback_hours`** — How far back to look for new videos (default: 48)
+
+**`desks`** — Desk manifest mapping desk names to RSS feed categories. Each desk runs a specialist analysis pass in parallel. To add a desk, add an entry here and create a matching `prompts/desk_<name>.md` file.
+
+```yaml
+desks:
+  - { name: "geopolitics", categories: ["non-western", "substack-independent", "global-south", "western-analysis"] }
+  - { name: "energy_materials", categories: ["energy-materials"] }
+```
+
+**`pipeline.stages[].turns.<name>`** — Per-turn model overrides for two-turn stages (`seams`, `cross_domain`). Override `max_tokens`, `temperature`, or `model` for individual turns without changing the stage default.
+
+```yaml
+- name: seams
+  model: { provider: "...", model: "...", max_tokens: 5000, temperature: 0.3 }
+  turns:
+    scan: { max_tokens: 4000, temperature: 0.4 }
+    synthesis: { max_tokens: 5000, temperature: 0.3 }
+```
 
 **`rss.feeds`** — Feed list with optional `cap` (max items per feed) and `category` for editorial treatment.
 
@@ -278,29 +316,36 @@ The digest applies different editorial treatment to each category:
 | `global-south` | Global South perspective |
 | `perspective-diversity` | "Stress test" layer — surface only when contradicting consensus |
 | `cyber` | Cybersecurity |
+| `energy-materials` | Physical substrate: power, raw materials, grid, industrial capacity |
+| `culture-structural` | Institutional shifts — not entertainment or discourse-chasing |
+| `science-biotech` | Frontier science and biotech with geopolitical/economic implications |
+| `legal-institutional` | Legal analysis, Supreme Court, national security law |
+| `regional-west` | Utah and Western US regional reporting |
+| `demographics` | Population, migration, and demographic trend research |
 
 ### Weather Display
 
-The weather module renders an inline SVG forecast display in the email with five zones:
+The weather module renders an HTML table-based forecast block for email clients. It avoids SVG and absolute positioning so the output survives Gmail and similar sanitizers.
 
 1. **Header** — Location, current temp, condition, AQI, wind, humidity. AQI Action Day alerts shown when AQI ≥ 151.
-2. **Temperature Chart** — 7-day high/low lines with record range band, normal range band, and forecast fill.
-3. **AQI Strip** — EPA-colored daily bars with numeric labels. Missing data shown as gray `--` bars.
-4. **Precipitation Bars** — Type-specific gradients (rain, snow, thunderstorm, mix, freezing rain) with probability labels and emoji markers.
-5. **Day Labels** — Day abbreviations and shortened condition summaries.
+2. **AQI Legend** — EPA-colored band key matching the per-day AQI labels.
+3. **7-Day Grid** — Each row shows day name, low temp, a hi-to-lo gradient temperature bar, the day’s AQI value positioned along the bar, the high temp, and a right column with condition and precipitation chance.
+4. **Precipitation Indicators** — Type-specific underline styling and probability labels for days with measurable precipitation.
+5. **Text Fallback** — If chart rendering fails, the module falls back to a compact text summary instead of emitting broken markup.
 
-All chart colors use CSS custom properties (`--wx-*`) with hardcoded light fallbacks, so email clients that don't support CSS variables still render a correct light-mode chart.
+All chart colors use CSS custom properties (`--wx-*`) with hardcoded light fallbacks so clients without CSS variable support still render a correct light-mode chart.
 
 ```yaml
 weather:
-  enabled: true
   nws_station: "KLGU"      # NWS observation station
-  aqi_strip: true          # Show AQI strip in SVG
-  record_band: true        # Show historical record range
-  normal_band: true        # Show NOAA 1991-2020 normals
+  aqi_strip: true          # Show AQI legend + per-day AQI labels
+  record_band: true        # Reserved for historical record overlays (not currently rendered)
+  normal_band: true        # Reserved for NOAA normal overlays (not currently rendered)
+  dark_theme: true         # Enable dark-theme palette overrides where supported
 ```
 
 **Data sources** (in priority order):
+
 - NWS API (primary) — forecast + current observations
 - Open-Meteo (fallback) — forecast + AQI + climate normals
 - AirNow API (optional) — current + forecast AQI
@@ -346,21 +391,15 @@ Falls back to direct RSS fetching if the FreshRSS API is unreachable.
 
 ## Cost
 
-**Fireworks AI (Kimi K2.5):** Used for transcript compression and domain analysis.
+Costs vary by the providers and models configured in `config.yaml`.
 
 | Stage | Input | Output | Est. cost |
 |-------|-------|--------|-----------|
-| compress (per transcript) | ~5K tokens | ~1.5K tokens | ~$0.01 |
-| analyze_domain | ~30K tokens | ~6K tokens | ~$0.03–0.06 |
-
-**Anthropic (Claude Sonnet):** Used for seam detection and cross-domain synthesis.
-
-| Stage | Input | Output | Est. cost |
-|-------|-------|--------|-----------|
-| seams | ~8K tokens | ~2K tokens | ~$0.03 |
-| cross_domain | ~20K tokens | ~8K tokens | ~$0.10–0.15 |
-
-**Total: ~$0.20–0.40/day** at current pricing.
+| compress (per transcript) | ~5K tokens | ~1.5K tokens | depends on configured model |
+| analyze_domain (×7 desks) | ~30K tokens each | ~6K tokens each | depends on configured model |
+| seams (2 turns) | ~12K tokens | ~4K tokens | depends on configured model |
+| cross_domain (2 turns) | ~25K tokens | ~12K tokens | depends on configured model |
+| coverage_gaps | ~15K tokens | ~3K tokens | depends on configured model |
 
 **Finnhub:** Free tier (60 API calls/minute). Four symbols = four calls per run. No cost.
 
@@ -370,25 +409,22 @@ All other sources are free with no API key required.
 
 ## Files
 
-```
+```text
 morning-digest/
 ├── config.yaml              # All preferences — edit this
 ├── pipeline.py              # Staged pipeline orchestrator (v2)
 ├── entrypoint.py            # Scheduler (runs at configured cron time)
-├── llm.py                   # LLM client (Fireworks + Anthropic)
-├── sender.py                # SMTP email delivery
-├── validate.py              # URL validation + HTML sanitization (Security Layer)
-├── sanitize.py              # HTML sanitizer for deep dive bodies
 ├── stages/
 │   ├── collect.py           # Fetches all sources
 │   ├── compress.py          # YouTube transcript compression
-│   ├── analyze_domain.py    # Four specialist domain passes
+│   ├── analyze_domain.py    # Seven specialist domain passes (parallel)
 │   ├── prepare_calendar.py  # Calendar enrichment
-│   ├── prepare_weather.py   # Weather enrichment
+│   ├── prepare_weather.py   # Weather enrichment + HTML weather block
 │   ├── prepare_spiritual.py # Come Follow Me enrichment
 │   ├── prepare_local.py     # Local news filter
 │   ├── seams.py             # Contested narratives + coverage gaps + key assumptions
-│   ├── cross_domain.py      # Editor-in-chief cross-domain synthesis
+│   ├── cross_domain.py      # Editor-in-chief cross-domain synthesis (two-turn)
+│   ├── coverage_gaps.py     # Diagnostic blind-spot detection
 │   ├── assemble.py          # HTML rendering from stage outputs
 │   ├── anomaly.py           # Post-assembly behavioral checks
 │   ├── briefing_packet.py   # Compressed chat context artifact
@@ -402,8 +438,26 @@ morning-digest/
 │   ├── launches.py          # Space launch schedule (Launch Library 2)
 │   ├── holidays.py          # Holiday calendar
 │   └── economic_calendar.py # Economic events
+├── prompts/                 # Prompt files for LLM stages
+│   ├── seams_scan.md        # Seams Turn 1: divergent scan
+│   ├── seams_synthesis.md   # Seams Turn 2: convergent synthesis
+│   ├── cross_domain_plan.md # Cross-domain Turn 1: editorial planning
+│   ├── cross_domain_execute.md  # Cross-domain Turn 2: writing
+│   ├── coverage_gaps.md     # Coverage gap diagnostic
+│   └── ...                  # Per-desk and system prompts
+├── utils/
+│   ├── prompts.py           # Prompt loader (template substitution from prompts/)
+│   ├── time.py              # Shared timezone helper (reads TZ env var)
+│   └── urls.py              # URL validation helpers
 ├── modules/
-│   └── weather_display.py   # SVG weather chart renderer (CSS-variable themed)
+│   └── weather_display.py   # HTML email-safe weather chart renderer
+├── morning_digest/
+│   ├── __init__.py          # Shared application package
+│   ├── llm.py               # LLM client (currently Fireworks + Anthropic providers)
+│   ├── validate.py          # URL validation + HTML sanitization (Security Layer)
+│   └── sanitize.py          # HTML sanitizer for deep dive bodies
+├── scripts/
+│   └── validate_new_feeds.py  # One-off feed URL validator
 ├── templates/
 │   └── email_template.py    # Jinja2 HTML email template
 ├── output/                  # Generated at runtime (volume-mounted in Docker)
@@ -412,13 +466,14 @@ morning-digest/
 │   ├── digest.log           # Pipeline log (30-day rotation)
 │   └── artifacts/
 │       └── YYYY-MM-DD/      # Per-run JSON artifacts for each stage
-├── tests/
-│   ├── fixtures/            # JSON test fixtures (weather scenarios)
-│   ├── test_weather_classify.py
-│   ├── test_weather_display.py
-│   ├── test_weather_integration.py
-│   ├── test_prepare_local.py
-│   └── test_cross_domain_models.py
+├── tests/                   # 780+ tests
+│   ├── fixtures/            # JSON test fixtures
+│   ├── test_contracts.py    # Tag vocabulary sync across all surfaces
+│   ├── test_seams_two_turn.py
+│   ├── test_cross_domain_two_turn.py
+│   ├── test_coverage_gaps.py
+│   ├── test_new_desks.py
+│   └── ...                  # Per-stage and integration tests
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt

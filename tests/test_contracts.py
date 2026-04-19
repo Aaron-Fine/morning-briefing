@@ -14,7 +14,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from validate import VALID_TAGS, VALID_TAG_LABELS
+from morning_digest.validate import VALID_TAGS, VALID_TAG_LABELS
 from stages.cross_domain import _VALID_TAGS, _TAG_LABELS, _SYSTEM_PROMPT
 from stages.assemble import _TAG_LABELS as ASSEMBLE_TAG_LABELS
 from stages.prepare_calendar import _parse_date
@@ -165,6 +165,43 @@ class TestStageArtifactKeyCoverage:
             "prepare_local",
             "seams",
             "cross_domain",
+            "coverage_gaps",
+            "assemble",
+            "anomaly",
+            "briefing_packet",
+            "send",
+        ]
+
+        # Stages where artifact_key intentionally matches the stage name
+        _IDENTITY_KEY_STAGES = {"briefing_packet", "coverage_gaps"}
+
+        for stage in stage_names:
+            key = _stage_artifact_key(stage)
+            if stage in _IDENTITY_KEY_STAGES:
+                continue
+            assert key != stage, (
+                f"Stage '{stage}' falls through to identity fallback — "
+                f"add an explicit mapping in _stage_artifact_key"
+            )
+
+
+class TestStageMetadataCoverage:
+    """Stage metadata should remain the single source of truth for pipeline behavior."""
+
+    def test_known_stages_have_metadata_entries(self):
+        from pipeline import _STAGE_METADATA
+
+        stage_names = [
+            "collect",
+            "compress",
+            "analyze_domain",
+            "prepare_calendar",
+            "prepare_weather",
+            "prepare_spiritual",
+            "prepare_local",
+            "seams",
+            "cross_domain",
+            "coverage_gaps",
             "assemble",
             "anomaly",
             "briefing_packet",
@@ -172,11 +209,4 @@ class TestStageArtifactKeyCoverage:
         ]
 
         for stage in stage_names:
-            key = _stage_artifact_key(stage)
-            # briefing_packet intentionally maps to itself (the artifact key matches the stage name)
-            if stage == "briefing_packet":
-                continue
-            assert key != stage, (
-                f"Stage '{stage}' falls through to identity fallback — "
-                f"add an explicit mapping in _stage_artifact_key"
-            )
+            assert stage in _STAGE_METADATA, f"Missing stage metadata for '{stage}'"
