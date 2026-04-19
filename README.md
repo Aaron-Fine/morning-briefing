@@ -22,10 +22,10 @@ Every morning at 6:00 AM MT, this container:
    - **collect** — Fetches all sources (RSS, YouTube transcripts, weather, markets, CFM)
    - **compress** — Pre-compresses YouTube transcripts to ~400–800 word summaries
    - **analyze_domain** — Seven specialist desks run in parallel: geopolitics, defense/space, AI/tech, energy/materials, culture/structural, science/biotech, economics
-   - **prepare_*** — Calendar, weather (SVG display), spiritual, local news enrichment passes
+   - **prepare_*** — Calendar, weather (HTML email-safe chart), spiritual, local news enrichment passes
    - **seams** — Two-turn adversarial review: scan for tensions/absences/assumptions, then synthesize into contested narratives, coverage gaps, key assumptions
    - **cross_domain** — Two-turn editor-in-chief synthesis: plan (editorial decisions) then execute (at-a-glance, deep dives, worth reading)
-   - **coverage_gaps** — Diagnostic blind-spot detection with recurring pattern history (artifacts only, not in email)
+   - **coverage_gaps** — Diagnostic blind-spot detection with recurring pattern history; stored as artifacts and shown only in dry-run diagnostics
    - **assemble** — Renders HTML digest from all stage outputs
    - **anomaly** — Post-assembly behavioral checks: category skew, source absence, unusual deep dives, length drift, repeated phrases
    - **briefing_packet** — Builds compressed JSON context for follow-up chat (writes `output/latest_briefing_packet.json`)
@@ -118,7 +118,7 @@ See the [Unraid section](#unraid) below.
 
 **All pipeline commands run inside Docker** — yt-dlp, Python packages, and other dependencies live only in the container image.
 
-### If the container is stopped (one-off run):
+### If the container is stopped (one-off run)
 
 ```bash
 docker compose run --rm morning-digest python pipeline.py --sources-only
@@ -126,13 +126,13 @@ docker compose run --rm morning-digest python pipeline.py --dry-run
 docker compose run --rm morning-digest python pipeline.py
 ```
 
-### If the container is already running (scheduled mode):
+### If the container is already running (scheduled mode)
 
 ```bash
 docker exec -it morning-digest python pipeline.py --dry-run
 ```
 
-### All pipeline flags:
+### All pipeline flags
 
 ```bash
 python pipeline.py                         # full run (collect + AI + send)
@@ -143,12 +143,13 @@ python pipeline.py --stage cross_domain    # re-run from a specific stage (loads
 python pipeline.py --stage cross_domain --from-plan  # reuse today's editorial plan, re-run execution only
 ```
 
-### Checking output:
+### Checking output
 
 After a `--dry-run`:
+
 - `output/last_digest.html` — full rendered digest (open in browser)
 - `output/latest_briefing_packet.json` — compressed context packet for follow-up chat
-- `output/artifacts/YYYY-MM-DD/` — per-stage JSON artifacts (raw_sources, domain_analysis, seam_data, cross_domain_output, anomaly_report, etc.)
+- `output/artifacts/YYYY-MM-DD/` — per-stage JSON artifacts (`raw_sources`, `domain_analysis`, `seam_scan`, `cross_domain_plan`, `coverage_gaps`, `anomaly_report`, etc.)
 - `output/digest.log` — pipeline log with stage timings
 
 ---
@@ -160,12 +161,14 @@ After a `--dry-run`:
 This is the cleanest approach if you have the [Compose Manager](https://forums.unraid.net/topic/114415-plugin-docker-compose-manager/) plugin installed.
 
 **1. Copy the project to appdata:**
+
 ```bash
 mkdir -p /mnt/user/appdata/morning-digest
 cp -r . /mnt/user/appdata/morning-digest/
 ```
 
 **2. Create your `.env` file:**
+
 ```bash
 cd /mnt/user/appdata/morning-digest
 cp .env.example .env
@@ -175,6 +178,7 @@ nano .env   # fill in your keys
 **3. Edit `config.yaml`** — set your `delivery.to_address` and adjust preferences.
 
 **4. In the Unraid UI:**
+
 - Go to **Docker → Compose** tab
 - Click **Add Stack**
 - Name it `morning-digest`
@@ -184,6 +188,7 @@ nano .env   # fill in your keys
 **5. Test it:**
 
 Open an Unraid terminal and run:
+
 ```bash
 cd /mnt/user/appdata/morning-digest
 docker compose run --rm morning-digest python pipeline.py --dry-run
@@ -198,6 +203,7 @@ Then check `output/last_digest.html` — copy the path and open it in a browser 
 If you don't use the Compose plugin, you'll need to pre-build the image.
 
 **1. Build the image on your machine (or on Unraid via terminal):**
+
 ```bash
 cd /mnt/user/appdata/morning-digest
 docker build -t morning-digest:latest .
@@ -245,6 +251,7 @@ docker compose up -d
 ```
 
 If using the Unraid Docker UI (Option B):
+
 ```bash
 docker build -t morning-digest:latest .
 # Then in Unraid Docker UI: Force Update the container
@@ -266,7 +273,7 @@ docker build -t morning-digest:latest .
 
 **`digest.worth_reading`** — long-form pieces worth setting aside time for. Selected by the `cross_domain` stage as part of the normal daily digest.
 
-**`topics.primary / secondary / tertiary`** — Topic priority tiers. Primary always gets coverage; tertiary only when something significant happens.
+**`topics.primary / secondary / tertiary`** — Topic priority tiers used to steer editorial selection in the digest.
 
 **`youtube.analysis_channels`** — Channels whose transcripts are fetched, compressed, and fed into synthesis. Uses `handle` (the `@username` on YouTube).
 
@@ -318,26 +325,27 @@ The digest applies different editorial treatment to each category:
 
 ### Weather Display
 
-The weather module renders an inline SVG forecast display in the email with five zones:
+The weather module renders an HTML table-based forecast block for email clients. It avoids SVG and absolute positioning so the output survives Gmail and similar sanitizers.
 
 1. **Header** — Location, current temp, condition, AQI, wind, humidity. AQI Action Day alerts shown when AQI ≥ 151.
-2. **Temperature Chart** — 7-day high/low lines with record range band, normal range band, and forecast fill.
-3. **AQI Strip** — EPA-colored daily bars with numeric labels. Missing data shown as gray `--` bars.
-4. **Precipitation Bars** — Type-specific gradients (rain, snow, thunderstorm, mix, freezing rain) with probability labels and emoji markers.
-5. **Day Labels** — Day abbreviations and shortened condition summaries.
+2. **AQI Legend** — EPA-colored band key matching the per-day AQI labels.
+3. **7-Day Grid** — Each row shows day name, low temp, a hi-to-lo gradient temperature bar, the day’s AQI value positioned along the bar, the high temp, and a right column with condition and precipitation chance.
+4. **Precipitation Indicators** — Type-specific underline styling and probability labels for days with measurable precipitation.
+5. **Text Fallback** — If chart rendering fails, the module falls back to a compact text summary instead of emitting broken markup.
 
-All chart colors use CSS custom properties (`--wx-*`) with hardcoded light fallbacks, so email clients that don't support CSS variables still render a correct light-mode chart.
+All chart colors use CSS custom properties (`--wx-*`) with hardcoded light fallbacks so clients without CSS variable support still render a correct light-mode chart.
 
 ```yaml
 weather:
-  enabled: true
   nws_station: "KLGU"      # NWS observation station
-  aqi_strip: true          # Show AQI strip in SVG
-  record_band: true        # Show historical record range
-  normal_band: true        # Show NOAA 1991-2020 normals
+  aqi_strip: true          # Show AQI legend + per-day AQI labels
+  record_band: true        # Reserved for historical record overlays (not currently rendered)
+  normal_band: true        # Reserved for NOAA normal overlays (not currently rendered)
+  dark_theme: true         # Enable dark-theme palette overrides where supported
 ```
 
 **Data sources** (in priority order):
+
 - NWS API (primary) — forecast + current observations
 - Open-Meteo (fallback) — forecast + AQI + climate normals
 - AirNow API (optional) — current + forecast AQI
@@ -401,13 +409,12 @@ All other sources are free with no API key required.
 
 ## Files
 
-```
+```text
 morning-digest/
 ├── config.yaml              # All preferences — edit this
 ├── pipeline.py              # Staged pipeline orchestrator (v2)
 ├── entrypoint.py            # Scheduler (runs at configured cron time)
-├── llm.py                   # LLM client (provider-configurable)
-├── sender.py                # SMTP email delivery
+├── llm.py                   # LLM client (currently Fireworks + Anthropic providers)
 ├── validate.py              # URL validation + HTML sanitization (Security Layer)
 ├── sanitize.py              # HTML sanitizer for deep dive bodies
 ├── stages/
@@ -415,7 +422,7 @@ morning-digest/
 │   ├── compress.py          # YouTube transcript compression
 │   ├── analyze_domain.py    # Seven specialist domain passes (parallel)
 │   ├── prepare_calendar.py  # Calendar enrichment
-│   ├── prepare_weather.py   # Weather enrichment
+│   ├── prepare_weather.py   # Weather enrichment + HTML weather block
 │   ├── prepare_spiritual.py # Come Follow Me enrichment
 │   ├── prepare_local.py     # Local news filter
 │   ├── seams.py             # Contested narratives + coverage gaps + key assumptions
@@ -446,7 +453,7 @@ morning-digest/
 │   ├── time.py              # Shared timezone helper (reads TZ env var)
 │   └── urls.py              # URL validation helpers
 ├── modules/
-│   └── weather_display.py   # SVG weather chart renderer (CSS-variable themed)
+│   └── weather_display.py   # HTML email-safe weather chart renderer
 ├── scripts/
 │   └── validate_new_feeds.py  # One-off feed URL validator
 ├── templates/
@@ -457,7 +464,7 @@ morning-digest/
 │   ├── digest.log           # Pipeline log (30-day rotation)
 │   └── artifacts/
 │       └── YYYY-MM-DD/      # Per-run JSON artifacts for each stage
-├── tests/                   # 775+ tests
+├── tests/                   # 780+ tests
 │   ├── fixtures/            # JSON test fixtures
 │   ├── test_contracts.py    # Tag vocabulary sync across all surfaces
 │   ├── test_seams_two_turn.py

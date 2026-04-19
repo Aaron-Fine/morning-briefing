@@ -34,7 +34,6 @@ Each item schema:
 """
 
 import logging
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from urllib.parse import urlparse
@@ -574,9 +573,6 @@ def _run_domain_pass(
 # ---------------------------------------------------------------------------
 
 
-_RETRY_DELAY_SECONDS = 300  # 5 minutes
-
-
 def _resolve_domain_configs(config: dict) -> dict[str, dict]:
     """Resolve active desk routing from config while reusing desk-owned metadata."""
     manifest = config.get("desks") or []
@@ -622,9 +618,8 @@ def run(
     if failed_keys:
         log.warning(
             f"analyze_domain: {len(failed_keys)} domain(s) failed ({', '.join(failed_keys)}), "
-            f"retrying in {_RETRY_DELAY_SECONDS}s..."
+            "retrying immediately without blocking the pipeline..."
         )
-        time.sleep(_RETRY_DELAY_SECONDS)
         for domain_key in failed_keys:
             log.info(f"  Retrying domain: {domain_key} ({domain_configs[domain_key]['label']})")
             result = _run_domain_pass(

@@ -21,6 +21,7 @@ from sources.rss_feeds import (
     fetch_rss,
     _clean_summary,
     _parse_feed_date,
+    _fetch_direct,
 )
 
 
@@ -237,3 +238,37 @@ class TestRssFeeds:
         )
         mock_direct.assert_called_once()
         assert len(result) == 1
+
+    @patch("sources.rss_feeds._parse_feed_with_timeout")
+    @patch("sources.rss_feeds.http_get_bytes")
+    def test_fetch_direct_preserves_ordered_circuit_breaker(self, mock_get_bytes, mock_parse):
+        feeds = [
+            {"name": f"Feed {i}", "url": f"https://example.com/{i}", "category": "test"}
+            for i in range(6)
+        ]
+        mock_get_bytes.side_effect = [None, None, None, None, None, b"<rss />"]
+        mock_parse.return_value = MagicMock(entries=[])
+
+        result = _fetch_direct({"feeds": feeds})
+
+        assert result == []
+        assert mock_get_bytes.call_count == 6
+        mock_parse.assert_not_called()
+
+    @patch("sources.rss_feeds._parse_feed_with_timeout")
+    @patch("sources.rss_feeds.http_get_bytes")
+    def test_fetch_direct_collects_items_after_parallel_fetch(self, mock_get_bytes, mock_parse):
+        feeds = [
+            {"name": "Feed A", "url": "https://example.com/a", "category": "alpha"},
+            {"name": "Feed B", "url": "https://example.com/b", "category": "beta"},
+        ]
+        mock_get_bytes.side_effect = [b"a", b"b"]
+        mock_parse.side_effect = [
+            MagicMock(entries=[{"title": "A1", "link": "https://example.com/a1", "summary": "Alpha"}]),
+            MagicMock(entries=[{"title": "B1", "link": "https://example.com/b1", "summary": "Beta"}]),
+        ]
+
+        result = _fetch_direct({"feeds": feeds})
+
+        assert len(result) == 2
+        assert {item["source"] for item in result} == {"Feed A", "Feed B"}

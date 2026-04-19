@@ -1,6 +1,6 @@
 # Morning Digest — TODO
 
-_Last updated: 2026-04-17_
+Last updated: 2026-04-18
 
 > **Design-intent note.** When triaging items marked "stale" or "unused,"
 > first ask whether the feature was *intentional but silently broken* (e.g.
@@ -24,7 +24,6 @@ _Last updated: 2026-04-17_
 
 ### High — Design (architecture)
 
-- **Tracked in `plan.md` Slice 1: pipeline lifecycle + stage metadata cleanup.** This covers the existing `pipeline.py` stage-specific branches, central registries (`_stage_artifact_key`, `_empty_stage_output`, `_NON_CRITICAL_STAGES`), and related orchestration drift. Keep new ideas here only if they are outside the current plan scope.
 - **Retry policy is global.** `max_retries=2` + fixed backoff in `_run_with_retry` (`pipeline.py:165`). LLM stages and scraper stages want different budgets. Put retry config per stage in `config.yaml`.
 - **`config.yaml` is doing four jobs** (pipeline manifest, LLM routing, source catalog, delivery prefs). 246 lines. Split into `config/pipeline.yaml`, `config/sources.yaml`, `config/delivery.yaml` and merge at load.
 - **Stage I/O is untyped dicts.** `context.get("domain_analysis", {})` everywhere. Pydantic models for `DomainAnalysis`, `CrossDomainOutput`, `SeamData` would catch schema drift — that seam is the most likely silent-regression spot.
@@ -35,11 +34,7 @@ _Last updated: 2026-04-17_
 ### High — Performance
 
 - ~~**Tracked in `plan.md` Slice 10: parallelize `analyze_domain`.**~~ Done — 7 desk passes run via ThreadPoolExecutor (max 4 workers) with per-desk failure isolation.
-- **Parallelize `collect.py` sources.** `stages/collect.py` fetches RSS, HN, GitHub trending, launches, astronomy, markets, econ calendar, holidays, CFM, history, YouTube transcripts serially. Most are independent HTTP calls. A `ThreadPoolExecutor` with ~6 workers would cut wall time substantially. Be careful to preserve deterministic ordering in outputs.
-- **Parallelize RSS fetch loop.** `sources/rss_feeds._fetch_direct` pulls feeds one-at-a-time. With ~30 feeds at ~1s each this is the biggest single contributor to collect latency. Move to `ThreadPoolExecutor`. Preserve the "5 consecutive failures → network down → abort" circuit breaker by tracking failures atomically.
-- **Parallelize transcript compression.** `stages/compress.py` runs the transcript compression LLM call once per transcript. These are independent; parallelize them.
 - **Remove uncoordinated 3-layer retry stack.** Retries exist at the pipeline level (30-min retry in `entrypoint.py`), the LLM helper (`llm._retry_loop`, ~3 attempts with backoff), and per-domain (`analyze_domain` retries the whole domain after 5 min). Worst case: a single flaky call produces `3 × 2 × N` attempts before giving up. Consolidate: LLM helper retries transient 5xx only, domain/pipeline treat a failed LLM call as "done, failed", no nested retry.
-- **Remove `time.sleep(300)` in `analyze_domain`.** The 5-min sleep-and-retry for failed domains blocks the pipeline. Either (a) drop it in favor of the pipeline-level 30-min retry, or (b) do the retry asynchronously so other domains continue.
 
 ### Medium — Consolidation
 
@@ -47,7 +42,6 @@ _Last updated: 2026-04-17_
 - **Consolidate AQI breakpoint ladder.** The `if aqi <= 50: "Good" / <= 100: "Moderate" / ...` ladder appears in `sources/weather.py::_aqi_to_label` and twice more in `modules/weather_display.py` (label + color). Extract to `utils/aqi.py` with `aqi_label(aqi)` and `aqi_color(aqi)`.
 - **Extract retry backoff helper.** `llm.py::_retry_loop` and `pipeline.py` both implement exponential backoff with jitter. Once the 3-layer retry stack is consolidated (see above), keep one implementation in `utils/retry.py`.
 - **Extract artifact helpers.** `_ARTIFACTS_BASE` path + date-directory iteration is duplicated in `pipeline.py` and `stages/anomaly.py`. Move to `utils/artifacts.py` (`artifact_dir(date)`, `iter_recent_dirs(n)`, `load_artifact(date, key)`).
-- **Tracked in `plan.md` Slice 4: standardize `utils.urls` usage.** Validation and URL matching are already being tightened there; keep future notes here only if a second pass is still needed after that slice lands.
 - **Investigate recurring dry-run source warnings.** Current end-to-end dry-runs complete successfully, but `output/digest.log` consistently shows non-fatal source issues for SpaceNews (`429`), Brad Setser (`404`), Reuters Markets (`401`), China Global South Project (`410`), and The Diff (`400`). Decide case by case whether to:
   - fix the feed URL,
   - add provider-specific throttling/backoff,
@@ -71,6 +65,21 @@ _Last updated: 2026-04-17_
 - **`aqi_strip` config flag now actually gates the legend + overlay** (was previously a no-op).
 - **Tests: +9 new cases** covering legend, per-bar overlay, color selection, high-AQI right-alignment, and `AQI_SCALE_MAX` contract. Total weather suite: 97 passing.
 - **TODO revision**: added design-intent preamble; removed "collapse At-a-Glance Thread block" item (undermines intentional three-voice rhetorical layering); added "Restore Normal/Record/Forecast Hi-Lo bar overlays" item (same Gmail-strip fate as AQI, same fix pattern); softened Google Fonts `@import` item from "wasted bytes" to "audit in both clients first."
+
+### 2026-04-18 — Verification follow-up cleanup
+
+- **Closed stale TODO items for completed plan work.** Removed open entries for stage metadata cleanup, `collect.py` parallelization, transcript compression parallelization, and the old `utils.urls` standardization tracker now that those changes have landed.
+- **`coverage_gaps` contract now enforced.** The stage normalizes to the published schema and strips stray top-level fields before writing artifacts/history.
+- **`coverage_gaps` diagnostics now render in dry-run only.** They are available for diagnostics without leaking into the normal send path.
+- **Desk manifest is now live at runtime.** `analyze_domain` resolves active desk routing from `config.yaml` instead of leaving `desks:` as documentation-only config.
+- **Feed validator drift corrected.** `scripts/validate_new_feeds.py` now validates the same feed URLs that are actually committed in `config.yaml`.
+- **README made model-agnostic.** Provider/model swaps should no longer require documentation cleanup just to keep the architecture and setup sections truthful.
+
+### 2026-04-18 — Performance follow-up
+
+- **Parallelized the direct RSS fetch loop.** `sources/rss_feeds._fetch_direct` now fetches raw feed bytes in small parallel batches (`ThreadPoolExecutor`, max 6 workers) while preserving feed-order parsing and the existing "5 consecutive failures" circuit-breaker semantics.
+- **Removed the blocking 5-minute analyze-domain sleep.** Failed domain passes now retry immediately after the initial parallel wave instead of pausing the whole pipeline for 300 seconds.
+- **Tests added for both changes.** New coverage verifies ordered RSS circuit-breaker behavior, successful item collection after parallel fetch, and that failed domain retries do not call `time.sleep`.
 
 ### 2026-04-16 — Review sweep quick wins
 

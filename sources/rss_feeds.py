@@ -2,6 +2,7 @@
 
 import logging
 import signal
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from typing import Optional
@@ -12,6 +13,8 @@ from dateutil import parser as dateparser
 from sources._http import http_get_bytes
 
 log = logging.getLogger(__name__)
+
+_MAX_PARALLEL_FEED_FETCHES = 6
 
 
 def fetch_rss(config: dict) -> list[dict]:
@@ -60,47 +63,51 @@ def _fetch_direct(rss_config: dict) -> list[dict]:
     all_items = []
     consecutive_failures = 0
 
-    for feed_conf in feeds:
-        # Circuit breaker: if 5+ feeds fail in a row, network is likely down
-        if consecutive_failures >= 5:
-            log.warning(
-                f"RSS: {consecutive_failures} consecutive fetch failures — "
-                f"network likely down, skipping remaining {len(feeds) - feeds.index(feed_conf)} feeds"
-            )
-            break
-        # Pre-fetch via shared HTTP helper so we don't hang indefinitely.
-        # feedparser.parse() has no built-in timeout; passing content bypasses its fetch.
-        feed_content = http_get_bytes(
-            feed_conf["url"], timeout=15, label=f"RSS {feed_conf['name']}"
-        )
-        if feed_content is None:
-            consecutive_failures += 1
-            continue
-        consecutive_failures = 0
-        try:
-            parsed = _parse_feed_with_timeout(feed_content, feed_conf["name"])
-            cap = feed_conf.get("cap", 15)
-            tag = feed_conf.get("tag", "")
-            for entry in parsed.entries[:cap]:
-                published = _parse_feed_date(entry)
-                if published and published < cutoff:
-                    continue
+    for start in range(0, len(feeds), _MAX_PARALLEL_FEED_FETCHES):
+        batch = feeds[start:start + _MAX_PARALLEL_FEED_FETCHES]
+        batch_contents = _fetch_feed_batch(batch)
 
-                item = {
-                    "source": feed_conf["name"],
-                    "title": entry.get("title", "").strip(),
-                    "url": entry.get("link", ""),
-                    "published": published.isoformat() if published else "",
-                    "summary": _clean_summary(entry.get("summary", "")),
-                }
-                if tag:
-                    item["tag"] = tag
-                category = feed_conf.get("category", "")
-                if category:
-                    item["category"] = category
-                all_items.append(item)
-        except Exception as e:
-            log.warning(f"RSS parse failed for {feed_conf['name']}: {e}")
+        for feed_conf, feed_content in zip(batch, batch_contents):
+            if consecutive_failures >= 5:
+                remaining = len(feeds) - feeds.index(feed_conf)
+                log.warning(
+                    f"RSS: {consecutive_failures} consecutive fetch failures — "
+                    f"network likely down, skipping remaining {remaining} feeds"
+                )
+                break
+
+            if feed_content is None:
+                consecutive_failures += 1
+                continue
+
+            consecutive_failures = 0
+            try:
+                parsed = _parse_feed_with_timeout(feed_content, feed_conf["name"])
+                cap = feed_conf.get("cap", 15)
+                tag = feed_conf.get("tag", "")
+                for entry in parsed.entries[:cap]:
+                    published = _parse_feed_date(entry)
+                    if published and published < cutoff:
+                        continue
+
+                    item = {
+                        "source": feed_conf["name"],
+                        "title": entry.get("title", "").strip(),
+                        "url": entry.get("link", ""),
+                        "published": published.isoformat() if published else "",
+                        "summary": _clean_summary(entry.get("summary", "")),
+                    }
+                    if tag:
+                        item["tag"] = tag
+                    category = feed_conf.get("category", "")
+                    if category:
+                        item["category"] = category
+                    all_items.append(item)
+            except Exception as e:
+                log.warning(f"RSS parse failed for {feed_conf['name']}: {e}")
+        else:
+            continue
+        break
 
     if all_items:
         log.info(f"RSS: fetched {len(all_items)} items from {len(feeds)} feeds")
@@ -108,6 +115,20 @@ def _fetch_direct(rss_config: dict) -> list[dict]:
         log.warning("RSS: no items fetched from any feed")
     all_items.sort(key=lambda x: x.get("published", ""), reverse=True)
     return all_items
+
+
+def _fetch_feed_batch(feeds: list[dict]) -> list[bytes | None]:
+    """Fetch one batch of feed bytes in parallel, preserving input order."""
+    max_workers = min(_MAX_PARALLEL_FEED_FETCHES, len(feeds) or 1)
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        return list(pool.map(_fetch_feed_content, feeds))
+
+
+def _fetch_feed_content(feed_conf: dict) -> bytes | None:
+    """Fetch raw feed bytes for one configured feed."""
+    return http_get_bytes(
+        feed_conf["url"], timeout=15, label=f"RSS {feed_conf['name']}"
+    )
 
 
 def _fetch_from_freshrss(rss_config: dict) -> list[dict]:
