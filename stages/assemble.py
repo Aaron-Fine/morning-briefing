@@ -19,7 +19,7 @@ Inputs (Phase 0 fallback):
 Outputs: html (str), template_data (dict), digest_json (dict)
 
 Security Layer 4 (Jinja2 autoescape) is enforced here: deep dive body HTML is
-sanitized by validate.py and then wrapped in Markup() before template rendering.
+sanitized by morning_digest.validate and then wrapped in Markup() before template rendering.
 """
 
 import logging

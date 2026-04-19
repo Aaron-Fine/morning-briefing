@@ -19,7 +19,7 @@ Each pipeline stage consumes keys from `context` and produces new keys. When cha
 
 Tags: `war`, `ai`, `domestic`, `defense`, `space`, `tech`, `local`, `science`, `econ`, `cyber`, `energy`, `biotech`. These are defined in 5 synchronized surfaces — all must stay in sync:
 
-1. `validate.py` — `VALID_TAGS` and `VALID_TAG_LABELS`
+1. `morning_digest/validate.py` — `VALID_TAGS` and `VALID_TAG_LABELS`
 2. `stages/cross_domain.py` — `_VALID_TAGS`, `_TAG_LABELS`, and `_TAG_KEYWORDS`
 3. `stages/assemble.py` — `_TAG_LABELS`
 4. `templates/email_template.py` — CSS `--tag-*-text` / `--tag-*-bg` variables

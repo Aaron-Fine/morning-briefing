@@ -23,10 +23,10 @@ Outputs: cross_domain_output (dict) containing at_a_glance, deep_dives,
 import json
 import logging
 
-from llm import call_llm
+from morning_digest.llm import call_llm
 from utils.prompts import load_prompt
 from utils.urls import collect_known_urls, extract_domains, url_domain_allowed
-from validate import validate_stage_output
+from morning_digest.validate import validate_stage_output
 
 log = logging.getLogger(__name__)
 

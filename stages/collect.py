@@ -7,7 +7,7 @@ Outputs: raw_sources (dict)
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from sanitize import sanitize_all_sources
+from morning_digest.sanitize import sanitize_all_sources
 from sources.youtube import fetch_analysis_transcripts
 from sources.weather import fetch_weather
 from sources.markets import fetch_markets

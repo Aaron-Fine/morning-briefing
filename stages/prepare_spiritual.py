@@ -10,7 +10,7 @@ Output: {"spiritual": {reading, title, key_scripture, scripture_text, reflection
 
 import logging
 
-from llm import call_llm
+from morning_digest.llm import call_llm
 from utils.prompts import load_prompt
 
 log = logging.getLogger(__name__)

@@ -11,7 +11,7 @@ with 'transcript' replaced by 'compressed_transcript'. Falls back to the first
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from llm import call_llm
+from morning_digest.llm import call_llm
 from utils.prompts import load_prompt
 
 log = logging.getLogger(__name__)

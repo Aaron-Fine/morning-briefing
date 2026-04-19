@@ -14,7 +14,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from validate import VALID_TAGS, VALID_TAG_LABELS
+from morning_digest.validate import VALID_TAGS, VALID_TAG_LABELS
 from stages.cross_domain import _VALID_TAGS, _TAG_LABELS, _SYSTEM_PROMPT
 from stages.assemble import _TAG_LABELS as ASSEMBLE_TAG_LABELS
 from stages.prepare_calendar import _parse_date

@@ -21,9 +21,9 @@ Non-critical: returns empty results on failure so the pipeline can continue.
 import logging
 import json
 
-from llm import call_llm
+from morning_digest.llm import call_llm
 from utils.prompts import load_prompt
-from validate import validate_stage_output
+from morning_digest.validate import validate_stage_output
 
 log = logging.getLogger(__name__)
 

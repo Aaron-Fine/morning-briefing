@@ -1,4 +1,4 @@
-"""Tests for validate.py — Security Layer 3 output validation."""
+"""Tests for morning_digest.validate — Security Layer 3 output validation."""
 
 import sys
 import os
@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from validate import (
+from morning_digest.validate import (
     VALID_TAGS,
     VALID_TAG_LABELS,
     _ALLOWED_HTML_TAGS,

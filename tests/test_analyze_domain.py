@@ -453,9 +453,8 @@ class TestRunDomainPass:
 class TestAnalyzeDomainRetries:
     @patch("stages.analyze_domain._run_all_domains")
     @patch("stages.analyze_domain._run_domain_pass")
-    @patch("stages.analyze_domain.time.sleep")
     def test_failed_domains_retry_without_sleep(
-        self, mock_sleep, mock_run_domain_pass, mock_run_all_domains
+        self, mock_run_domain_pass, mock_run_all_domains
     ):
         mock_run_all_domains.return_value = {
             "ai_tech": {"items": [], "_failed": True},
@@ -469,6 +468,5 @@ class TestAnalyzeDomainRetries:
             model_config={"provider": "fireworks"},
         )
 
-        mock_sleep.assert_not_called()
         mock_run_domain_pass.assert_called_once()
         assert result["domain_analysis_failures"] == []

@@ -19,7 +19,7 @@ import json
 import logging
 from pathlib import Path
 
-from llm import call_llm
+from morning_digest.llm import call_llm
 from utils.prompts import load_prompt
 from utils.time import artifact_date
 

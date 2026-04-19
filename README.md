@@ -414,9 +414,6 @@ morning-digest/
 ├── config.yaml              # All preferences — edit this
 ├── pipeline.py              # Staged pipeline orchestrator (v2)
 ├── entrypoint.py            # Scheduler (runs at configured cron time)
-├── llm.py                   # LLM client (currently Fireworks + Anthropic providers)
-├── validate.py              # URL validation + HTML sanitization (Security Layer)
-├── sanitize.py              # HTML sanitizer for deep dive bodies
 ├── stages/
 │   ├── collect.py           # Fetches all sources
 │   ├── compress.py          # YouTube transcript compression
@@ -454,6 +451,11 @@ morning-digest/
 │   └── urls.py              # URL validation helpers
 ├── modules/
 │   └── weather_display.py   # HTML email-safe weather chart renderer
+├── morning_digest/
+│   ├── __init__.py          # Shared application package
+│   ├── llm.py               # LLM client (currently Fireworks + Anthropic providers)
+│   ├── validate.py          # URL validation + HTML sanitization (Security Layer)
+│   └── sanitize.py          # HTML sanitizer for deep dive bodies
 ├── scripts/
 │   └── validate_new_feeds.py  # One-off feed URL validator
 ├── templates/

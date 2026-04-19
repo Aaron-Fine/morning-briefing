@@ -38,8 +38,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from urllib.parse import urlparse
 
-from llm import call_llm
-from sanitize import sanitize_source_content
+from morning_digest.llm import call_llm
+from morning_digest.sanitize import sanitize_source_content
 from utils.prompts import load_prompt
 
 log = logging.getLogger(__name__)
