@@ -67,8 +67,7 @@ graph TD
     briefing_packet --> send
 
     subgraph LLM Providers
-        FW["Fireworks (compress, analyze_domain)"]
-        AN["Anthropic (seams, cross_domain, coverage_gaps)"]
+        CFG["Configured provider(s) in config.yaml"]
     end
 ```
 
@@ -78,8 +77,7 @@ graph TD
 
 | Key | Where | Free? |
 |-----|-------|-------|
-| Fireworks AI API | [fireworks.ai/account/api-keys](https://fireworks.ai/account/api-keys) | Pay-per-use (~$0.20–0.40/day) |
-| Anthropic API | [console.anthropic.com](https://console.anthropic.com) | Pay-per-use (~$0.10–0.20/day) |
+| LLM provider API key(s) | Your configured provider account(s) | Depends on provider/model |
 | Finnhub API | [finnhub.io](https://finnhub.io) | Free tier |
 | Gmail App Password | [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) | Yes |
 
@@ -219,8 +217,7 @@ docker build -t morning-digest:latest .
 | Variable | Value |
 |----------|-------|
 | `TZ` | `America/Denver` |
-| `FIREWORKS_API_KEY` | your Fireworks key |
-| `ANTHROPIC_API_KEY` | your Anthropic key |
+| Provider API key(s) | keys required by the models/providers configured in `config.yaml` |
 | `FINNHUB_API_KEY` | your Finnhub key |
 | `SMTP_USER` | your email address |
 | `SMTP_PASSWORD` | your Gmail App Password (or SMTP password) |
@@ -265,7 +262,7 @@ docker build -t morning-digest:latest .
 
 **`pipeline.stages`** — Ordered list of pipeline stages with optional per-stage model config. Each stage maps to `stages/<name>.py`.
 
-**`llm.model`** — Default AI model (Fireworks, used by compress + analyze_domain). Default: `accounts/fireworks/models/kimi-k2p5`
+**`llm.model`** — Default AI model. Individual stages can override provider/model settings in `pipeline.stages`.
 
 **`digest.worth_reading`** — long-form pieces worth setting aside time for. Selected by the `cross_domain` stage as part of the normal daily digest.
 
@@ -287,7 +284,7 @@ desks:
 
 ```yaml
 - name: seams
-  model: { provider: fireworks, model: "...", max_tokens: 5000, temperature: 0.3 }
+  model: { provider: "...", model: "...", max_tokens: 5000, temperature: 0.3 }
   turns:
     scan: { max_tokens: 4000, temperature: 0.4 }
     synthesis: { max_tokens: 5000, temperature: 0.3 }
@@ -386,22 +383,15 @@ Falls back to direct RSS fetching if the FreshRSS API is unreachable.
 
 ## Cost
 
-**Fireworks AI (Kimi K2.5):** Used for transcript compression and domain analysis (7 desks).
+Costs vary by the providers and models configured in `config.yaml`.
 
 | Stage | Input | Output | Est. cost |
 |-------|-------|--------|-----------|
-| compress (per transcript) | ~5K tokens | ~1.5K tokens | ~$0.01 |
-| analyze_domain (×7 desks) | ~30K tokens each | ~6K tokens each | ~$0.07–0.14 |
-
-**Anthropic (Claude Sonnet):** Used for seams, cross-domain synthesis, and coverage gaps.
-
-| Stage | Input | Output | Est. cost |
-|-------|-------|--------|-----------|
-| seams (2 turns) | ~12K tokens | ~4K tokens | ~$0.05 |
-| cross_domain (2 turns) | ~25K tokens | ~12K tokens | ~$0.12–0.18 |
-| coverage_gaps | ~15K tokens | ~3K tokens | ~$0.05 |
-
-**Total: ~$0.30–0.50/day** at current pricing.
+| compress (per transcript) | ~5K tokens | ~1.5K tokens | depends on configured model |
+| analyze_domain (×7 desks) | ~30K tokens each | ~6K tokens each | depends on configured model |
+| seams (2 turns) | ~12K tokens | ~4K tokens | depends on configured model |
+| cross_domain (2 turns) | ~25K tokens | ~12K tokens | depends on configured model |
+| coverage_gaps | ~15K tokens | ~3K tokens | depends on configured model |
 
 **Finnhub:** Free tier (60 API calls/minute). Four symbols = four calls per run. No cost.
 
@@ -416,7 +406,7 @@ morning-digest/
 ├── config.yaml              # All preferences — edit this
 ├── pipeline.py              # Staged pipeline orchestrator (v2)
 ├── entrypoint.py            # Scheduler (runs at configured cron time)
-├── llm.py                   # LLM client (Fireworks + Anthropic)
+├── llm.py                   # LLM client (provider-configurable)
 ├── sender.py                # SMTP email delivery
 ├── validate.py              # URL validation + HTML sanitization (Security Layer)
 ├── sanitize.py              # HTML sanitizer for deep dive bodies
