@@ -347,6 +347,15 @@ Parallelizable test-writing within each subagent: each test file (`test_enrich_a
 
 Coordinate at integration points: pipeline manifest entry in `config.yaml` (single line), `requirements.txt` updates, and `README.md` / `CLAUDE.md` documentation. These land in a single final commit.
 
+**Commit and push discipline (applies to every subagent and to the main agent):**
+
+- **One feature per commit.** Pre-work fix, audit tool, enrich-articles stage, prompt updates, docs — each is its own commit. Do not accumulate unrelated changes in a single commit.
+- **Stage files explicitly** (`git add <file>`); never `git add -A` or `git add .`.
+- **Commit at the end of each turn** if tracked files are modified.
+- **Push at least once per batch of work** (e.g. after the pre-work fix lands, after the audit tool lands, after the enrich stage lands), and at the end of a work session. Do not push mid-feature when code is broken or partial.
+
+These rules match the project's `CLAUDE.md` policy and must be passed through to any subagent the main agent dispatches.
+
 ## Rollout
 
 1. Complete the pre-implementation sanity checks above.
