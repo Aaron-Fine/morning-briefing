@@ -67,8 +67,16 @@ Pass the result through the existing `_clean_summary`. This lights up Nikkei Asi
 
 **Per-item decision flow:**
 
+Before the decision loop, dedup items by URL — the same article can legitimately appear in multiple feeds (wire stories, cross-posts). Keep the first occurrence; assign any subsequent occurrences the enriched `summary` once the first one completes, so downstream stages see consistent content for the same URL.
+
 ```
+seen_urls = {}              # url -> item (first occurrence)
 for item in rss_items:
+    if item.url in seen_urls:
+        continue            # leave duplicate; we'll backfill after enrichment
+    seen_urls[item.url] = item
+
+for item in seen_urls.values():
     if feed.enrich.skip == True:            # explicit skip (even if thin)
         continue
     if feed.enrich.fetch_article == True:   # opt-in: always fetch
@@ -80,6 +88,12 @@ for item in rss_items:
 
     if fetches_this_run >= MAX_FETCHES_PER_RUN:
         log warning; break
+
+# backfill duplicates from their canonical enriched twin
+for item in rss_items:
+    canonical = seen_urls.get(item.url)
+    if canonical and canonical is not item and canonical.summary != item.summary:
+        item.summary = canonical.summary
 ```
 
 **Defaults:**
@@ -206,6 +220,8 @@ Once enrichment artifacts exist (`enrich_articles.json`), the tool also reads th
 
 Run on demand (manual), not from the pipeline. Re-run after enrichment is live to confirm improvements.
 
+**Empty-input behavior:** if no artifact directories are found (fresh clone, first-time setup), the tool prints a short "no artifacts found at output/artifacts/" notice and exits 0 — never crashes. Same treatment if artifacts exist but contain no RSS items.
+
 ## Error handling
 
 The pipeline **never fails** because of enrichment. In every failure path, the item keeps its original summary and the stage continues.
@@ -281,7 +297,7 @@ Fetching will hit a paywall preview and waste the per-run budget. Current thin-b
 
 **Authenticated paywall — use `enrich.cookies_file`:**
 
-- **The Atlantic** — user holds a subscription. Export a Netscape `cookies.txt` from a logged-in browser (e.g. the "Get cookies.txt LOCALLY" extension) into `secrets/atlantic.cookies.txt` (path outside git). Set `fetch_article: true` and `cookies_file:` on the feed. Cookies expire periodically; re-export when `enrich_articles.json` starts showing `paywall` status for Atlantic URLs.
+- **The Atlantic** — user holds a subscription. Export a Netscape `cookies.txt` from a logged-in browser (e.g. the "Get cookies.txt LOCALLY" extension) into `cookies/atlantic.cookies.txt` at the project root. Set `fetch_article: true` and `cookies_file:` on the feed. Cookies expire periodically; re-export when `enrich_articles.json` starts showing `paywall` status for Atlantic URLs.
 
 **Substack cluster — no special config, but expect heavy enrichment volume:**
 
@@ -291,12 +307,51 @@ Several Substacks publish very short teasers (China Talk ~36 chars, Slow Boring 
 
 Brad Setser, China Global South Project — 100% empty summaries by design. Set `fetch_article: true` at rollout.
 
-**Secrets handling:** `cookies_file` paths must resolve to files outside the git repo. Suggested location: `secrets/` at the project root, added to `.gitignore` and `.dockerignore`, mounted into the container as a read-only volume in `docker-compose.yml`.
+**Cookie file handling:** `cookies_file` paths must resolve to files outside the git repo. Reuse the existing file-mount pattern (same as `config.yaml`): create a `cookies/` directory at the project root, add it to `.gitignore` and `.dockerignore`, and mount it read-only in `docker-compose.yml`:
+
+```yaml
+volumes:
+  - ./config.yaml:/app/config.yaml:ro
+  - ./cookies:/app/cookies:ro    # new
+  - ./output:/app/output
+  - ./tests:/app/tests:ro
+```
+
+API-key-style secrets stay in `.env`; cookie *files* get the same treatment as `config.yaml`. No new secrets-handling concept.
+
+## Pre-implementation sanity checks
+
+Four assumptions in this spec haven't been verified. Do these first; they're cheap and any failure changes the design.
+
+1. **curl-cffi installs in the existing Docker image.** The base image is `python:3.12-slim` (confirmed), so manylinux wheels apply. Sanity-check: `docker compose run --rm morning-digest python -c "from curl_cffi import requests; print(requests.get('https://example.com', impersonate='chrome').status_code)"`.
+
+2. **trafilatura extraction quality on Substack DOM.** Run `trafilatura` against 3-4 Substack article URLs (open posts, e.g. recent Slow Boring, Adam Tooze, Simon Willison). Confirm the extracted text is clean article prose, not navigation/subscribe-CTA noise. If quality is poor, add a Substack-specific config (or a fallback readability pass) to the plan.
+
+3. **Browser-exported `cookies.txt` is readable by curl-cffi.** Export a test cookies file from a logged-in Atlantic session, load it in a curl-cffi session, verify the jar has the expected session cookies and that a GET to a paywalled article returns full HTML (not a login wall). If parsing fails, add an adapter step that normalizes to curl-cffi's expected format.
+
+4. **Fireworks quota headroom.** Check current monthly usage dashboard; up to 40 extra `minimax-m2p7` calls per run at ~500 tokens output is ~20k tokens/day additional. Confirm this is comfortably within your plan.
+
+Deliver these as a short "pre-flight" PR or verification log before the stage implementation starts.
+
+## Implementation leverage — subagents
+
+The three pieces of work are largely independent and well-suited to parallel subagent execution:
+
+- **Subagent A** — Pre-work fix in `sources/rss_feeds.py` (body-field fallback) + tests.
+- **Subagent B** — `scripts/audit_rss_quality.py` audit tool + tests. Depends on nothing else; can start immediately.
+- **Subagent C** — `enrich_articles` stage (decision logic, cache layer, curl-cffi client, LLM distillation, artifact emission) + tests. Depends on the pre-work fix landing first so its tests use a consistent baseline.
+
+The prompt update (adding the short note to `analyze_domain_system.md`, `seams_*.md`, `cross_domain_*.md`) is a small focused task — assign to a single subagent to keep phrasing consistent.
+
+Parallelizable test-writing within each subagent: each test file (`test_enrich_articles_cache.py`, `test_enrich_articles_decision.py`, `test_enrich_articles_failures.py`, `test_audit_rss_quality.py`) is independent and can be split across subagents if the main agent is pacing the work.
+
+Coordinate at integration points: pipeline manifest entry in `config.yaml` (single line), `requirements.txt` updates, and `README.md` / `CLAUDE.md` documentation. These land in a single final commit.
 
 ## Rollout
 
-1. Land the `rss_feeds.py` body-field fallback fix first. Re-run pipeline once to confirm Nikkei summaries go from 0 → non-empty.
-2. Land the audit tool; run it against existing artifacts (including the fresh post-fix run) to produce a baseline report.
-3. Land the `enrich_articles` stage with the pre-seeded per-feed config above (`skip: true` on hard paywalls, `cookies_file` on The Atlantic, `fetch_article: true` on html_index sources). Observe cache growth, timing, and artifact contents over 2-3 runs.
-4. Review the baseline audit vs. post-rollout audit. Adjust per-feed overrides for outliers.
-5. Re-run the audit after 3-5 days. Iterate on per-feed overrides as needed.
+1. Complete the pre-implementation sanity checks above.
+2. Land the `rss_feeds.py` body-field fallback fix. Re-run pipeline once to confirm Nikkei summaries go from 0 → non-empty.
+3. Land the audit tool; run it against existing artifacts (including the fresh post-fix run) to produce a baseline report.
+4. Land the `enrich_articles` stage with the pre-seeded per-feed config above (`skip: true` on hard paywalls, `cookies_file` on The Atlantic, `fetch_article: true` on html_index sources). Observe cache growth, timing, and artifact contents over 2-3 runs.
+5. Review the baseline audit vs. post-rollout audit. Adjust per-feed overrides for outliers.
+6. Re-run the audit after 3-5 days. Iterate on per-feed overrides as needed.
