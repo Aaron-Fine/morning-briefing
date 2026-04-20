@@ -106,17 +106,23 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
     log.info("Collecting from sources (parallel)...")
     data: dict = {}
 
+    # RSS parsing and YouTube transcript collection use SIGALRM timeout guards.
+    # Python only permits signal handlers in the main thread, so keep those
+    # source orchestrators out of this stage's worker pool.
+    main_thread_tasks = [
+        (_fetch_youtube, config),
+        (_fetch_rss, config),
+        (_fetch_local_news, config),
+    ]
+
     tasks = [
         (_fetch_weather, config),
         (_fetch_launches, config),
         (_fetch_calendar, config),
-        (_fetch_youtube, config),
-        (_fetch_rss, config),
         (_fetch_hackernews, config),
         (_fetch_github_trending, config),
         (_fetch_astronomy, config),
         (_fetch_on_this_day, config),
-        (_fetch_local_news, config),
     ]
 
     if config.get("digest", {}).get("markets", {}).get("enabled", True):
@@ -137,6 +143,13 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
                     data[key] = result
             except Exception as e:
                 log.error(f"  collect[{name}]: fetch failed: {e}")
+
+    for fn, cfg in main_thread_tasks:
+        try:
+            key, result = fn(cfg)
+            data[key] = result
+        except Exception as e:
+            log.error(f"  collect[{fn.__name__}]: fetch failed: {e}")
 
     # Ensure keys exist even if tasks were skipped or failed
     data.setdefault("weather", {})

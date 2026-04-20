@@ -2,6 +2,7 @@
 
 import sys
 import os
+import threading
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -371,6 +372,124 @@ class TestCollectRun:
 
         assert result["raw_sources"]["local_news"] == []
         assert mock_rss.call_count == 1
+
+    @patch("stages.collect.fetch_weather")
+    @patch("stages.collect.fetch_markets")
+    @patch("stages.collect.fetch_upcoming_launches")
+    @patch("stages.collect.fetch_hackernews")
+    @patch("stages.collect.fetch_github_trending")
+    @patch("stages.collect.fetch_astronomy")
+    @patch("stages.collect.fetch_on_this_day")
+    @patch("stages.collect.get_upcoming_church_events")
+    @patch("stages.collect.get_upcoming_holidays")
+    @patch("stages.collect.fetch_economic_calendar")
+    @patch("stages.collect.get_current_lesson")
+    @patch("stages.collect.fetch_analysis_transcripts")
+    @patch("stages.collect.fetch_rss")
+    @patch("stages.collect.sanitize_all_sources")
+    def test_rss_fetch_runs_on_main_thread(
+        self,
+        mock_sanitize,
+        mock_rss,
+        mock_yt,
+        mock_lesson,
+        mock_econ_cal,
+        mock_holidays,
+        mock_church,
+        mock_history,
+        mock_astronomy,
+        mock_github,
+        mock_hn,
+        mock_launches,
+        mock_markets,
+        mock_weather,
+    ):
+        mock_weather.return_value = {"temp": 72}
+        mock_markets.return_value = []
+        mock_launches.return_value = []
+        mock_hn.return_value = []
+        mock_github.return_value = []
+        mock_astronomy.return_value = {}
+        mock_history.return_value = {}
+        mock_church.return_value = []
+        mock_holidays.return_value = []
+        mock_econ_cal.return_value = []
+        mock_lesson.return_value = {}
+        mock_yt.return_value = []
+        mock_sanitize.return_value = {
+            "rss": [],
+            "local_news": [],
+            "analysis_transcripts": [],
+        }
+
+        def _fetch_rss_on_main_thread(_config):
+            assert threading.current_thread() is threading.main_thread()
+            return []
+
+        mock_rss.side_effect = _fetch_rss_on_main_thread
+
+        run({}, self._make_config())
+
+        mock_rss.assert_called_once()
+
+    @patch("stages.collect.fetch_weather")
+    @patch("stages.collect.fetch_markets")
+    @patch("stages.collect.fetch_upcoming_launches")
+    @patch("stages.collect.fetch_hackernews")
+    @patch("stages.collect.fetch_github_trending")
+    @patch("stages.collect.fetch_astronomy")
+    @patch("stages.collect.fetch_on_this_day")
+    @patch("stages.collect.get_upcoming_church_events")
+    @patch("stages.collect.get_upcoming_holidays")
+    @patch("stages.collect.fetch_economic_calendar")
+    @patch("stages.collect.get_current_lesson")
+    @patch("stages.collect.fetch_analysis_transcripts")
+    @patch("stages.collect.fetch_rss")
+    @patch("stages.collect.sanitize_all_sources")
+    def test_youtube_fetch_runs_on_main_thread(
+        self,
+        mock_sanitize,
+        mock_rss,
+        mock_yt,
+        mock_lesson,
+        mock_econ_cal,
+        mock_holidays,
+        mock_church,
+        mock_history,
+        mock_astronomy,
+        mock_github,
+        mock_hn,
+        mock_launches,
+        mock_markets,
+        mock_weather,
+    ):
+        mock_weather.return_value = {"temp": 72}
+        mock_markets.return_value = []
+        mock_launches.return_value = []
+        mock_hn.return_value = []
+        mock_github.return_value = []
+        mock_astronomy.return_value = {}
+        mock_history.return_value = {}
+        mock_church.return_value = []
+        mock_holidays.return_value = []
+        mock_econ_cal.return_value = []
+        mock_lesson.return_value = {}
+        mock_rss.return_value = []
+        mock_sanitize.return_value = {
+            "rss": [],
+            "local_news": [],
+            "analysis_transcripts": [],
+        }
+
+        def _fetch_youtube_on_main_thread(_config):
+            assert threading.current_thread() is threading.main_thread()
+            return []
+
+        mock_yt.side_effect = _fetch_youtube_on_main_thread
+
+        run({}, self._make_config())
+
+        mock_yt.assert_called_once()
 
     @patch("stages.collect.fetch_weather")
     @patch("stages.collect.fetch_markets")
