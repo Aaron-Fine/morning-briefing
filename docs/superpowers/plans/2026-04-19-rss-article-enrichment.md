@@ -543,6 +543,8 @@ the disk cache and keep processing remaining items."
 - Create: `sources/article_extract.py`
 - Create: `tests/test_article_extract.py`
 
+**Note from Task 0:** Substack-rendered HTML was NOT sanity-checked in pre-flight (the hardcoded test URLs were 404s). If integration runs show `extraction_failed` for Substack-hosted feeds (adamtooze, slowboring, etc.), first check the stored HTML for a JS-only render shell — trafilatura needs article text in the initial HTML document, not JS-injected. Mitigation if needed: add a Substack-specific fallback that pulls from the `<meta name="description">` and the first N `<p>` tags inside `<article>` before giving up.
+
 - [ ] **Step 4.1: Write failing tests**
 
 Create `tests/test_article_extract.py`:
@@ -2252,8 +2254,9 @@ Subscription sites require browser cookies for real article access. Cookies live
 **Exporting cookies:**
 1. Install the "Get cookies.txt LOCALLY" browser extension (Chrome or Firefox).
 2. Log into the subscription site in that browser.
-3. Click the extension → select the site's domain → **Export** → save as `cookies/<name>.cookies.txt` at the project root.
-4. Reference the path from the feed's `enrich.cookies_file` setting.
+3. **Filter the export to the single target domain** — the extension defaults to the full browser jar (thousands of unrelated cookies). Use the domain filter / "Current Site" option so the exported file contains only cookies for e.g. `theatlantic.com`. A full-jar export works functionally but dramatically increases the blast radius if the file or container is ever compromised.
+4. Save as `cookies/<name>.cookies.txt` at the project root.
+5. Reference the path from the feed's `enrich.cookies_file` setting.
 
 Cookies expire periodically. When `output/artifacts/{date}/enrich_articles.json` shows `paywall` status for the feed's URLs, re-export and overwrite.
 ````
