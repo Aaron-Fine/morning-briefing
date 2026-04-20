@@ -24,7 +24,7 @@ Output: {"domain_analysis": {
 }}
 
 Each item schema:
-  tag (str), tag_label (str), headline (str),
+  item_id (str), tag (str), tag_label (str), headline (str),
   facts (str), analysis (str),
   source_depth ("single-source"|"corroborated"|"widely-reported"),
   connection_hooks ([{entity, region, theme, policy}]),
@@ -33,6 +33,7 @@ Each item schema:
   deep_dive_rationale (str|null)
 """
 
+import hashlib
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
@@ -348,6 +349,7 @@ OUTPUT: JSON object with:
 {
   "items": [
     {
+      "item_id": "leave blank; the pipeline assigns a stable content ID",
       "tag": "one of the domain tags listed above",
       "tag_label": "human-readable label for the tag",
       "headline": "Short, specific, active-voice headline. Lead with the actor or event, not 'Report says' or 'Sources indicate'. Bad: 'Analysts warn of tensions'. Good: 'India cancels water treaty with Pakistan amid Kashmir escalation'.",
@@ -401,6 +403,7 @@ DEEP DIVE CANDIDATES:
   a deep dive that they wouldn't get from the at-a-glance item alone.
 
 RULES:
+- For each item, make the today-specific selection reason explicit inside `analysis`: what specifically about today makes this included, or, if nothing specifically today, what cumulative state earned inclusion now. Do not manufacture a day-of hook when accumulated evidence is the honest reason.
 - Multiple sources covering the same event: merge into ONE item with all relevant links.
 - All URLs must come verbatim from the source data — never fabricate or modify a URL.
 - Return fewer items if fewer stories qualify. Three sharp items beat six padded ones.
@@ -459,6 +462,30 @@ def _fmt_markets(markets: list[dict]) -> str:
             f"${m.get('price', '?')} ({direction}{change:.1f}%)"
         )
     return "\n".join(lines)
+
+
+def _stable_item_id(domain_key: str, item: dict) -> str:
+    """Return a stable content ID for a domain item.
+
+    Prefer source URLs so re-ingesting the same article yields the same ID. Fall
+    back to the headline/facts bundle for source material without links.
+    """
+    urls = sorted(
+        str(link.get("url", "")).strip().lower()
+        for link in item.get("links", [])
+        if isinstance(link, dict) and link.get("url")
+    )
+    if urls:
+        seed = "\n".join(urls)
+    else:
+        seed = "\n".join(
+            [
+                str(item.get("headline", "")).strip().lower(),
+                str(item.get("facts", "")).strip().lower(),
+            ]
+        )
+    digest = hashlib.blake2b(seed.encode("utf-8"), digest_size=16).hexdigest()
+    return f"{domain_key}-{digest}"
 
 
 # ---------------------------------------------------------------------------
@@ -560,6 +587,7 @@ def _run_domain_pass(
             for lnk in item.get("links", [])
             if urlparse(lnk.get("url", "")).netloc in known_domains
         ]
+        item["item_id"] = _stable_item_id(domain_key, item)
 
     log.info(
         f"  analyze_domain[{domain_key}]: {len(result['items'])} items, "

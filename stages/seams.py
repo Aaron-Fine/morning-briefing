@@ -1,19 +1,14 @@
-"""Stage: seams — Detect narrative disagreements, coverage gaps, and key assumptions.
+"""Stage: seams — Produce per-item perspective annotations.
 
-Phase 2 seam detection operates on domain analysis artifacts AND raw source data,
-not just synthesized output. This gives it access to source-level framing that the
-domain analysis passes may have smoothed over.
-
-Three detection modes (all in one LLM call):
-  1. Contested Narratives — where source categories frame the same event differently
-  2. Coverage Gaps — stories present in some categories but absent from analyses
-  3. Key Assumptions Check — IC-style identification of unstated analytical assumptions
-
-The seam detection model should have DIFFERENT training biases than the domain
-analysis model (Kimi K2.5) to provide bias diversity. Default: Claude Sonnet.
+Seam detection operates on domain analysis artifacts and raw source data, then
+first emits a broad diagnostic candidate scan. A second pass prunes those
+candidate seams into item-level annotations keyed by stable domain-analysis item
+IDs. A legacy `seam_data` projection is still returned so older downstream
+consumers continue to receive a safe shape while rendering moves to inline
+annotations.
 
 Inputs:  domain_analysis (dict), raw_sources (dict), compressed_transcripts (list)
-Outputs: seam_data (dict)
+Outputs: seam_candidates (dict), seam_annotations (dict), seam_data (dict)
 
 Non-critical: returns empty results on failure so the pipeline can continue.
 """
@@ -24,12 +19,11 @@ from json import JSONDecodeError
 
 from morning_digest.llm import call_llm
 from utils.prompts import load_prompt
-from morning_digest.validate import validate_stage_output
 
 log = logging.getLogger(__name__)
 
-_SCAN_PROMPT = load_prompt("seams_scan.md")
-_SYNTHESIS_PROMPT = load_prompt("seams_synthesis.md")
+_CANDIDATE_PROMPT = load_prompt("seam_candidates.md")
+_ANNOTATION_PROMPT = load_prompt("seam_annotations.md")
 _JSON_REPAIR_PROMPT = """You repair malformed JSON emitted by another model.
 
 Return ONLY valid JSON.
@@ -37,6 +31,14 @@ Do not invent facts.
 If a field is truncated or uncertain, drop the partial item or replace it with a safe empty default.
 Preserve as much valid structure as possible.
 """
+_VALID_SEAM_TYPES = {
+    "framing_divergence",
+    "selection_divergence",
+    "causal_divergence",
+    "magnitude_divergence",
+    "credible_dissent",
+}
+_VALID_CONFIDENCE = {"high", "medium", "low"}
 
 
 def _build_domain_summary(domain_analysis: dict) -> str:
@@ -54,7 +56,8 @@ def _build_domain_summary(domain_analysis: dict) -> str:
                 " [DEEP DIVE CANDIDATE]" if item.get("deep_dive_candidate") else ""
             )
             parts.append(
-                f"\nHeadline: {item.get('headline', '')}{dive_flag}\n"
+                f"\nItem ID: {item.get('item_id', '')}\n"
+                f"Headline: {item.get('headline', '')}{dive_flag}\n"
                 f"Tag: {item.get('tag', '')} | Depth: {item.get('source_depth', '')}\n"
                 f"Facts: {item.get('facts', '')}\n"
                 f"Analysis: {item.get('analysis', '')}"
@@ -101,7 +104,7 @@ def _build_raw_source_summary(raw_sources: dict) -> str:
             parts.append(
                 f"  {item.get('source', '?')}{rel_note}: "
                 f"{item.get('title', '?')} — "
-                f"{item.get('summary', '')[:200]}"
+                f"{item.get('summary', '')[:500]}"
             )
             if item.get("url"):
                 parts.append(f"    URL: {item['url']}")
@@ -122,7 +125,30 @@ def _build_transcript_summary(compressed_transcripts: list) -> str:
     return "\n".join(parts)
 
 
-def _scan_user_content(
+def _annotation_user_content(
+    domain_summary: str,
+    raw_summary: str,
+    transcript_summary: str,
+    seam_candidates: dict,
+) -> str:
+    return f"""Use the broad candidate scan to produce the final per-item seam annotation artifact.
+
+=== DOMAIN ANALYSES ===
+{domain_summary}
+
+=== RAW SOURCE DATA ===
+{raw_summary}
+
+=== COMPRESSED TRANSCRIPTS ===
+{transcript_summary}
+
+=== TURN 1 SEAM CANDIDATES ===
+{json.dumps(seam_candidates, indent=2)}
+
+Produce the final per-item seam annotation artifact. Output ONLY valid JSON."""
+
+
+def _candidate_user_content(
     domain_summary: str, raw_summary: str, transcript_summary: str
 ) -> str:
     return f"""Review the following analytical products and source material.
@@ -136,30 +162,11 @@ def _scan_user_content(
 === COMPRESSED TRANSCRIPTS ===
 {transcript_summary}
 
-Scan broadly for tensions, absences, and assumptions. Output ONLY valid JSON."""
+Scan broadly for possible per-item and cross-domain seam candidates. Output ONLY valid JSON."""
 
 
-def _synthesis_user_content(
-    domain_summary: str,
-    raw_summary: str,
-    transcript_summary: str,
-    seam_scan: dict,
-) -> str:
-    return f"""Use the scan findings to produce the final seam report.
-
-=== DOMAIN ANALYSES ===
-{domain_summary}
-
-=== RAW SOURCE DATA ===
-{raw_summary}
-
-=== COMPRESSED TRANSCRIPTS ===
-{transcript_summary}
-
-=== TURN 1 SCAN OUTPUT ===
-{json.dumps(seam_scan, indent=2)}
-
-Produce the final contested narratives, coverage gaps, and key assumptions report. Output ONLY valid JSON."""
+def _empty_candidates() -> dict:
+    return {"schema_version": 1, "candidates": [], "cross_domain_candidates": []}
 
 
 def _resolve_turn_model_config(
@@ -167,18 +174,230 @@ def _resolve_turn_model_config(
 ) -> dict | None:
     if not base_model_config:
         return None
-
     turn_overrides = (stage_cfg or {}).get("turns", {}).get(turn_name, {})
     return {**base_model_config, **turn_overrides}
 
 
-def _normalize_seam_scan(result: dict | None) -> dict:
-    scan = dict(result or {})
-    scan["schema_version"] = 1
-    scan["tensions"] = scan.get("tensions", []) or []
-    scan["absences"] = scan.get("absences", []) or []
-    scan["assumptions"] = scan.get("assumptions", []) or []
-    return scan
+def _empty_annotations() -> dict:
+    return {"per_item": [], "cross_domain": []}
+
+
+def _normalize_seam_candidates(result: dict | None, domain_analysis: dict) -> dict:
+    if not isinstance(result, dict):
+        return _empty_candidates()
+
+    ids = _valid_item_ids(domain_analysis)
+    candidates = []
+    for raw_item in result.get("candidates", []) or []:
+        if not isinstance(raw_item, dict):
+            continue
+        item_id = str(raw_item.get("item_id", "")).strip()
+        if ids and item_id and item_id not in ids:
+            log.warning(f"seams: dropping candidate for unknown item_id {item_id!r}")
+            continue
+        seam_type = str(raw_item.get("seam_type", "")).strip()
+        if seam_type not in _VALID_SEAM_TYPES:
+            continue
+        candidates.append(
+            {
+                "item_id": item_id,
+                "seam_type": seam_type,
+                "candidate_one_line": str(
+                    raw_item.get("candidate_one_line", "")
+                ).strip(),
+                "why_it_might_matter": str(
+                    raw_item.get("why_it_might_matter", "")
+                ).strip(),
+                "possible_evidence": [
+                    {
+                        "source": str(entry.get("source", "")).strip(),
+                        "excerpt": str(entry.get("excerpt", "")).strip(),
+                        "framing": str(entry.get("framing", "")).strip(),
+                    }
+                    for entry in (raw_item.get("possible_evidence", []) or [])
+                    if isinstance(entry, dict)
+                ],
+                "drop_if_weak_reason": str(
+                    raw_item.get("drop_if_weak_reason", "")
+                ).strip(),
+            }
+        )
+
+    cross_domain_candidates = []
+    for raw_item in result.get("cross_domain_candidates", []) or []:
+        if not isinstance(raw_item, dict):
+            continue
+        linked_ids = [
+            str(item_id).strip()
+            for item_id in raw_item.get("linked_item_ids", []) or []
+            if str(item_id).strip()
+        ]
+        if ids:
+            linked_ids = [item_id for item_id in linked_ids if item_id in ids]
+        if len(linked_ids) < 2:
+            continue
+        cross_domain_candidates.append(
+            {
+                "candidate_one_line": str(
+                    raw_item.get("candidate_one_line", "")
+                ).strip(),
+                "linked_item_ids": linked_ids,
+                "why_it_might_matter": str(
+                    raw_item.get("why_it_might_matter", "")
+                ).strip(),
+            }
+        )
+
+    return {
+        "schema_version": 1,
+        "candidates": candidates,
+        "cross_domain_candidates": cross_domain_candidates,
+    }
+
+
+def _valid_item_ids(domain_analysis: dict) -> set[str]:
+    ids: set[str] = set()
+    for domain_result in domain_analysis.values():
+        if not isinstance(domain_result, dict):
+            continue
+        for item in domain_result.get("items", []):
+            item_id = str(item.get("item_id", "")).strip()
+            if item_id:
+                ids.add(item_id)
+    return ids
+
+
+def _normalize_confidence(value: str) -> str:
+    confidence = str(value or "medium").strip().lower()
+    return confidence if confidence in _VALID_CONFIDENCE else "medium"
+
+
+def _evidence_passes_gate(evidence: object) -> bool:
+    if not isinstance(evidence, list) or len(evidence) < 2:
+        return False
+    distinct_sources: set[str] = set()
+    useful_excerpts = 0
+    for entry in evidence:
+        if not isinstance(entry, dict):
+            continue
+        source = str(entry.get("source", "")).strip()
+        excerpt = str(entry.get("excerpt", "")).strip()
+        if source:
+            distinct_sources.add(source.lower())
+        if excerpt:
+            useful_excerpts += 1
+    return len(distinct_sources) >= 2 and useful_excerpts >= 2
+
+
+def _validate_seam_annotations(result: dict | None, domain_analysis: dict) -> dict:
+    """Validate the load-bearing seam annotation schema.
+
+    The evidence gate is intentionally structural: if two distinct sourced
+    excerpts are not present, the item annotation is dropped.
+    """
+    if not isinstance(result, dict):
+        return _empty_annotations()
+
+    ids = _valid_item_ids(domain_analysis)
+    cleaned_per_item: list[dict] = []
+    for raw_item in result.get("per_item", []) or []:
+        if not isinstance(raw_item, dict):
+            continue
+        item_id = str(raw_item.get("item_id", "")).strip()
+        if ids and item_id not in ids:
+            log.warning(f"seams: dropping annotation for unknown item_id {item_id!r}")
+            continue
+        seam_type = str(raw_item.get("seam_type", "")).strip()
+        if seam_type not in _VALID_SEAM_TYPES:
+            log.warning(f"seams: dropping annotation with invalid type {seam_type!r}")
+            continue
+        evidence = raw_item.get("evidence", [])
+        if not _evidence_passes_gate(evidence):
+            log.warning(
+                f"seams: dropping annotation for {item_id!r}; evidence gate failed"
+            )
+            continue
+
+        cleaned_evidence = []
+        for entry in evidence:
+            if not isinstance(entry, dict):
+                continue
+            cleaned_evidence.append(
+                {
+                    "source": str(entry.get("source", "")).strip(),
+                    "excerpt": str(entry.get("excerpt", "")).strip(),
+                    "framing": str(entry.get("framing", "")).strip(),
+                }
+            )
+
+        cleaned_per_item.append(
+            {
+                "item_id": item_id,
+                "seam_type": seam_type,
+                "one_line": str(raw_item.get("one_line", "")).strip(),
+                "evidence": cleaned_evidence,
+                "confidence": _normalize_confidence(raw_item.get("confidence", "")),
+            }
+        )
+
+    cleaned_cross_domain: list[dict] = []
+    for raw_item in result.get("cross_domain", []) or []:
+        if not isinstance(raw_item, dict):
+            continue
+        linked_ids = [
+            str(item_id).strip()
+            for item_id in raw_item.get("linked_item_ids", []) or []
+            if str(item_id).strip()
+        ]
+        if ids:
+            linked_ids = [item_id for item_id in linked_ids if item_id in ids]
+        if len(linked_ids) < 2:
+            continue
+        cleaned_cross_domain.append(
+            {
+                "seam_type": "cross_desk",
+                "one_line": str(raw_item.get("one_line", "")).strip(),
+                "linked_item_ids": linked_ids,
+            }
+        )
+
+    return {"per_item": cleaned_per_item, "cross_domain": cleaned_cross_domain}
+
+
+def _legacy_seam_data(seam_annotations: dict) -> dict:
+    """Project annotations into the old seam_data shape for compatibility."""
+    contested = []
+    coverage_gaps = []
+    for annotation in seam_annotations.get("per_item", []):
+        entry = {
+            "topic": annotation.get("item_id", ""),
+            "description": annotation.get("one_line", ""),
+            "links": [],
+            "sources_a": "",
+            "sources_b": "",
+            "analytical_significance": annotation.get("seam_type", ""),
+        }
+        if annotation.get("seam_type") == "selection_divergence":
+            coverage_gaps.append(
+                {
+                    "topic": annotation.get("item_id", ""),
+                    "description": annotation.get("one_line", ""),
+                    "present_in": "",
+                    "absent_from": "",
+                    "links": [],
+                }
+            )
+        else:
+            contested.append(entry)
+
+    total = len(contested) + len(coverage_gaps)
+    return {
+        "contested_narratives": contested,
+        "coverage_gaps": coverage_gaps,
+        "key_assumptions": [],
+        "seam_count": total,
+        "quiet_day": total <= 1,
+    }
 
 
 def _call_turn_json(
@@ -201,6 +420,8 @@ def _call_turn_json(
                 stream=stream,
             )
             raw_attempts.append(raw)
+            if isinstance(raw, dict):
+                return raw
             return _parse_turn_json(raw)
         except Exception as exc:
             if stream:
@@ -263,101 +484,84 @@ Malformed JSON:
 
 
 def _empty_seam_result() -> dict:
+    empty_annotations = _empty_annotations()
+    empty_candidates = _empty_candidates()
     return {
-        "seam_scan": {
-            "schema_version": 1,
-            "tensions": [],
-            "absences": [],
-            "assumptions": [],
-        },
-        "seam_data": {
-            "contested_narratives": [],
-            "coverage_gaps": [],
-            "key_assumptions": [],
-            "seam_count": 0,
-            "quiet_day": True,
-        },
+        "seam_candidates": empty_candidates,
+        "seam_scan": empty_candidates,
+        "seam_annotations": empty_annotations,
+        "seam_data": _legacy_seam_data(empty_annotations),
     }
 
 
 def run(
     context: dict, config: dict, model_config: dict | None = None, **kwargs
 ) -> dict:
-    """Detect narrative seams, coverage gaps, and key assumptions."""
+    """Detect per-item seam annotations."""
     domain_analysis = context.get("domain_analysis", {})
     raw_sources = context.get("raw_sources", {})
     compressed_transcripts = context.get("compressed_transcripts", [])
 
-    # Development default: keep seams on MiniMax to control iteration cost.
     effective_config = model_config or config.get("llm", {}).get(
         "seam_detection",
         {
-            "provider": "fireworks",
-            "model": "accounts/fireworks/models/minimax-m2p7",
-            "max_tokens": 5000,
+            "provider": "anthropic",
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 8192,
             "temperature": 0.3,
         },
     )
     stage_cfg = kwargs.get("stage_cfg") or {}
-    scan_config = _resolve_turn_model_config(effective_config, stage_cfg, "scan")
-    synthesis_config = _resolve_turn_model_config(
-        effective_config, stage_cfg, "synthesis"
+    candidate_config = _resolve_turn_model_config(
+        effective_config, stage_cfg, "candidates"
+    )
+    annotation_config = _resolve_turn_model_config(
+        effective_config, stage_cfg, "annotations"
     )
 
-    # Build the comprehensive user prompt
     domain_summary = _build_domain_summary(domain_analysis)
     raw_summary = _build_raw_source_summary(raw_sources)
     transcript_summary = _build_transcript_summary(compressed_transcripts)
 
     try:
-        log.info("Stage: seams — running Turn 1 scan...")
-        seam_scan = _call_turn_json(
-            _SCAN_PROMPT,
-            _scan_user_content(domain_summary, raw_summary, transcript_summary),
-            scan_config,
-            "scan",
-            _empty_seam_result()["seam_scan"],
+        log.info("Stage: seams — scanning broad seam candidates...")
+        seam_candidates_raw = _call_turn_json(
+            _CANDIDATE_PROMPT,
+            _candidate_user_content(domain_summary, raw_summary, transcript_summary),
+            candidate_config,
+            "candidates",
+            _empty_candidates(),
         )
-        seam_scan = _normalize_seam_scan(seam_scan)
+        seam_candidates = _normalize_seam_candidates(
+            seam_candidates_raw, domain_analysis
+        )
 
-        log.info("Stage: seams — running Turn 2 synthesis...")
+        log.info("Stage: seams — pruning candidates into per-item annotations...")
         result = _call_turn_json(
-            _SYNTHESIS_PROMPT,
-            _synthesis_user_content(
+            _ANNOTATION_PROMPT,
+            _annotation_user_content(
                 domain_summary,
                 raw_summary,
                 transcript_summary,
-                seam_scan,
+                seam_candidates,
             ),
-            synthesis_config,
-            "synthesis",
-            _empty_seam_result()["seam_data"],
+            annotation_config,
+            "annotations",
+            _empty_annotations(),
         )
-
-        # Validate output schema and URLs against known sources
-        result = validate_stage_output(result, raw_sources, "seams")
-
-        # Ensure all expected fields exist with safe defaults
-        if "contested_narratives" not in result:
-            result["contested_narratives"] = []
-        if "coverage_gaps" not in result:
-            result["coverage_gaps"] = []
-        if "key_assumptions" not in result:
-            result["key_assumptions"] = []
-
-        cn = result.get("contested_narratives", [])
-        cg = result.get("coverage_gaps", [])
-        ka = result.get("key_assumptions", [])
-        total = len(cn) + len(cg) + len(ka)
-        result["seam_count"] = total
-        if "quiet_day" not in result:
-            result["quiet_day"] = total <= 1
+        seam_annotations = _validate_seam_annotations(result, domain_analysis)
+        seam_data = _legacy_seam_data(seam_annotations)
 
         log.info(
-            f"  Seam detection: {len(cn)} contested narratives, "
-            f"{len(cg)} coverage gaps, {len(ka)} key assumptions"
+            f"  Seam annotations: {len(seam_annotations['per_item'])} per-item, "
+            f"{len(seam_annotations['cross_domain'])} cross-domain"
         )
-        return {"seam_scan": seam_scan, "seam_data": result}
+        return {
+            "seam_candidates": seam_candidates,
+            "seam_scan": seam_candidates,
+            "seam_annotations": seam_annotations,
+            "seam_data": seam_data,
+        }
 
     except Exception as e:
         log.warning(f"Seam detection failed (non-fatal): {e}")

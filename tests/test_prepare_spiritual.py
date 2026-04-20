@@ -13,6 +13,13 @@ from stages.prepare_spiritual import run, _SYSTEM_PROMPT
 
 
 class TestPrepareSpiritualRun:
+    @pytest.fixture(autouse=True)
+    def no_weekly_artifact(self, monkeypatch):
+        monkeypatch.setattr(
+            "stages.prepare_spiritual._find_latest_weekly_artifact",
+            lambda today=None: None,
+        )
+
     def _make_cfm_data(self):
         return {
             "reading": "Mosiah 1-3",
@@ -150,3 +157,41 @@ class TestPrepareSpiritualRun:
         result = run(context, {})
         assert result["spiritual"]["reading"] == "Test"
         assert result["spiritual"]["reflection"] == ""
+
+    @patch("stages.prepare_spiritual.call_llm")
+    def test_uses_weekly_artifact_focus(self, mock_llm, monkeypatch):
+        mock_llm.return_value = "Weekly reflection."
+        weekly = {
+            "week_start": "2026-01-05",
+            "cfm_range": "Mosiah 1-3",
+            "weekly_purpose": "Purpose",
+            "daily_foci": [
+                {
+                    "id": "focus-1",
+                    "text_ref": "Mosiah 2:17",
+                    "guide_excerpt": "Service is covenantal, not performative.",
+                }
+            ],
+            "misuses": [],
+            "applications": [],
+            "conspicuous_absences": [],
+            "proposed_sequence": {"monday": "focus-1"},
+        }
+        monkeypatch.setattr(
+            "stages.prepare_spiritual._find_latest_weekly_artifact",
+            lambda today=None: weekly,
+        )
+        monkeypatch.setattr(
+            "stages.prepare_spiritual.now_local",
+            lambda: MagicMock(date=lambda: __import__("datetime").date(2026, 1, 5)),
+        )
+
+        result = run(
+            self._make_context(),
+            self._make_config(),
+            model_config={"provider": "fireworks"},
+        )
+
+        assert result["spiritual"]["reflection"] == "Weekly reflection."
+        assert result["spiritual"]["focus_id"] == "focus-1"
+        assert "Service is covenantal" in mock_llm.call_args[0][1]

@@ -47,6 +47,7 @@ class TestStageArtifactKey:
             "analyze_domain": "domain_analysis",
             "prepare_calendar": "calendar",
             "prepare_weather": "weather",
+            "prepare_spiritual_weekly": "spiritual_weekly",
             "prepare_spiritual": "spiritual",
             "prepare_local": "local_items",
             "seams": "seam_data",
@@ -78,6 +79,10 @@ class TestEmptyStageOutput:
 
     def test_seams_returns_structure(self):
         output = _empty_stage_output("seams")
+        assert "seam_candidates" in output
+        assert "candidates" in output["seam_candidates"]
+        assert "seam_annotations" in output
+        assert "per_item" in output["seam_annotations"]
         assert "seam_data" in output
         assert "contested_narratives" in output["seam_data"]
         assert "coverage_gaps" in output["seam_data"]
@@ -90,6 +95,10 @@ class TestEmptyStageOutput:
     def test_prepare_spiritual_returns_empty_dict(self):
         output = _empty_stage_output("prepare_spiritual")
         assert "spiritual" in output
+
+    def test_prepare_spiritual_weekly_returns_empty_dict(self):
+        output = _empty_stage_output("prepare_spiritual_weekly")
+        assert "spiritual_weekly" in output
 
     def test_prepare_local_returns_empty_list(self):
         output = _empty_stage_output("prepare_local")

@@ -14,7 +14,7 @@ Execution rules:
 - Use the editorial plan as the selection baseline unless the provided evidence makes a planned item impossible to support.
 - Build `at_a_glance` from the best non-deep-dive items across desks.
 - The editor may freely mix stories from all desks; no desk has reserved quota.
-- Preserve domain analysts' `facts` and `analysis` verbatim in `at_a_glance`; your contribution is ordering, `cross_domain_note`, and deep dive writing.
+- Preserve domain analysts' `item_id`, `facts`, and `analysis` verbatim in `at_a_glance`; your contribution is ordering, `cross_domain_note`, and deep dive writing.
 - If a story appears in both `at_a_glance` and `deep_dives`, the deep dive must add distinct connective analysis rather than repeating the same facts.
 - If a story appears in seam detection, the at-a-glance item may point readers to Perspective Seams rather than restating the same disagreement.
 - Each story appears in at most two sections.
@@ -38,6 +38,7 @@ Output format:
 {
   "at_a_glance": [
     {
+      "item_id": "stable ID from the domain analysis item",
       "tag": "must be exactly one of: war, domestic, econ, ai, tech, defense, space, cyber, local, science, energy, biotech",
       "tag_label": "human-readable label matching the tag",
       "headline": "from domain analysis, possibly lightly edited",

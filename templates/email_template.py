@@ -143,6 +143,7 @@ EMAIL_TEMPLATE = _env.from_string("""\
   .scan-voice-src      { color: var(--text-faint); }
   .scan-voice-analysis { color: var(--text-muted); }
   .scan-voice-thread   { color: var(--accent-seam); }
+  .scan-seam { margin-top: 7px; padding-left: 8px; border-left: 2px solid var(--wx-grid, #d8d5d0); color: var(--wx-label, #555555); font-size: 13px; line-height: 1.45; font-style: italic; }
   .aqi-warn { font-size: 13px; font-weight: 600; display: block; margin-top: 3px; }
   .scan-link { font-size: 13px; color: var(--link-subtle); margin-top: 4px; }
   .scan-link a { color: var(--link-subtle); text-decoration: none; border-bottom: 1px dotted var(--link-border); }
@@ -267,6 +268,9 @@ EMAIL_TEMPLATE = _env.from_string("""\
         <span class="scan-hl">{{ item.headline }}</span>
       </div>
       <div class="scan-ctx">{% if item.facts or item.analysis or item.cross_domain_note %}{% if item.facts %}<div class="scan-ctx-block"><span class="mono-label scan-voice scan-voice-src">Sources</span>{{ item.facts }}</div>{% endif %}{% if item.analysis %}<div class="scan-ctx-block scan-ctx-block-analysis"><span class="mono-label scan-voice scan-voice-analysis">Analysis</span>{{ item.analysis }}</div>{% endif %}{% if item.cross_domain_note %}<div class="scan-ctx-block scan-ctx-block-thread"><span class="mono-label scan-voice scan-voice-thread">Thread</span>{{ item.cross_domain_note }}</div>{% endif %}{% else %}{{ item.context }}{% endif %}</div>
+      {% if item.seam_annotation %}
+      <div class="scan-seam">{{ item.seam_annotation.one_line }}</div>
+      {% endif %}
       {% if item.links %}
       <div class="scan-link">
         {% for link in item.links %}
@@ -349,69 +353,12 @@ EMAIL_TEMPLATE = _env.from_string("""\
   </div>
   {% endif %}
 
-  <!-- PERSPECTIVE SEAMS -->
-  {% if contested_narratives or coverage_gaps %}
-  <div class="section">
-    <h2 class="mono-label sec-label">Perspective Seams</h2>
-
-    {% if contested_narratives %}
-    <div style="margin-bottom: 16px;">
-      <div class="mono-label seam-sub">Contested Narratives</div>
-      {% for cn in contested_narratives %}
-      <div class="seam-item">
-        <div class="seam-topic">{{ cn.topic }}</div>
-        <div class="seam-desc">{{ cn.description }}</div>
-        <div class="seam-sources">{{ cn.sources_a }} vs. {{ cn.sources_b }}</div>
-        {% if cn.analytical_significance %}
-        <div class="seam-desc" style="margin-top:4px; font-style:italic;">{{ cn.analytical_significance }}</div>
-        {% endif %}
-        {% if cn.links %}
-        <div class="scan-link" style="margin-top:4px;">{% for link in cn.links %}<a href="{{ link.url }}">{{ link.label }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</div>
-        {% endif %}
-      </div>
-      {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if coverage_gaps %}
-    <div>
-      <div class="mono-label seam-sub">Covered There, Not Here</div>
-      {% for cg in coverage_gaps %}
-      <div class="seam-item">
-        <div class="seam-topic">{{ cg.topic }}</div>
-        <div class="seam-desc">{{ cg.description }}</div>
-        <div class="seam-sources">Present in {{ cg.present_in }} · Absent from {{ cg.absent_from }}</div>
-        {% if cg.links %}
-        <div class="scan-link" style="margin-top:4px;">{% for link in cg.links %}<a href="{{ link.url }}">{{ link.label }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</div>
-        {% endif %}
-      </div>
-      {% endfor %}
-    </div>
-    {% endif %}
-  </div>
-  {% endif %}
-
   <!-- WEEK AHEAD -->
   {% if week_ahead %}
   <div class="section">
     <h2 class="mono-label sec-label">Week Ahead</h2>
     {% for item in week_ahead %}
     <div class="cal-item"><span class="mono-label cal-date">{{ item.date or "TBD" }}</span> {{ item.event }}</div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-   <!-- KEY ASSUMPTIONS CHECK -->
-  {% if key_assumptions %}
-  <div class="section">
-    <h2 class="mono-label sec-label">Key Assumptions Check</h2>
-    {% for ka in key_assumptions %}
-    <div class="seam-item">
-      <div class="seam-topic">{{ ka.topic }}</div>
-      <div class="seam-desc">Assumes: {{ ka.assumption }}</div>
-      <div class="seam-desc" style="margin-top:4px;">Would invalidate: {{ ka.invalidator }}</div>
-      <div class="seam-sources">Confidence: {{ ka.confidence }}{% if ka.confidence_basis %} — {{ ka.confidence_basis }}{% endif %}</div>
-    </div>
     {% endfor %}
   </div>
   {% endif %}

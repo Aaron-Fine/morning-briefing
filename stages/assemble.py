@@ -23,6 +23,7 @@ sanitized by morning_digest.validate and then wrapped in Markup() before templat
 """
 
 import logging
+import re
 from markupsafe import Markup
 
 from templates.email_template import render_email
@@ -45,6 +46,12 @@ _TAG_LABELS = {
     "energy": "Energy",
     "biotech": "Biotech",
 }
+_CONFIDENCE_RANK = {"high": 3, "medium": 2, "low": 1}
+_HEDGED_SEAM_RE = re.compile(
+    r"^\s*(some analysts argue|critics say|observers (?:say|believe)|"
+    r"some experts (?:say|argue)|there are concerns)\b",
+    re.IGNORECASE,
+)
 
 
 def _item_to_glance(item: dict) -> dict:
@@ -62,6 +69,7 @@ def _item_to_glance(item: dict) -> dict:
     if cross_note:
         parts.append(f"({cross_note})")
     return {
+        "item_id": item.get("item_id", ""),
         "tag": tag,
         "tag_label": item.get("tag_label") or _TAG_LABELS.get(tag, tag.capitalize()),
         "headline": item.get("headline", ""),
@@ -73,6 +81,56 @@ def _item_to_glance(item: dict) -> dict:
         "source_depth": item.get("source_depth", ""),
         "connection_hooks": item.get("connection_hooks", []),
     }
+
+
+def _truncate_one_line(text: str, limit: int = 220) -> str:
+    text = " ".join(str(text or "").split())
+    if len(text) <= limit:
+        return text
+    truncated = text[:limit].rstrip()
+    for marker in (". ", "? ", "! "):
+        idx = truncated.rfind(marker)
+        if idx >= 80:
+            return truncated[: idx + 1].rstrip()
+    return truncated.rstrip(" ,;:") + "..."
+
+
+def _select_inline_seam_annotations(
+    at_a_glance: list[dict], seam_annotations: dict
+) -> list[dict]:
+    """Attach at most one renderable seam annotation to each at-a-glance item."""
+    candidates: dict[str, dict] = {}
+    for annotation in seam_annotations.get("per_item", []) or []:
+        if not isinstance(annotation, dict):
+            continue
+        item_id = str(annotation.get("item_id", "")).strip()
+        one_line = str(annotation.get("one_line", "")).strip()
+        if not item_id or not one_line:
+            continue
+        if _HEDGED_SEAM_RE.match(one_line):
+            log.warning(
+                f"assemble: seam annotation for {item_id!r} starts with hedged voice"
+            )
+        existing = candidates.get(item_id)
+        rank = _CONFIDENCE_RANK.get(str(annotation.get("confidence", "")).lower(), 0)
+        existing_rank = _CONFIDENCE_RANK.get(
+            str((existing or {}).get("confidence", "")).lower(), -1
+        )
+        if existing is None or rank > existing_rank:
+            candidates[item_id] = annotation
+
+    rendered = []
+    for item in at_a_glance:
+        item_copy = dict(item)
+        annotation = candidates.get(str(item.get("item_id", "")).strip())
+        if annotation:
+            item_copy["seam_annotation"] = {
+                "one_line": _truncate_one_line(annotation.get("one_line", "")),
+                "seam_type": annotation.get("seam_type", ""),
+                "confidence": annotation.get("confidence", ""),
+            }
+        rendered.append(item_copy)
+    return rendered
 
 
 def _domain_item_to_deep_dive(item: dict) -> dict:
@@ -159,6 +217,7 @@ def run(
 ) -> dict:
     """Assemble template data, render HTML, and return html + template_data artifacts."""
     seam_data = context.get("seam_data", {})
+    seam_annotations = context.get("seam_annotations", {})
     raw_sources = context.get("raw_sources", {})
     dry_run = kwargs.get("dry_run", False)
 
@@ -223,6 +282,7 @@ def run(
     raw_rss_count = len(raw_sources.get("rss", []))
     analysis_unavailable = bool(domain_failures) and not at_a_glance and raw_rss_count > 0
     coverage_gap_diagnostics = context.get("coverage_gaps", {}) if dry_run else {}
+    at_a_glance = _select_inline_seam_annotations(at_a_glance, seam_annotations)
 
     template_data = {
         "date_display": format_display_date(today),
@@ -235,6 +295,7 @@ def run(
         "markets": markets,
         "at_a_glance": at_a_glance,
         "analysis_unavailable": analysis_unavailable,
+        "seam_annotations": seam_annotations,
         "contested_narratives": seam_data.get("contested_narratives", []),
         "coverage_gaps": seam_data.get("coverage_gaps", []),
         "key_assumptions": seam_data.get("key_assumptions", []),

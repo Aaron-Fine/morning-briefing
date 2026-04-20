@@ -16,6 +16,7 @@ from stages.assemble import (
     _domain_item_to_deep_dive,
     _build_from_domain_analysis,
     _extract_peripheral_data,
+    _select_inline_seam_annotations,
     _TAG_LABELS,
     run,
 )
@@ -82,6 +83,40 @@ class TestItemToGlance:
         item = {"connection_hooks": hooks}
         result = _item_to_glance(item)
         assert result["connection_hooks"] == hooks
+
+
+class TestInlineSeamAnnotations:
+    def test_attaches_annotation_by_item_id(self):
+        items = [{"item_id": "item-1", "headline": "Story"}]
+        annotations = {
+            "per_item": [
+                {
+                    "item_id": "item-1",
+                    "one_line": "The non-Western read: this is escalation.",
+                    "confidence": "high",
+                    "seam_type": "framing_divergence",
+                }
+            ]
+        }
+
+        result = _select_inline_seam_annotations(items, annotations)
+
+        assert result[0]["seam_annotation"]["one_line"].startswith(
+            "The non-Western read:"
+        )
+
+    def test_keeps_highest_confidence_annotation(self):
+        items = [{"item_id": "item-1", "headline": "Story"}]
+        annotations = {
+            "per_item": [
+                {"item_id": "item-1", "one_line": "Low.", "confidence": "low"},
+                {"item_id": "item-1", "one_line": "High.", "confidence": "high"},
+            ]
+        }
+
+        result = _select_inline_seam_annotations(items, annotations)
+
+        assert result[0]["seam_annotation"]["one_line"] == "High."
 
 
 class TestDomainItemToDeepDive:

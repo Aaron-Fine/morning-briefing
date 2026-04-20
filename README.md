@@ -420,9 +420,10 @@ morning-digest/
 │   ├── analyze_domain.py    # Seven specialist domain passes (parallel)
 │   ├── prepare_calendar.py  # Calendar enrichment
 │   ├── prepare_weather.py   # Weather enrichment + HTML weather block
-│   ├── prepare_spiritual.py # Come Follow Me enrichment
+│   ├── prepare_spiritual_weekly.py # Weekly study-guide artifact
+│   ├── prepare_spiritual.py # Daily Come Follow Me reflection
 │   ├── prepare_local.py     # Local news filter
-│   ├── seams.py             # Contested narratives + coverage gaps + key assumptions
+│   ├── seams.py             # Per-item perspective annotations
 │   ├── cross_domain.py      # Editor-in-chief cross-domain synthesis (two-turn)
 │   ├── coverage_gaps.py     # Diagnostic blind-spot detection
 │   ├── assemble.py          # HTML rendering from stage outputs
@@ -439,8 +440,9 @@ morning-digest/
 │   ├── holidays.py          # Holiday calendar
 │   └── economic_calendar.py # Economic events
 ├── prompts/                 # Prompt files for LLM stages
-│   ├── seams_scan.md        # Seams Turn 1: divergent scan
-│   ├── seams_synthesis.md   # Seams Turn 2: convergent synthesis
+│   ├── seam_annotations.md  # Per-item seam annotation prompt
+│   ├── seam_candidates.md   # Broad seam candidate scan prompt
+│   ├── prepare_spiritual_weekly.md # Weekly spiritual artifact prompt
 │   ├── cross_domain_plan.md # Cross-domain Turn 1: editorial planning
 │   ├── cross_domain_execute.md  # Cross-domain Turn 2: writing
 │   ├── coverage_gaps.md     # Coverage gap diagnostic

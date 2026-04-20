@@ -258,6 +258,14 @@ _STAGE_METADATA = {
         "model_defaults": None,
         "turn_model_overrides": None,
     },
+    "prepare_spiritual_weekly": {
+        "artifact_key": "spiritual_weekly",
+        "context_keys": ["spiritual_weekly"],
+        "non_critical": True,
+        "empty_output": {"spiritual_weekly": {}},
+        "model_defaults": {},
+        "turn_model_overrides": None,
+    },
     "prepare_spiritual": {
         "artifact_key": "spiritual",
         "context_keys": ["spiritual"],
@@ -276,15 +284,20 @@ _STAGE_METADATA = {
     },
     "seams": {
         "artifact_key": "seam_data",
-        "context_keys": ["seam_scan", "seam_data"],
+        "context_keys": ["seam_candidates", "seam_scan", "seam_annotations", "seam_data"],
         "non_critical": True,
         "empty_output": {
+            "seam_candidates": {
+                "schema_version": 1,
+                "candidates": [],
+                "cross_domain_candidates": [],
+            },
             "seam_scan": {
                 "schema_version": 1,
-                "tensions": [],
-                "absences": [],
-                "assumptions": [],
+                "candidates": [],
+                "cross_domain_candidates": [],
             },
+            "seam_annotations": {"per_item": [], "cross_domain": []},
             "seam_data": {
                 "contested_narratives": [],
                 "coverage_gaps": [],

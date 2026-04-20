@@ -67,11 +67,16 @@ def get_current_lesson(config: dict) -> dict:
                    lesson_url, date_range}
     """
     today = date.today()
+    return get_lesson_for_date(config, today)
+
+
+def get_lesson_for_date(config: dict, target_date: date) -> dict:
+    """Return the Come Follow Me lesson for a specific date."""
 
     for start_str, end_str, num, reading, title, key_ref in SCHEDULE_2026:
         start = date.fromisoformat(start_str)
         end = date.fromisoformat(end_str)
-        if start <= today <= end:
+        if start <= target_date <= end:
             lesson_url = (
                 f"{config.get('come_follow_me', {}).get('base_url', '')}/{num + 1}"
             )
@@ -87,6 +92,8 @@ def get_current_lesson(config: dict) -> dict:
                 ),
                 "lesson_url": lesson_url,
                 "lesson_num": num,
+                "week_start": start.isoformat(),
+                "week_end": end.isoformat(),
             }
 
     # Fallback if no match
