@@ -66,7 +66,7 @@ Both are overridable in `config.yaml` under a new `enrich_articles:` block.
 **`enrich(item)`:**
 
 1. Check disk cache at `cache/article_bodies/<sha1(url)>.json`. If hit, `status == "ok"`, and `fetched_at` within 30d → load cached `compressed_body`, skip to step 5.
-2. `requests.get(url, timeout=15, headers={User-Agent: ...})`, follow redirects.
+2. `curl_cffi.requests.get(url, impersonate="chrome", timeout=15)`, follow redirects. `curl-cffi` provides Chrome's TLS fingerprint, HTTP/2 settings, and default browser header set — defeats naive UA filters and most basic Cloudflare challenges without running a headless browser. A custom User-Agent / header override is only applied when a feed explicitly sets one (rare).
 3. `trafilatura.extract(html, ...)` → raw article text. If result is `None` or shorter than `min_body_chars` (default 300) → cache as failure, return.
 4. Cheap Fireworks pass (same model as `compress`, ~500 `max_tokens`) using `prompts/enrich_article_system.md` distills to 300-500 words of substance (actors, claims, numbers, mechanisms). If LLM call fails → fall back to `raw_text[:2000]`, cache with `status=llm_failed`.
 5. Write cache entry with compressed body, `fetched_at`, status, raw length, and source name.
@@ -83,7 +83,8 @@ Each RSS feed entry in `config.yaml` gets an optional `enrich:` sub-block. All f
 ```yaml
 - { url: "...", name: "Financial Times",
     enrich: { fetch_article: true,
-              user_agent: "...",          # override default UA
+              impersonate: "chrome",      # override browser profile (rare)
+              user_agent: "...",          # override UA header (rare)
               timeout_seconds: 30,        # override 15s default
               min_body_chars: 500,        # override 300 default
               skip: false } }             # force-skip (even if thin)
@@ -102,7 +103,9 @@ enrich_articles:
   per_host_min_interval_ms: 500
   min_body_chars: 300
   timeout_seconds: 15
-  user_agent: "MorningDigest/1.0 (morningDigest@lurkers.us)"
+  impersonate: "chrome"                   # curl-cffi browser profile
+  # user_agent: unset by default; curl-cffi sends a real Chrome header set.
+  # Only set this per-feed when a specific site needs a non-default UA.
 ```
 
 ## Cache layout
@@ -177,9 +180,9 @@ The pipeline **never fails** because of enrichment. In every failure path, the i
 
 | Failure | Behavior |
 |---|---|
-| HTTP timeout / connection error | Cache `status=http_error`, TTL 24h. Item keeps original summary. |
-| HTTP 4xx / 5xx | Cache `status=http_error` with `http_status`, TTL 24h. |
-| `trafilatura.extract` returns `None` or too short | Cache `status=extraction_failed` (or `paywall` if heuristic matches), TTL 24h. |
+| HTTP timeout / connection error | Cache `status=http_error`, backoff `cache_failure_backoff_hours`. Item keeps original summary. |
+| HTTP 4xx / 5xx | Cache `status=http_error` with `http_status`, same backoff. |
+| `trafilatura.extract` returns `None` or too short | Cache `status=extraction_failed` (or `paywall` if heuristic matches), same backoff. |
 | LLM call fails / times out | Fall back to `raw_text[:2000]` written to `summary`; cache with `status=llm_failed`. Next run won't re-fetch but may retry the LLM pass on the cached raw text. |
 | `MAX_FETCHES_PER_RUN` hit | Log warning with count of skipped items; pipeline continues normally. |
 | Corrupt cache file | Treat as miss, overwrite. |
@@ -190,7 +193,7 @@ All tests live under `tests/`. No live-network tests; real-world validation via 
 
 - `test_enrich_articles_cache.py` — hit/miss/expired/corrupt cache scenarios, tmp_path fixtures, no network.
 - `test_enrich_articles_decision.py` — opt-in vs threshold vs skip logic, per-feed overrides, `MAX_FETCHES_PER_RUN` cap.
-- `test_enrich_articles_failures.py` — mocked `requests` / `trafilatura` / `call_llm` failures; verify item flows through with original summary intact.
+- `test_enrich_articles_failures.py` — mocked `curl_cffi.requests` / `trafilatura` / `call_llm` failures; verify item flows through with original summary intact.
 - `test_audit_rss_quality.py` — synthetic artifact directory, verify ranking and recommendations logic.
 
 ## Documentation updates
@@ -224,7 +227,10 @@ Add to `requirements.txt`:
 
 ```
 trafilatura>=1.8
+curl-cffi>=0.7
 ```
+
+`curl-cffi` ships its own bundled `libcurl-impersonate` binaries for Linux x86_64 and arm64 via wheels; no extra system packages required inside the Docker image.
 
 ## Rollout
 
