@@ -27,13 +27,38 @@ Downstream stages (`analyze_domain`, `seams`, `cross_domain`) only see `title + 
 
 ## Architecture
 
-Two independent pieces of work:
+Three pieces of work:
 
-1. **Audit tool** — `scripts/audit_rss_quality.py`. One-shot script, reads `output/artifacts/{date}/raw_sources.json` across a window, emits a ranked report. Used to populate `fetch_article: true` opt-ins and verify post-rollout impact. Not part of the pipeline.
+1. **Pre-work fix in `sources/rss_feeds.py`** — a narrow body-field fallback that closes the most common cause of 0-char RSS summaries before any enrichment logic runs (see "Pre-work" below).
 
-2. **`enrich_articles` pipeline stage** — sits between `collect` and `compress`. Fetches, extracts, compresses article bodies for qualifying items, writes results into `item["summary"]`. Backed by a 30-day disk cache.
+2. **Audit tool** — `scripts/audit_rss_quality.py`. One-shot script, reads `output/artifacts/{date}/raw_sources.json` across a window, emits a ranked report. Used to populate `fetch_article: true` opt-ins and verify post-rollout impact. Not part of the pipeline.
+
+3. **`enrich_articles` pipeline stage** — sits between `collect` and `compress`. Fetches, extracts, compresses article bodies for qualifying items, writes results into `item["summary"]`. Backed by a 30-day disk cache.
 
 The audit informs configuration; the stage performs the work. They share nothing at runtime.
+
+## Pre-work: `sources/rss_feeds.py` body-field fallback
+
+Today, `_items_from_parsed_feed` only reads `entry.get("summary", "")`. Some feeds (notably Nikkei Asia) publish their body via `<content:encoded>` instead of `<description>`, so feedparser surfaces it at `entry.content` rather than `entry.summary`. The current code returns empty.
+
+Fix: replace the single `summary` lookup with a fallback chain:
+
+```python
+def _entry_body(entry) -> str:
+    candidates = [
+        entry.get("summary", ""),
+        entry.get("description", ""),
+    ]
+    content = entry.get("content") or []
+    if content:
+        candidates.append(content[0].get("value", ""))
+    for c in candidates:
+        if c and c.strip():
+            return c
+    return ""
+```
+
+Pass the result through the existing `_clean_summary`. This lights up Nikkei Asia (currently 100% empty) and likely helps any other feed using the same RSS 2.0 convention. Pure fix; independent of the enrichment stage; lands first so the audit baseline reflects real empty-summary rates, not parser gaps.
 
 ## `enrich_articles` stage
 
@@ -66,7 +91,7 @@ Both are overridable in `config.yaml` under a new `enrich_articles:` block.
 **`enrich(item)`:**
 
 1. Check disk cache at `cache/article_bodies/<sha1(url)>.json`. If hit, `status == "ok"`, and `fetched_at` within 30d → load cached `compressed_body`, skip to step 5.
-2. `curl_cffi.requests.get(url, impersonate="chrome", timeout=15)`, follow redirects. `curl-cffi` provides Chrome's TLS fingerprint, HTTP/2 settings, and default browser header set — defeats naive UA filters and most basic Cloudflare challenges without running a headless browser. A custom User-Agent / header override is only applied when a feed explicitly sets one (rare).
+2. `curl_cffi.requests.get(url, impersonate="chrome", timeout=15, cookies=cookies_jar_or_none)`, follow redirects. `curl-cffi` provides Chrome's TLS fingerprint, HTTP/2 settings, and default browser header set — defeats naive UA filters and most basic Cloudflare challenges without running a headless browser. A custom User-Agent / header override is only applied when a feed explicitly sets one (rare). If `enrich.cookies_file` is set on the feed, load it (Netscape format) and pass the jar to the request so authenticated fetches work against subscription sites.
 3. `trafilatura.extract(html, ...)` → raw article text. If result is `None` or shorter than `min_body_chars` (default 300) → cache as failure, return.
 4. Cheap Fireworks pass (same model as `compress`, ~500 `max_tokens`) using `prompts/enrich_article_system.md` distills to 300-500 words of substance (actors, claims, numbers, mechanisms). If LLM call fails → fall back to `raw_text[:2000]`, cache with `status=llm_failed`.
 5. Write cache entry with compressed body, `fetched_at`, status, raw length, and source name.
@@ -81,13 +106,14 @@ Both are overridable in `config.yaml` under a new `enrich_articles:` block.
 Each RSS feed entry in `config.yaml` gets an optional `enrich:` sub-block. All fields optional; unset fields inherit from the global block.
 
 ```yaml
-- { url: "...", name: "Financial Times",
+- { url: "...", name: "The Atlantic",
     enrich: { fetch_article: true,
-              impersonate: "chrome",      # override browser profile (rare)
-              user_agent: "...",          # override UA header (rare)
-              timeout_seconds: 30,        # override 15s default
-              min_body_chars: 500,        # override 300 default
-              skip: false } }             # force-skip (even if thin)
+              impersonate: "chrome",           # override browser profile (rare)
+              user_agent: "...",               # override UA header (rare)
+              timeout_seconds: 30,             # override 15s default
+              min_body_chars: 500,             # override 300 default
+              cookies_file: "secrets/atlantic.cookies.txt",  # Netscape cookies.txt
+              skip: false } }                  # force-skip (even if thin)
 ```
 
 Global block:
@@ -162,13 +188,19 @@ No other prompt changes. No branching on provenance.
 - current `cap`
 - whether already opted into enrichment (`enrich.fetch_article: true`)
 
-**Output:** ranked markdown table, worst-quality first, with a `Recommend` column suggesting `fetch_article: true`, `increase cap`, `retire feed`, or `ok`.
+Once enrichment artifacts exist (`enrich_articles.json`), the tool also reads those and reports, per feed:
+
+- enrichment attempts, successes, and paywall-fail rate
+- LLM-fallback rate (how often we dropped to `raw_text[:2000]`)
+
+**Output:** ranked markdown table, worst-quality first, with a `Recommend` column suggesting `fetch_article: true`, `skip: true`, `cookies_file`, `increase cap`, `retire feed`, or `ok`. The recommendation logic distinguishes "thin summary + enrichment succeeded" (keep current config) from "thin summary + high paywall rate" (recommend `skip: true` or `cookies_file` depending on the feed).
 
 ```
-| Feed | Items | Median chars | Empty % | Mode | Recommend |
-|---|---|---|---|---|---|
-| Brad Setser | 6 | 0 | 100% | html_index | fetch_article: true |
-| Financial Times | 42 | 48 | 0% | rss | fetch_article: true |
+| Feed | Items | Median chars | Empty % | Paywall % | Mode | Recommend |
+|---|---|---|---|---|---|---|
+| Brad Setser | 6 | 0 | 100% | 0% | html_index | fetch_article: true |
+| Financial Times | 42 | 48 | 0% | 96% | rss | skip: true |
+| The Atlantic | 54 | 90 | 0% | 12% | rss | ok (cookies working) |
 | ... |
 ```
 
@@ -203,8 +235,9 @@ All tests live under `tests/`. No live-network tests; real-world validation via 
 1. Add `enrich_articles` bullet to the pipeline stages list under "Processes" (between `compress` and `analyze_domain`).
 2. Add the `enrich_articles` node to the Pipeline Flow mermaid diagram.
 3. New "Article enrichment" subsection documenting: global config block, per-feed `enrich:` override schema (with example), cache location and eviction.
-4. New "Diagnostics" subsection covering: running `scripts/audit_rss_quality.py`, reading the report, and the audit → opt-in → re-audit workflow.
-5. `trafilatura` noted in the dependencies/install section.
+4. New "Authenticated fetches" subsection explaining the `cookies_file` pattern: how to export cookies.txt from a browser, where to put it (`secrets/` outside git), how to mount it in Docker, when to refresh.
+5. New "Diagnostics" subsection covering: running `scripts/audit_rss_quality.py`, reading the report, and the audit → opt-in → re-audit workflow.
+6. `trafilatura` and `curl-cffi` noted in the dependencies/install section.
 
 **`CLAUDE.md`:** short addition noting `output/artifacts/{date}/enrich_articles.json` as the introspection artifact for enrichment runs, and `scripts/audit_rss_quality.py` as the canonical feed-quality measurement tool.
 
@@ -232,9 +265,38 @@ curl-cffi>=0.7
 
 `curl-cffi` ships its own bundled `libcurl-impersonate` binaries for Linux x86_64 and arm64 via wheels; no extra system packages required inside the Docker image.
 
+## Known constraints per feed
+
+Baseline measurement from `output/artifacts/2026-04-19/raw_sources.json` (109 items, 31 sources) drives these recommendations. They're starting config; the audit tool can refine over time.
+
+**Hard paywalls — set `enrich.skip: true`:**
+
+Fetching will hit a paywall preview and waste the per-run budget. Current thin-but-nonzero RSS summaries are better than a failed fetch.
+
+- Financial Times
+- The Economist (Finance & Economics)
+- Nikkei Asia *(re-evaluate after the pre-work fix; may no longer be empty)*
+- Nature
+- Science Magazine
+
+**Authenticated paywall — use `enrich.cookies_file`:**
+
+- **The Atlantic** — user holds a subscription. Export a Netscape `cookies.txt` from a logged-in browser (e.g. the "Get cookies.txt LOCALLY" extension) into `secrets/atlantic.cookies.txt` (path outside git). Set `fetch_article: true` and `cookies_file:` on the feed. Cookies expire periodically; re-export when `enrich_articles.json` starts showing `paywall` status for Atlantic URLs.
+
+**Substack cluster — no special config, but expect heavy enrichment volume:**
+
+Several Substacks publish very short teasers (China Talk ~36 chars, Slow Boring ~27, Cosmopolitan Globalist ~60, Daniel Drezner ~66, Adam Tooze ~72, Defense Tech and Acquisition ~59). These will all trigger threshold-based enrichment. Substack articles are almost always open, so fetches should succeed. Budget-wise this alone consumes ~8-10 of the 40 per-run fetch slots — expected and acceptable.
+
+**html_index scrapers — already handled, but prioritized targets:**
+
+Brad Setser, China Global South Project — 100% empty summaries by design. Set `fetch_article: true` at rollout.
+
+**Secrets handling:** `cookies_file` paths must resolve to files outside the git repo. Suggested location: `secrets/` at the project root, added to `.gitignore` and `.dockerignore`, mounted into the container as a read-only volume in `docker-compose.yml`.
+
 ## Rollout
 
-1. Land the audit tool first; run it against existing artifacts to produce a baseline report.
-2. Land the `enrich_articles` stage with no feeds opted in (`fetch_article: true` unset everywhere); threshold-based enrichment only. Observe cache growth, timing, and artifact contents over 2-3 runs.
-3. Review the baseline audit, add `fetch_article: true` to the worst offenders.
-4. Re-run the audit after 3-5 days. Iterate on per-feed overrides as needed.
+1. Land the `rss_feeds.py` body-field fallback fix first. Re-run pipeline once to confirm Nikkei summaries go from 0 → non-empty.
+2. Land the audit tool; run it against existing artifacts (including the fresh post-fix run) to produce a baseline report.
+3. Land the `enrich_articles` stage with the pre-seeded per-feed config above (`skip: true` on hard paywalls, `cookies_file` on The Atlantic, `fetch_article: true` on html_index sources). Observe cache growth, timing, and artifact contents over 2-3 runs.
+4. Review the baseline audit vs. post-rollout audit. Adjust per-feed overrides for outliers.
+5. Re-run the audit after 3-5 days. Iterate on per-feed overrides as needed.
