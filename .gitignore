@@ -7,3 +7,5 @@ output/
 .claude/
 cache/weather/*.json
 cache/rss_fetch_state.json
+cache/article_bodies/
+cookies/

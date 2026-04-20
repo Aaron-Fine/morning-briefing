@@ -58,3 +58,5 @@ Evidence guidance:
 - If two distinct source excerpts are already visible, include them.
 - If evidence is suggestive but incomplete, include the candidate and explain the weakness in `drop_if_weak_reason`.
 - Do not invent facts, sources, excerpts, URLs, or item IDs.
+
+Note on source material: Item summaries are canonicalized from the best available source text: RSS body fields when available, otherwise fetched article text where feed policy allows. Article text may have been captured up to 30 days ago (on the day the URL was first seen) rather than fetched fresh today; prefer analysis grounded in items from the most recent 24-48 hours but don't ignore context from older captures when it clarifies a current story.

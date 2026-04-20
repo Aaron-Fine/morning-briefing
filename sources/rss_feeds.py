@@ -361,8 +361,11 @@ def _items_from_parsed_feed(
             "title": entry.get("title", "").strip(),
             "url": entry.get("link", ""),
             "published": published.isoformat() if published else "",
-            "summary": _clean_summary(entry.get("summary", "")),
+            "summary": _clean_summary(_entry_body(entry)),
         }
+        native_body = _entry_body(entry)
+        if native_body:
+            item["_rss_body"] = native_body
         if tag:
             item["tag"] = tag
         if category:
@@ -370,6 +373,28 @@ def _items_from_parsed_feed(
         items.append(item)
 
     return items
+
+
+def _entry_body(entry) -> str:
+    """Return the first non-empty body-like field from a feedparser entry."""
+    candidates: list[str] = []
+    content = entry.get("content") or []
+    if content:
+        for part in content:
+            if isinstance(part, dict):
+                candidates.append(part.get("value", "") or "")
+
+    candidates.extend(
+        [
+            entry.get("summary", "") or "",
+            entry.get("description", "") or "",
+        ]
+    )
+
+    for candidate in candidates:
+        if candidate and candidate.strip():
+            return candidate
+    return ""
 
 
 def _items_from_html_index(feed_conf: dict, content: bytes) -> list[dict]:

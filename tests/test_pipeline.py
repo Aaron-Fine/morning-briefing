@@ -43,6 +43,7 @@ class TestStageArtifactKey:
     def test_known_stages_return_explicit_keys(self):
         mappings = {
             "collect": "raw_sources",
+            "enrich_articles": "enrich_articles",
             "compress": "compressed_transcripts",
             "analyze_domain": "domain_analysis",
             "prepare_calendar": "calendar",

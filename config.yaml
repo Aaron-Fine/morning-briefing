@@ -28,6 +28,13 @@ pipeline:
     - name: collect
       # No model needed — pure data collection
 
+    - name: enrich_articles
+      model:
+        provider: fireworks
+        model: "accounts/fireworks/models/minimax-m2p7"
+        max_tokens: 500
+        temperature: 0.2
+
     - name: compress
       model:
         provider: fireworks
@@ -125,6 +132,20 @@ desks:
   - { name: "science_biotech", categories: ["science-biotech"] }
   - { name: "econ", categories: ["econ-trade"] }
 
+enrich_articles:
+  enabled: true
+  min_usable_chars: 200
+  summarize_above_chars: 800
+  canonical_summary_max_chars: 700
+  max_fetches_per_run: 40
+  cache_ttl_days: 30
+  cache_failure_backoff_hours: 24
+  per_host_concurrency: 2
+  per_host_min_interval_ms: 500
+  min_body_chars: 300
+  timeout_seconds: 15
+  impersonate: "chrome"
+
 location:
   city: "Logan"
   state: "UT"
@@ -177,14 +198,14 @@ rss:
     # "What's missing" layer — flag when framing diverges from wire coverage
     - { url: "https://www.aljazeera.com/xml/rss/all.xml", name: "Al Jazeera", cap: 7, category: "non-western", reliability: "primary-reporting" }
     - { url: "https://scmp.com/rss/91/feed", name: "South China Morning Post", cap: 10, category: "non-western", reliability: "primary-reporting" }
-    - { url: "https://asia.nikkei.com/rss/feed/nar", name: "Nikkei Asia", cap: 8, category: "non-western", reliability: "primary-reporting" }
+    - { url: "https://asia.nikkei.com/rss/feed/nar", name: "Nikkei Asia", cap: 8, category: "non-western", reliability: "primary-reporting", enrich: { strategy: "skip" } }  # re-evaluate after body-fallback fix shows real summaries
     - { url: "https://www.thehindu.com/feeder/default.rss", name: "The Hindu", cap: 5, category: "non-western", reliability: "primary-reporting" }
     - { url: "https://www.dawn.com/feeds/home", name: "Dawn", cap: 5, category: "non-western", reliability: "primary-reporting" }
     - { url: "https://asiatimes.com/feed", name: "Asia Times", cap: 5, category: "non-western", reliability: "analysis-opinion" }
 
     # --- WESTERN ANALYSIS ---
     # "What it means" layer — interpretation and framing
-    - { url: "https://www.theatlantic.com/feed/all/", name: "The Atlantic", cap: 8, category: "western-analysis", reliability: "analysis-opinion" }
+    - { url: "https://www.theatlantic.com/feed/all/", name: "The Atlantic", cap: 8, category: "western-analysis", reliability: "analysis-opinion", enrich: { strategy: "fetch_with_cookies", cookies_file: "cookies/atlantic.cookies.txt" } }
 
     # --- DEFENSE / MILITARY ---
     - { url: "https://breakingdefense.com/feed/", name: "Breaking Defense", category: "defense-mil", reliability: "primary-reporting" }
@@ -210,18 +231,18 @@ rss:
 
     # --- ECONOMICS / TRADE ---
     - { url: "https://theovershoot.co/feed", name: "The Overshoot (Matt Klein)", cap: 3, category: "econ-trade", reliability: "analysis-opinion" }
-    - { url: "https://www.cfr.org/series/follow-the-money", name: "Brad Setser", cap: 3, category: "econ-trade", reliability: "analysis-opinion", mode: "html_index" }
-    - { url: "https://www.ft.com/rss/home", name: "Financial Times", cap: 5, category: "econ-trade", reliability: "primary-reporting" }
-    - { url: "https://www.economist.com/finance-and-economics/rss.xml", name: "The Economist (Finance & Economics)", cap: 5, category: "econ-trade", reliability: "analysis-opinion" }
-    - { url: "https://www.reuters.com/markets/", name: "Reuters Markets", cap: 5, category: "econ-trade", reliability: "primary-reporting", mode: "html_index", cooldown_on_error_seconds: 21600 }
+    - { url: "https://www.cfr.org/series/follow-the-money", name: "Brad Setser", cap: 3, category: "econ-trade", reliability: "analysis-opinion", mode: "html_index", enrich: { strategy: "fetch" } }
+    - { url: "https://www.ft.com/rss/home", name: "Financial Times", cap: 5, category: "econ-trade", reliability: "primary-reporting", enrich: { strategy: "skip" } }
+    - { url: "https://www.economist.com/finance-and-economics/rss.xml", name: "The Economist (Finance & Economics)", cap: 5, category: "econ-trade", reliability: "analysis-opinion", enrich: { strategy: "skip" } }
+    - { url: "https://www.reuters.com/markets/", name: "Reuters Markets", cap: 5, category: "econ-trade", reliability: "primary-reporting", mode: "html_index", cooldown_on_error_seconds: 21600, enrich: { strategy: "fetch" } }
 
     # --- GLOBAL SOUTH ---
     - { url: "https://www.ipsnews.net/news/headlines/feed/", name: "Inter Press Service", cap: 5, category: "global-south", reliability: "primary-reporting" }
-    - { url: "https://chinaglobalsouth.com/news-feed/", name: "China Global South Project", cap: 3, category: "global-south", reliability: "analysis-opinion", mode: "html_index" }
+    - { url: "https://chinaglobalsouth.com/news-feed/", name: "China Global South Project", cap: 3, category: "global-south", reliability: "analysis-opinion", mode: "html_index", enrich: { strategy: "fetch" } }
 
     # --- PERSPECTIVE DIVERSITY ---
     # "Stress test" layer — only surface when contradicting consensus
-    - { url: "https://diff.substack.com/", name: "The Diff (Byrne Hobart)", cap: 3, category: "perspective-diversity", reliability: "analysis-opinion", mode: "html_index" }
+    - { url: "https://diff.substack.com/", name: "The Diff (Byrne Hobart)", cap: 3, category: "perspective-diversity", reliability: "analysis-opinion", mode: "html_index", enrich: { strategy: "fetch" } }
     - { url: "https://slowboring.substack.com/feed", name: "Slow Boring (Matt Yglesias)", cap: 3, category: "perspective-diversity", reliability: "analysis-opinion" }
 
     # --- CYBERSECURITY ---
@@ -244,8 +265,8 @@ rss:
 
     # --- SCIENCE / BIOTECH ---
     # Frontier science and biotech with geopolitical or economic implications
-    - { url: "https://www.nature.com/nature.rss", name: "Nature", cap: 5, category: "science-biotech", reliability: "primary-reporting" }
-    - { url: "https://www.science.org/rss/news_current.xml", name: "Science Magazine", cap: 5, category: "science-biotech", reliability: "primary-reporting" }
+    - { url: "https://www.nature.com/nature.rss", name: "Nature", cap: 5, category: "science-biotech", reliability: "primary-reporting", enrich: { strategy: "skip" } }
+    - { url: "https://www.science.org/rss/news_current.xml", name: "Science Magazine", cap: 5, category: "science-biotech", reliability: "primary-reporting", enrich: { strategy: "skip" } }
     - { url: "https://www.statnews.com/feed/", name: "STAT News", cap: 5, category: "science-biotech", reliability: "primary-reporting" }
     - { url: "https://endpts.com/feed/", name: "Endpoints News", cap: 3, category: "science-biotech", reliability: "primary-reporting" }
 

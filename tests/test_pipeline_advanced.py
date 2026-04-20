@@ -263,6 +263,7 @@ class TestStageMetadataConsistency:
     def test_known_stages_have_metadata_entries(self):
         known_stages = [
             "collect",
+            "enrich_articles",
             "compress",
             "analyze_domain",
             "prepare_calendar",
@@ -292,6 +293,7 @@ class TestStageArtifactKeyMapping:
     def test_all_known_stages_mapped(self):
         known_stages = [
             "collect",
+            "enrich_articles",
             "compress",
             "analyze_domain",
             "prepare_calendar",
@@ -308,7 +310,7 @@ class TestStageArtifactKeyMapping:
         ]
         for stage in known_stages:
             key = _stage_artifact_key(stage)
-            if stage == "briefing_packet":
+            if stage in {"briefing_packet", "enrich_articles"}:
                 continue  # intentionally maps to itself
             assert key != stage, (
                 f"Stage '{stage}' falls through to identity fallback"

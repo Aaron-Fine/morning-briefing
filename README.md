@@ -20,6 +20,7 @@ Every morning at 6:00 AM MT, this container:
 
 2. **Processes** sources through a staged AI pipeline (`pipeline.py`):
    - **collect** — Fetches all sources (RSS, YouTube transcripts, weather, markets, CFM)
+   - **enrich_articles** — Normalizes RSS items to canonical sanitized summaries using native RSS body fields or fetched article text
    - **compress** — Pre-compresses YouTube transcripts to ~400–800 word summaries
    - **analyze_domain** — Seven specialist desks run in parallel: geopolitics, defense/space, AI/tech, energy/materials, culture/structural, science/biotech, economics
    - **prepare_*** — Calendar, weather (HTML email-safe chart), spiritual, local news enrichment passes
@@ -55,7 +56,8 @@ graph LR
 
 ```mermaid
 graph TD
-    collect --> compress
+    collect --> enrich_articles
+    enrich_articles --> compress
     compress --> analyze_domain
     analyze_domain -->|"7 desks in parallel"| prepare["prepare_*"]
     prepare --> seams
@@ -298,6 +300,51 @@ desks:
 ```
 
 **`rss.feeds`** — Feed list with optional `cap` (max items per feed) and `category` for editorial treatment.
+
+**`enrich_articles`** — RSS summary normalization. The stage chooses the best native RSS text first, fetches article HTML only when configured or when native text is too thin, and writes one canonical sanitized `summary` for downstream stages.
+
+```yaml
+enrich_articles:
+  enabled: true
+  min_usable_chars: 200
+  summarize_above_chars: 800
+  canonical_summary_max_chars: 700
+  max_fetches_per_run: 40
+  cache_ttl_days: 30
+  cache_failure_backoff_hours: 24
+  per_host_concurrency: 2
+  per_host_min_interval_ms: 500
+```
+
+Per-feed overrides live under `rss.feeds[].enrich`:
+
+```yaml
+enrich:
+  strategy: "auto"  # auto | rss_only | fetch | fetch_with_cookies | skip
+  cookies_file: "cookies/atlantic.cookies.txt"
+  min_body_chars: 500
+  timeout_seconds: 30
+```
+
+Cached article records live in `cache/article_bodies/`. Provenance and before/after lengths are written to `output/artifacts/YYYY-MM-DD/enrich_articles.json`, not to prompt-visible RSS fields.
+
+### Authenticated Fetches
+
+Subscription sites can use browser-exported Netscape `cookies.txt` files. Put domain-scoped cookie files in `cookies/` at the project root; the directory is gitignored and mounted read-only into Docker. Reference the in-container path from `enrich.cookies_file`.
+
+When `enrich_articles.json` starts showing `paywall` for a feed that should have authenticated access, refresh the cookie export.
+
+### RSS Quality Audit
+
+Run the audit manually to identify thin feeds, paywall-heavy feeds, and stale cookies:
+
+```bash
+docker compose run --rm --entrypoint "" morning-digest python scripts/audit_rss_quality.py
+docker compose run --rm --entrypoint "" morning-digest \
+  python scripts/audit_rss_quality.py --window 30 --output output/audits/rss_quality_$(date -u +%F).md
+```
+
+The `Recommend` column suggests `strategy: "fetch"`, `strategy: "rss_only"`, `strategy: "skip"`, cookie refreshes, or `ok`.
 
 **`markets.symbols`** — Finnhub ticker symbols. ETFs work on free tier; raw indices (`^GSPC`) do not.
 

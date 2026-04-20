@@ -95,3 +95,5 @@ Rules:
 - The `tag` field must use only the exact allowed vocabulary listed above.
 - `worth_reading` should favor durable analysis, essays, and explainers over incremental breaking-news updates.
 - Output valid JSON only. Do not wrap it in markdown fences.
+
+Note on source material: Item summaries are canonicalized from the best available source text: RSS body fields when available, otherwise fetched article text where feed policy allows. Article text may have been captured up to 30 days ago (on the day the URL was first seen) rather than fetched fresh today; prefer analysis grounded in items from the most recent 24-48 hours but don't ignore context from older captures when it clarifies a current story.

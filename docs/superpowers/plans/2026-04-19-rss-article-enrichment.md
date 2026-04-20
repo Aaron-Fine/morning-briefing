@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Upgrade thin/empty RSS summaries by fetching article bodies, extracting with trafilatura, and distilling via a cheap LLM pass — all transparent to downstream stages, so they see a single unified `summary` field regardless of whether content came from the RSS feed or a fetched article.
+**Goal:** Normalize every RSS item to the same downstream contract: a sanitized, canonical `summary` field with comparable density and length, regardless of whether the source text came from RSS `summary`, RSS `description`, RSS `content:encoded`, an anonymous article fetch, or an authenticated article fetch.
 
-**Architecture:** Three pieces land in sequence: (1) a body-field fallback in `sources/rss_feeds.py` that recovers `content:encoded` bodies the current parser drops; (2) a new `enrich_articles` pipeline stage between `collect` and `compress` that fetches qualifying items via `curl-cffi` (Chrome TLS fingerprint), extracts with `trafilatura`, distills via Fireworks, and caches to disk with a 30-day TTL; (3) a standalone audit tool at `scripts/audit_rss_quality.py` that reads existing artifacts and ranks feeds by quality. Downstream stages remain unaware — same schema, same code path, enriched items and native-RSS items both arrive as `item["summary"]`.
+**Architecture:** Four pieces land in sequence: (1) a body-field fallback in `sources/rss_feeds.py` that recovers `content:encoded` bodies the current parser drops; (2) a small content-selection layer that chooses the best native RSS text before deciding whether to fetch; (3) a new `enrich_articles` pipeline stage between `collect` and `compress` that normalizes qualifying items via `curl-cffi`, `trafilatura`, Fireworks distillation, and a 30-day cache; (4) a standalone audit tool at `scripts/audit_rss_quality.py` that reads existing artifacts and ranks feeds by quality. Downstream stages remain unaware — same schema, same code path, all items arrive as `item["summary"]`.
 
 **Tech Stack:** Python 3.12, `feedparser`, `curl-cffi` (new), `trafilatura` (new), `pytest`, Fireworks LLM via existing `morning_digest.llm.call_llm`, Docker (`python:3.12-slim` base).
 
@@ -14,26 +14,60 @@
 
 ---
 
+## Clarifications captured 2026-04-20 (at start of implementation)
+
+1. **Branch.** Implementation happens on `feat/rss-article-enrichment`, cut from `main` at the start of the session. Do not commit to `main` directly.
+
+2. **Atlantic cookies path.** The user exported cookies to `/tmp/www.theatlantic.com_cookies.txt` (Netscape format, `.theatlantic.com` scope — not the plan's placeholder `/tmp/test-atlantic.cookies.txt`). Task 0.3 uses this path. The in-container mount path for Task 8 remains `cookies/atlantic.cookies.txt` — copy the /tmp file into `cookies/` (not committed; `cookies/*` is gitignored).
+
+3. **Fireworks quota.** Confirmed by the user: plenty of headroom for MiniMax on Fireworks. Task 0.4 is satisfied — no need to re-check the dashboard.
+
+4. **Docker socket + sandbox.** Claude Code's filesystem sandbox blocks the Docker socket by default. Every `docker compose run` / `docker compose build` needs either `dangerouslyDisableSandbox: true` per call, or `/sandbox` whitelisting of `/var/run/docker.sock`. Expect and accept this on every Docker-touching step.
+
+5. **Task 0 container model is broken as written.** The plan's Task 0.1 does `docker compose run --rm ... pip install ...` followed by a *separate* `docker compose run --rm ... python -c '...'` — but `--rm` discards the first container, so the install doesn't persist into the second run. Chain them in a single container: `docker compose run --rm --entrypoint "" morning-digest bash -c "pip install ... && python -c '...'"`. Same pattern for 0.2 and 0.3 until Task 2 bakes the deps into the image.
+
+6. **Task 0.2 URL list.** The plan's hardcoded Substack URLs are stale and may 404. Pick currently-live articles from Substack-hosted feeds in `config.yaml` before running the check, or accept a lower-signal pass if URLs return 404. If Substack extraction is clearly broken (empty/subscribe-CTA only text), flag the Substack-specific fallback planned in Task 4 (see note at Task 4 head).
+
+7. **Subagent usage.** Serial tasks first (Task 0 → Task 1 → Task 2), because Tasks 3–6 depend on the Docker image having curl-cffi/trafilatura baked in via Task 2. After Task 2, Tasks 3/4/5/6 are independent and safe to parallelize across subagents. Tasks 7 onward depend on 3–6 and are serial again.
+
+8. **Canonical summary contract.** The enrichment stage is a normalizer, not just a thin-item fetcher. It must:
+   - choose the best available native RSS text first (`content:encoded` / `entry.content`, then `summary`, then `description`);
+   - fetch article HTML only when the native text is insufficient or feed policy explicitly says to fetch;
+   - distill any long source text, whether native RSS or fetched HTML, to the same target size;
+   - sanitize the final summary before writing `item["summary"]`, because `collect` has already run source sanitization;
+   - keep provenance and before/after lengths in `enrich_articles.json`, not in downstream prompt-visible fields.
+
+9. **Canonical summary target.** Do not produce 300-500 word item summaries unless downstream prompt budgets and sanitizer caps are widened. Current downstream consumers use roughly 500-600 chars of RSS summary context, so the first implementation target is **500-700 characters / about 80-120 words** of dense factual prose.
+
+10. **Pipeline metadata.** Registering a new stage in `config.yaml` is not enough. Add `enrich_articles` to `_STAGE_METADATA`, `_stage_artifact_key` expectations, and the known-stage tests. If the stage is non-critical, its empty output must preserve the existing `raw_sources` in context rather than replacing it.
+
+---
+
 ## File Structure
 
 **New files:**
+- `sources/article_content.py` — best-available source text selection over RSS fields, fetched extraction results, and per-feed strategy. Keeps acquisition decisions out of stage orchestration.
 - `sources/article_fetch.py` — curl-cffi HTTP client + Netscape cookies.txt loader. Isolated so tests can mock the HTTP boundary cleanly.
 - `sources/article_extract.py` — trafilatura wrapper + paywall heuristic classifier. Pure functions over HTML bytes.
 - `sources/article_cache.py` — disk cache CRUD (`get`, `put`, `prune`). Read/write JSON files keyed by `sha1(url)`.
 - `stages/enrich_articles.py` — pipeline stage orchestration: dedup, decision, concurrency, LLM distillation, artifact emission.
-- `prompts/enrich_article_system.md` — system prompt for article distillation (300-500 word output).
+- `prompts/enrich_article_system.md` — system prompt for canonical item-summary distillation (500-700 chars / about 80-120 words).
 - `scripts/audit_rss_quality.py` — standalone audit tool.
 - `tests/test_rss_feeds_body_fallback.py` — pre-work fix coverage.
+- `tests/test_article_content.py` — source-text selection, strategy, and summarization threshold coverage.
 - `tests/test_article_fetch.py` — cookies loader + client wiring.
 - `tests/test_article_extract.py` — extraction + paywall heuristic.
 - `tests/test_article_cache.py` — cache hit/miss/expiry/corrupt.
-- `tests/test_enrich_articles.py` — decision logic, dedup, failure modes.
+- `tests/test_enrich_articles.py` — canonical summary normalization, decision logic, dedup, sanitization, failure modes.
 - `tests/test_audit_rss_quality.py` — audit scoring and empty input.
 
 **Modified files:**
 - `sources/rss_feeds.py` — add `_entry_body()` helper; swap call site.
 - `requirements.txt` — add `trafilatura>=1.8`, `curl-cffi>=0.7`.
 - `config.yaml` — add `enrich_articles:` global block, register stage, add per-feed `enrich:` blocks on pre-seeded feeds.
+- `pipeline.py` — add `enrich_articles` stage metadata and non-critical empty-output handling that does not clobber `raw_sources`.
+- `tests/test_pipeline.py`, `tests/test_pipeline_advanced.py` — add stage metadata/key expectations for `enrich_articles`.
+- `stages/seams.py` — defensively sanitize RSS summaries before adding raw source snippets to seam prompts.
 - `docker-compose.yml` — mount `./cookies:/app/cookies:ro`.
 - `.gitignore` — add `cookies/`.
 - `.dockerignore` — add `cookies/` (create file if absent).
@@ -54,10 +88,8 @@
 Run:
 ```bash
 cd /home/aaron/Morning-Digest
-docker compose run --rm --entrypoint "" morning-digest \
-  pip install curl-cffi==0.7.4 trafilatura==1.12.2
-docker compose run --rm --entrypoint "" morning-digest \
-  python -c "from curl_cffi import requests; r = requests.get('https://example.com', impersonate='chrome'); print(r.status_code, len(r.text))"
+docker compose run --rm --entrypoint "" morning-digest bash -c \
+  "pip install curl-cffi==0.7.4 trafilatura==1.12.2 && python -c \"from curl_cffi import requests; r = requests.get('https://example.com', impersonate='chrome'); print(r.status_code, len(r.text))\""
 ```
 Expected: `200 <some positive length>`. If install fails (wheel missing) or the Chrome impersonation errors out, stop and report — the design assumes these work on `python:3.12-slim`.
 
@@ -65,31 +97,33 @@ Expected: `200 <some positive length>`. If install fails (wheel missing) or the 
 
 Run:
 ```bash
-docker compose run --rm --entrypoint "" morning-digest python - <<'PY'
+docker compose run --rm --entrypoint "" morning-digest bash -c "pip install curl-cffi==0.7.4 trafilatura==1.12.2 >/tmp/preflight-pip.log && python - <<'PY'
 import trafilatura
 urls = [
-    "https://slowboring.com/p/one-cheer-for-the-democratic-party",
-    "https://adamtooze.substack.com/p/chartbook-newsletter-101",
-    "https://simonwillison.net/2024/Sep/10/",
+    # Replace these with currently-live article URLs from Substack-hosted feeds in config.yaml.
+    "https://slowboring.com/",
+    "https://adamtooze.substack.com/",
+    "https://simonwillison.net/atom/everything/",
 ]
 for url in urls:
     html = trafilatura.fetch_url(url)
     text = trafilatura.extract(html) if html else ""
     print(f"{url}\n  extracted: {len(text) if text else 0} chars\n  first 200: {text[:200] if text else '(none)'!r}\n")
 PY
+"
 ```
-Expected: 500+ chars of clean article prose per URL, no subscribe CTAs or navigation in the first 200 chars. If extraction is poor on Substack, note it and plan a Substack-specific fallback in Task 4.
+Expected after substituting live article URLs: 500+ chars of clean article prose per URL, no subscribe CTAs or navigation in the first 200 chars. If extraction is poor on Substack, note it and plan a Substack-specific fallback in Task 4.
 
 - [ ] **Step 0.3: Verify cookies.txt round-trip**
 
 Manual step — cannot be scripted. Ask the user to:
 1. Install "Get cookies.txt LOCALLY" browser extension.
 2. Log into The Atlantic.
-3. Export cookies for `theatlantic.com` to `/tmp/test-atlantic.cookies.txt`.
+3. Export cookies for `theatlantic.com` to `/tmp/www.theatlantic.com_cookies.txt`.
 
 Then run:
 ```bash
-docker compose run --rm -v /tmp/test-atlantic.cookies.txt:/tmp/cookies.txt:ro --entrypoint "" morning-digest python - <<'PY'
+docker compose run --rm -v /tmp/www.theatlantic.com_cookies.txt:/tmp/cookies.txt:ro --entrypoint "" morning-digest bash -c "pip install curl-cffi==0.7.4 trafilatura==1.12.2 >/tmp/preflight-pip.log && python - <<'PY'
 from http.cookiejar import MozillaCookieJar
 from curl_cffi import requests
 jar = MozillaCookieJar("/tmp/cookies.txt")
@@ -98,6 +132,7 @@ print(f"jar has {len(list(jar))} cookies")
 r = requests.get("https://www.theatlantic.com/", impersonate="chrome", cookies=jar)
 print(f"GET homepage -> {r.status_code}, {len(r.text)} chars")
 PY
+"
 ```
 Expected: `jar has N cookies` where N > 5; homepage fetch returns 200 and HTML containing recognizable subscriber UI strings (e.g. "My Account" or "Sign out"). If `jar.load` fails, we need an adapter — document the error and plan accordingly in Task 3.
 
@@ -758,7 +793,7 @@ class TestArticleCache:
             url="https://example.com/x",
             status="ok",
             http_status=200,
-            compressed_body="distilled body",
+            canonical_summary="distilled body",
             raw_length=4000,
             source_name="Example",
             error="",
@@ -766,7 +801,7 @@ class TestArticleCache:
         entry = cache.get("https://example.com/x")
         assert entry is not None
         assert entry.status == "ok"
-        assert entry.compressed_body == "distilled body"
+        assert entry.canonical_summary == "distilled body"
         assert entry.raw_length == 4000
 
     def test_ok_entry_within_ttl_is_hit(self, cache):
@@ -829,8 +864,8 @@ class TestArticleCache:
     def test_sha1_keying_collision_free(self, cache):
         cache.put("https://a/x", "ok", 200, "A body", 100, "Src", "")
         cache.put("https://b/x", "ok", 200, "B body", 100, "Src", "")
-        assert cache.get("https://a/x").compressed_body == "A body"
-        assert cache.get("https://b/x").compressed_body == "B body"
+        assert cache.get("https://a/x").canonical_summary == "A body"
+        assert cache.get("https://b/x").canonical_summary == "B body"
 ```
 
 - [ ] **Step 5.2: Run tests to verify they fail**
@@ -844,7 +879,7 @@ Expected: `ModuleNotFoundError: sources.article_cache`.
 
 Create `sources/article_cache.py`:
 ```python
-"""Disk-backed article body cache.
+"""Disk-backed article enrichment cache.
 
 One JSON file per URL, keyed by sha1(url). Hit policy:
   - status="ok" within ttl_days -> hit
@@ -875,7 +910,7 @@ class CacheEntry:
     status: str
     http_status: Optional[int]
     raw_length: int
-    compressed_body: str
+    canonical_summary: str
     source_name: str
     error: str
 
@@ -914,7 +949,7 @@ class ArticleCache:
         url: str,
         status: str,
         http_status: Optional[int],
-        compressed_body: str,
+        canonical_summary: str,
         raw_length: int,
         source_name: str,
         error: str,
@@ -925,7 +960,7 @@ class ArticleCache:
             "status": status,
             "http_status": http_status,
             "raw_length": raw_length,
-            "compressed_body": compressed_body,
+            "canonical_summary": canonical_summary,
             "source_name": source_name,
             "error": error,
         }
@@ -962,7 +997,7 @@ def _entry_from_dict(data: dict, fetched_at: datetime) -> CacheEntry:
         status=data["status"],
         http_status=data.get("http_status"),
         raw_length=data.get("raw_length", 0),
-        compressed_body=data.get("compressed_body", ""),
+        canonical_summary=data.get("canonical_summary", ""),
         source_name=data.get("source_name", ""),
         error=data.get("error", ""),
     )
@@ -997,7 +1032,11 @@ cache miss and get rewritten on the next fetch attempt."
 
 Create `prompts/enrich_article_system.md`:
 ```markdown
-You are an article compressor. Given the full text of a news article, produce a dense summary that preserves:
+You are an article summary normalizer. Given source text from an RSS item or fetched article, produce one dense canonical summary for downstream news analysis.
+
+Target length: 500-700 characters, about 80-120 words. Match it closely.
+
+Preserve:
 1. All concrete claims, events, and factual assertions
 2. Named actors (people, organizations, countries, programs) and what each did
 3. Specific numbers, dates, locations, and technical terms
@@ -1010,8 +1049,6 @@ Strip all of the following:
 - Pull quotes and pull-quote duplication of body text
 - Author bios, publication metadata, ad copy
 - Social-share widgets, comment counts, reaction prompts
-
-The target length is 300–500 words. Match it closely.
 
 Output plain text only. No JSON. No markdown headers. No preamble ("Here is a summary of...") — go directly into the content.
 ```
@@ -1032,464 +1069,106 @@ git commit -m "Add enrich_article system prompt for article distillation"
 
 ---
 
-## Task 7: `stages/enrich_articles.py` — the pipeline stage
+## Task 7: `stages/enrich_articles.py` — canonical summary normalizer
 
 **Files:**
+- Create: `sources/article_content.py`
 - Create: `stages/enrich_articles.py`
+- Create: `tests/test_article_content.py`
 - Create: `tests/test_enrich_articles.py`
 
-- [ ] **Step 7.1: Write failing tests**
+The stage is a normalizer, not only a fetcher. Its invariant:
 
-Create `tests/test_enrich_articles.py`:
-```python
-"""Tests for stages.enrich_articles."""
-
-import sys
-import os
-from unittest.mock import patch, MagicMock
-
-import pytest
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-from stages.enrich_articles import (
-    run,
-    _should_enrich,
-    _dedup_by_url,
-)
-
-
-def _make_rss_items():
-    return [
-        {"source": "A", "title": "one", "url": "https://a/1", "summary": "x" * 50, "category": "x"},
-        {"source": "A", "title": "two", "url": "https://a/2", "summary": "x" * 400, "category": "x"},
-        {"source": "B", "title": "one", "url": "https://b/1", "summary": "", "category": "y"},
-        {"source": "C", "title": "one", "url": "https://a/1", "summary": "x" * 50, "category": "z"},
-    ]
-
-
-def _make_config(feeds_overrides=None, global_overrides=None):
-    feeds = [
-        {"name": "A", "url": "https://a/", "category": "x"},
-        {"name": "B", "url": "https://b/", "category": "y"},
-        {"name": "C", "url": "https://c/", "category": "z"},
-    ]
-    if feeds_overrides:
-        for feed in feeds:
-            if feed["name"] in feeds_overrides:
-                feed.update(feeds_overrides[feed["name"]])
-    enrich = {
-        "enabled": True,
-        "threshold_chars": 200,
-        "max_fetches_per_run": 40,
-        "cache_ttl_days": 30,
-        "cache_failure_backoff_hours": 24,
-        "min_body_chars": 300,
-        "timeout_seconds": 15,
-        "impersonate": "chrome",
-    }
-    if global_overrides:
-        enrich.update(global_overrides)
-    return {"rss": {"feeds": feeds}, "enrich_articles": enrich}
-
-
-class TestDedup:
-    def test_preserves_first_occurrence(self):
-        items = _make_rss_items()
-        canonical_by_url, order = _dedup_by_url(items)
-        assert canonical_by_url["https://a/1"] is items[0]
-        assert canonical_by_url["https://a/2"] is items[1]
-        assert canonical_by_url["https://b/1"] is items[2]
-        assert len(canonical_by_url) == 3
-        assert order == ["https://a/1", "https://a/2", "https://b/1"]
-
-
-class TestShouldEnrich:
-    def test_skip_true_returns_false_even_when_thin(self):
-        item = {"summary": "", "url": "https://x/", "source": "A"}
-        assert _should_enrich(item, {"enrich": {"skip": True}}, threshold=200) is False
-
-    def test_fetch_article_true_returns_true_even_when_fat(self):
-        item = {"summary": "x" * 500, "url": "https://x/", "source": "A"}
-        assert _should_enrich(item, {"enrich": {"fetch_article": True}}, threshold=200) is True
-
-    def test_thin_summary_triggers_enrichment(self):
-        item = {"summary": "x" * 50, "url": "https://x/", "source": "A"}
-        assert _should_enrich(item, {}, threshold=200) is True
-
-    def test_fat_summary_does_not_trigger_enrichment(self):
-        item = {"summary": "x" * 500, "url": "https://x/", "source": "A"}
-        assert _should_enrich(item, {}, threshold=200) is False
-
-    def test_missing_enrich_block_uses_threshold(self):
-        item = {"summary": "x" * 50, "url": "https://x/", "source": "A"}
-        assert _should_enrich(item, {"name": "A"}, threshold=200) is True
-
-
-class TestRun:
-    @patch("stages.enrich_articles._fetch_extract_distill")
-    def test_enriches_thin_items_and_leaves_fat_items_alone(self, mock_pipeline, tmp_path):
-        mock_pipeline.return_value = ("ENRICHED BODY", "ok", 200, 2000, "")
-        context = {"raw_sources": {"rss": _make_rss_items()}}
-        config = _make_config()
-        config["_test_cache_dir"] = str(tmp_path / "article_bodies")
-        config["_test_artifact_dir"] = str(tmp_path / "artifacts")
-
-        out = run(context, config, model_config={"provider": "fireworks", "model": "x", "max_tokens": 500, "temperature": 0.2})
-        items = out["raw_sources"]["rss"]
-
-        # Item 0 (thin, url https://a/1) enriched
-        assert items[0]["summary"] == "ENRICHED BODY"
-        # Item 1 (fat, https://a/2) untouched
-        assert items[1]["summary"] == "x" * 400
-        # Item 2 (empty, https://b/1) enriched
-        assert items[2]["summary"] == "ENRICHED BODY"
-        # Item 3 (duplicate URL of item 0) backfilled from canonical
-        assert items[3]["summary"] == "ENRICHED BODY"
-
-    @patch("stages.enrich_articles._fetch_extract_distill")
-    def test_skip_flag_bypasses_enrichment(self, mock_pipeline, tmp_path):
-        mock_pipeline.return_value = ("ENRICHED BODY", "ok", 200, 2000, "")
-        context = {"raw_sources": {"rss": _make_rss_items()}}
-        config = _make_config(feeds_overrides={"A": {"enrich": {"skip": True}}})
-        config["_test_cache_dir"] = str(tmp_path / "article_bodies")
-        config["_test_artifact_dir"] = str(tmp_path / "artifacts")
-
-        out = run(context, config, model_config={"provider": "fireworks", "model": "x", "max_tokens": 500, "temperature": 0.2})
-        items = out["raw_sources"]["rss"]
-
-        # A feed items unchanged (skip wins over thin)
-        assert items[0]["summary"] == "x" * 50
-        # B feed still enriched
-        assert items[2]["summary"] == "ENRICHED BODY"
-
-    @patch("stages.enrich_articles._fetch_extract_distill")
-    def test_max_fetches_per_run_caps_work(self, mock_pipeline, tmp_path):
-        mock_pipeline.return_value = ("ENRICHED", "ok", 200, 2000, "")
-        # 50 thin items, cap at 10 fetches
-        items = [
-            {"source": "A", "title": f"t{i}", "url": f"https://a/{i}", "summary": "x" * 50, "category": "x"}
-            for i in range(50)
-        ]
-        context = {"raw_sources": {"rss": items}}
-        config = _make_config(global_overrides={"max_fetches_per_run": 10})
-        config["_test_cache_dir"] = str(tmp_path / "article_bodies")
-        config["_test_artifact_dir"] = str(tmp_path / "artifacts")
-
-        run(context, config, model_config={"provider": "fireworks", "model": "x", "max_tokens": 500, "temperature": 0.2})
-        assert mock_pipeline.call_count == 10
-
-    @patch("stages.enrich_articles._fetch_extract_distill")
-    def test_fetch_failure_leaves_original_summary(self, mock_pipeline, tmp_path):
-        mock_pipeline.return_value = ("", "http_error", 500, 0, "boom")
-        context = {"raw_sources": {"rss": _make_rss_items()}}
-        config = _make_config()
-        config["_test_cache_dir"] = str(tmp_path / "article_bodies")
-        config["_test_artifact_dir"] = str(tmp_path / "artifacts")
-
-        out = run(context, config, model_config={"provider": "fireworks", "model": "x", "max_tokens": 500, "temperature": 0.2})
-        items = out["raw_sources"]["rss"]
-
-        assert items[0]["summary"] == "x" * 50
-        assert items[2]["summary"] == ""  # was empty, stays empty
-
-    @patch("stages.enrich_articles._fetch_extract_distill")
-    def test_disabled_flag_short_circuits(self, mock_pipeline, tmp_path):
-        mock_pipeline.return_value = ("ENRICHED BODY", "ok", 200, 2000, "")
-        context = {"raw_sources": {"rss": _make_rss_items()}}
-        config = _make_config(global_overrides={"enabled": False})
-        config["_test_cache_dir"] = str(tmp_path / "article_bodies")
-        config["_test_artifact_dir"] = str(tmp_path / "artifacts")
-
-        out = run(context, config, model_config={"provider": "fireworks", "model": "x", "max_tokens": 500, "temperature": 0.2})
-        items = out["raw_sources"]["rss"]
-
-        # Nothing enriched
-        assert items[0]["summary"] == "x" * 50
-        assert items[2]["summary"] == ""
-        mock_pipeline.assert_not_called()
+```text
+raw feed item -> best available source text -> sanitized canonical summary
 ```
 
-- [ ] **Step 7.2: Run tests to verify they fail**
+Downstream stages see only the canonical `item["summary"]`. Provenance, before/after lengths, fetch status, and failure details live in `enrich_articles.json`.
+
+- [ ] **Step 7.1: Write failing source-selection tests**
+
+Create `tests/test_article_content.py` covering:
+
+- `best_native_text(entry_or_item)` prefers full body-like text over teaser text: `content[0].value` / `content:encoded` first, then `summary`, then `description`.
+- Blank/HTML-only/whitespace fields are ignored.
+- `resolve_strategy(feed_conf)` supports legacy flags and the new explicit strategies:
+  - `skip: true` and `strategy: "skip"` always skip.
+  - `fetch_article: true` maps to `strategy: "fetch"` unless `cookies_file` is set, in which case it maps to `strategy: "fetch_with_cookies"`.
+  - no setting maps to `strategy: "auto"`.
+  - `strategy: "rss_only"` never fetches.
+- `needs_fetch(source_text, strategy, min_usable_chars)` returns true only when strategy requires fetch or auto-mode native text is too short.
+- `needs_distillation(source_text, summarize_above_chars)` returns true for long native or fetched text, not just fetched text.
+
+- [ ] **Step 7.2: Implement `sources/article_content.py`**
+
+Keep this module pure. It should not call the network or LLM. It should expose helpers used by `stages/enrich_articles.py`:
+
+```python
+VALID_STRATEGIES = {"auto", "rss_only", "fetch", "fetch_with_cookies", "skip"}
+
+def best_native_text(item: dict) -> tuple[str, str]:
+    """Return (text, origin), preferring body-like RSS fields over teaser fields."""
+
+def resolve_strategy(feed_conf: dict) -> str:
+    """Resolve enrich.strategy plus legacy skip/fetch_article flags."""
+
+def needs_fetch(source_text: str, strategy: str, min_usable_chars: int) -> bool:
+    """Return whether article HTML should be fetched."""
+
+def needs_distillation(source_text: str, summarize_above_chars: int) -> bool:
+    """Return whether source text should go through the LLM normalizer."""
+```
+
+- [ ] **Step 7.3: Write failing stage tests**
+
+Create `tests/test_enrich_articles.py` covering:
+
+- Dedup by URL; first occurrence wins and duplicates receive the canonical summary.
+- `strategy: "skip"` leaves the original sanitized summary untouched.
+- `strategy: "rss_only"` uses native text only and never calls fetch.
+- `strategy: "auto"` fetches when native text is below `min_usable_chars`.
+- `strategy: "fetch"` and `fetch_article: true` fetch even when native text is present.
+- Long native RSS text goes through the same distillation path as fetched article text.
+- Short-but-usable native RSS text is cleaned/sanitized and assigned to `summary` without LLM.
+- Final assigned summaries are sanitized with `sanitize_source_content(..., max_chars=canonical_summary_max_chars)`.
+- Fetch, extraction, and LLM failures leave the original summary unchanged.
+- LLM failure may fall back to a sanitized excerpt only if the source text is otherwise usable; the fallback must respect `canonical_summary_max_chars`.
+- `max_fetches_per_run` caps network fetches, not native RSS normalization.
+- Per-host throttling is applied around fetches: max `per_host_concurrency` and at least `per_host_min_interval_ms` between same-host requests.
+- The returned output includes `{"raw_sources": ..., "enrich_articles": {"records": [...]}}`, and each record includes at least: `url`, `source`, `status`, `source_text_origin`, `native_length`, `fetched_length`, `summary_length`, `http_status`, `error`.
+
+- [ ] **Step 7.4: Implement `stages/enrich_articles.py`**
+
+Implementation requirements:
+
+- Deep-copy `context["raw_sources"]`; never mutate the caller's context in place.
+- Use `sources.article_content` to select native source text and strategy.
+- Check cache before fetching; cache successful fetched extraction and canonical summary metadata.
+- Distill any source text longer than `summarize_above_chars`, regardless of whether it came from RSS or HTML.
+- Use `prompts/enrich_article_system.md` to produce 500-700 chars / about 80-120 words, not 300-500 words.
+- Sanitize the final summary before assigning `item["summary"]`, because `collect` sanitization has already run.
+- Do not add prompt-visible provenance fields to RSS items. Provenance goes only in the `enrich_articles` artifact.
+- Implement the spec's per-host limiter using a per-host semaphore plus lock-protected last-fetch timestamp.
+- Treat the stage as non-critical: every failure path preserves the original item summary and records the failure.
+- Write `enrich_articles.json` via normal pipeline artifact saving by returning `{"enrich_articles": {"records": status_records}}`; only use `_test_artifact_dir` in tests.
+
+- [ ] **Step 7.5: Run focused tests**
 
 ```bash
-docker compose run --rm --entrypoint "" morning-digest pytest tests/test_enrich_articles.py -v
-```
-Expected: `ModuleNotFoundError: stages.enrich_articles`.
-
-- [ ] **Step 7.3: Implement `stages/enrich_articles.py`**
-
-Create `stages/enrich_articles.py`:
-```python
-"""Stage: enrich_articles — fetch + extract + distill thin RSS items.
-
-Inputs:  raw_sources (dict) from collect
-Outputs: raw_sources (dict) with upgraded item["summary"] fields, plus
-         an enrich_articles.json artifact listing per-item status.
-
-Downstream stages are unaware of enrichment — a native-thick RSS
-summary and a distilled article body both arrive as item["summary"].
-"""
-
-from __future__ import annotations
-
-import json
-import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from copy import deepcopy
-from pathlib import Path
-from typing import Optional
-
-from morning_digest.llm import call_llm
-from sources.article_cache import ArticleCache
-from sources.article_extract import extract_article
-from sources.article_fetch import fetch_article_html, load_cookies_file
-from utils.prompts import load_prompt
-
-log = logging.getLogger(__name__)
-
-_DEFAULT_CACHE_DIR = Path(__file__).parent.parent / "cache" / "article_bodies"
-_MAX_PARALLEL = 4
-
-
-def run(context: dict, config: dict, model_config: dict | None = None, **kwargs) -> dict:
-    """Enrich qualifying RSS items with fetched article bodies."""
-    raw_sources = deepcopy(context.get("raw_sources", {}))
-    items = raw_sources.get("rss", []) or []
-
-    enrich_cfg = config.get("enrich_articles", {}) or {}
-    if not enrich_cfg.get("enabled", True) or not items:
-        log.info("enrich_articles: disabled or no items")
-        return {"raw_sources": raw_sources}
-
-    feeds_by_name = {f["name"]: f for f in config.get("rss", {}).get("feeds", [])}
-
-    cache_dir = Path(config.get("_test_cache_dir") or _DEFAULT_CACHE_DIR)
-    cache = ArticleCache(
-        cache_dir,
-        ttl_days=enrich_cfg.get("cache_ttl_days", 30),
-        failure_backoff_hours=enrich_cfg.get("cache_failure_backoff_hours", 24),
-    )
-    pruned = cache.prune()
-    if pruned:
-        log.info(f"enrich_articles: pruned {pruned} expired cache entries")
-
-    threshold = enrich_cfg.get("threshold_chars", 200)
-    max_fetches = enrich_cfg.get("max_fetches_per_run", 40)
-
-    canonical_by_url, order = _dedup_by_url(items)
-
-    targets: list[dict] = []
-    for url in order:
-        canonical = canonical_by_url[url]
-        feed_conf = feeds_by_name.get(canonical.get("source"), {})
-        if _should_enrich(canonical, feed_conf, threshold):
-            targets.append(canonical)
-            if len(targets) >= max_fetches:
-                skipped = sum(1 for u in order if _should_enrich(canonical_by_url[u], feeds_by_name.get(canonical_by_url[u].get("source"), {}), threshold)) - max_fetches
-                log.warning(f"enrich_articles: hit max_fetches_per_run={max_fetches}; ~{skipped} items left un-enriched")
-                break
-
-    status_records: list[dict] = []
-    if targets:
-        log.info(f"enrich_articles: enriching {len(targets)} of {len(order)} unique URLs")
-        system_prompt = load_prompt("enrich_article_system.md")
-        with ThreadPoolExecutor(max_workers=_MAX_PARALLEL) as pool:
-            futures = {
-                pool.submit(
-                    _enrich_one,
-                    item,
-                    feeds_by_name.get(item.get("source"), {}),
-                    enrich_cfg,
-                    cache,
-                    system_prompt,
-                    model_config,
-                ): item for item in targets
-            }
-            for future in as_completed(futures):
-                item = futures[future]
-                try:
-                    record = future.result()
-                except Exception as e:
-                    log.error(f"enrich_articles: enrichment crashed for {item.get('url')}: {e}")
-                    record = {
-                        "url": item.get("url"),
-                        "source": item.get("source"),
-                        "status": "exception",
-                        "error": str(e),
-                    }
-                status_records.append(record)
-
-    # Backfill duplicates from the canonical twin.
-    for item in items:
-        canonical = canonical_by_url.get(item.get("url"))
-        if canonical is not None and canonical is not item:
-            item["summary"] = canonical["summary"]
-
-    raw_sources["rss"] = items
-
-    artifact_dir = Path(config.get("_test_artifact_dir")) if config.get("_test_artifact_dir") else None
-    if artifact_dir is not None:
-        artifact_dir.mkdir(parents=True, exist_ok=True)
-        (artifact_dir / "enrich_articles.json").write_text(
-            json.dumps({"records": status_records}, indent=2), encoding="utf-8"
-        )
-
-    return {"raw_sources": raw_sources, "enrich_articles": {"records": status_records}}
-
-
-def _dedup_by_url(items: list[dict]) -> tuple[dict[str, dict], list[str]]:
-    """Return (canonical_by_url, order) — first-occurrence wins."""
-    canonical: dict[str, dict] = {}
-    order: list[str] = []
-    for item in items:
-        url = item.get("url")
-        if not url or url in canonical:
-            continue
-        canonical[url] = item
-        order.append(url)
-    return canonical, order
-
-
-def _should_enrich(item: dict, feed_conf: dict, threshold: int) -> bool:
-    enrich = (feed_conf or {}).get("enrich", {}) or {}
-    if enrich.get("skip", False):
-        return False
-    if enrich.get("fetch_article", False):
-        return True
-    return len(item.get("summary", "") or "") < threshold
-
-
-def _enrich_one(
-    item: dict,
-    feed_conf: dict,
-    enrich_cfg: dict,
-    cache: ArticleCache,
-    system_prompt: str,
-    model_config: Optional[dict],
-) -> dict:
-    """Enrich a single item. Never raises — records failures in the cache."""
-    url = item["url"]
-    source = item.get("source", "")
-
-    cached = cache.get(url)
-    if cached is not None:
-        if cached.status == "ok" and cached.compressed_body:
-            item["summary"] = cached.compressed_body
-        return {"url": url, "source": source, "status": f"cache_hit:{cached.status}", "error": ""}
-
-    per_feed = (feed_conf or {}).get("enrich", {}) or {}
-    impersonate = per_feed.get("impersonate") or enrich_cfg.get("impersonate", "chrome")
-    timeout = per_feed.get("timeout_seconds") or enrich_cfg.get("timeout_seconds", 15)
-    user_agent = per_feed.get("user_agent") or enrich_cfg.get("user_agent")
-    cookies_path = per_feed.get("cookies_file")
-    cookies_jar = load_cookies_file(cookies_path) if cookies_path else None
-    min_body = per_feed.get("min_body_chars") or enrich_cfg.get("min_body_chars", 300)
-
-    compressed, status, http_status, raw_length, error = _fetch_extract_distill(
-        url=url,
-        impersonate=impersonate,
-        timeout=timeout,
-        cookies=cookies_jar,
-        user_agent=user_agent,
-        min_body_chars=min_body,
-        system_prompt=system_prompt,
-        model_config=model_config,
-    )
-
-    cache.put(
-        url=url,
-        status=status,
-        http_status=http_status,
-        compressed_body=compressed,
-        raw_length=raw_length,
-        source_name=source,
-        error=error,
-    )
-    if status == "ok" and compressed:
-        item["summary"] = compressed
-    return {"url": url, "source": source, "status": status, "http_status": http_status, "error": error}
-
-
-def _fetch_extract_distill(
-    url: str,
-    impersonate: str,
-    timeout: int,
-    cookies,
-    user_agent: Optional[str],
-    min_body_chars: int,
-    system_prompt: str,
-    model_config: Optional[dict],
-) -> tuple[str, str, Optional[int], int, str]:
-    """Fetch -> extract -> distill. Returns (compressed, status, http_status, raw_length, error).
-
-    status is one of: ok, http_error, extraction_failed, paywall, llm_failed.
-    """
-    fetched = fetch_article_html(
-        url, impersonate=impersonate, timeout=timeout, cookies=cookies, user_agent=user_agent
-    )
-    if fetched.status != "ok":
-        return "", fetched.status, fetched.http_status, 0, fetched.error
-
-    extracted = extract_article(fetched.html, min_body_chars=min_body_chars)
-    if extracted.status != "ok":
-        return "", extracted.status, fetched.http_status, extracted.raw_length, ""
-
-    if not model_config:
-        # No LLM configured — fall back to a clamped raw body.
-        return extracted.text[:2000], "llm_failed", fetched.http_status, extracted.raw_length, "no model_config"
-
-    user_content = (
-        f"Article URL: {url}\n"
-        f"Article length: {extracted.raw_length} chars.\n"
-        f"Target distillation: 300–500 words.\n\n"
-        f"Article text:\n\n{extracted.text}"
-    )
-    try:
-        compressed = call_llm(
-            system_prompt,
-            user_content,
-            model_config,
-            max_retries=2,
-            json_mode=False,
-            stream=False,
-        )
-    except Exception as e:
-        return extracted.text[:2000], "llm_failed", fetched.http_status, extracted.raw_length, str(e)
-
-    compressed = (compressed or "").strip()
-    if not compressed:
-        return extracted.text[:2000], "llm_failed", fetched.http_status, extracted.raw_length, "empty LLM response"
-    return compressed, "ok", fetched.http_status, extracted.raw_length, ""
+docker compose run --rm --entrypoint "" morning-digest pytest tests/test_article_content.py tests/test_enrich_articles.py -v
 ```
 
-- [ ] **Step 7.4: Run tests to verify they pass**
-
-```bash
-docker compose run --rm --entrypoint "" morning-digest pytest tests/test_enrich_articles.py -v
-```
-Expected: all 11 tests pass.
-
-- [ ] **Step 7.5: Run the full test suite to confirm no regressions**
+- [ ] **Step 7.6: Run the full test suite**
 
 ```bash
 docker compose run --rm --entrypoint "" morning-digest pytest tests/ -v
 ```
-Expected: all green.
 
-- [ ] **Step 7.6: Commit**
+- [ ] **Step 7.7: Commit**
 
 ```bash
-git add stages/enrich_articles.py tests/test_enrich_articles.py
-git commit -m "Add enrich_articles pipeline stage
-
-Fetches, extracts, and distills article bodies for RSS items whose
-summary is below threshold (or whose feed opts in explicitly).
-Downstream stages receive enriched content in item['summary'] — same
-shape as native-thick RSS feeds — so no downstream code changes.
-Never fails the pipeline: every failure path leaves the original
-summary untouched. Dedups by URL before fetching; backfills duplicate
-items from their canonical twin."
+git add sources/article_content.py stages/enrich_articles.py tests/test_article_content.py tests/test_enrich_articles.py
+git commit -m "Add canonical RSS summary enrichment stage"
 ```
 
 ---
@@ -1498,6 +1177,9 @@ items from their canonical twin."
 
 **Files:**
 - Modify: `config.yaml`
+- Modify: `pipeline.py`
+- Modify: `tests/test_pipeline.py`
+- Modify: `tests/test_pipeline_advanced.py`
 
 - [ ] **Step 8.1: Add the `enrich_articles` stage to the pipeline manifest**
 
@@ -1517,7 +1199,9 @@ In `config.yaml`, add this top-level block (near `rss:` — before the `feeds` l
 ```yaml
 enrich_articles:
   enabled: true
-  threshold_chars: 200
+  min_usable_chars: 200
+  summarize_above_chars: 800
+  canonical_summary_max_chars: 700
   max_fetches_per_run: 40
   cache_ttl_days: 30
   cache_failure_backoff_hours: 24
@@ -1532,9 +1216,9 @@ enrich_articles:
 
 Edit each of the feeds below in `config.yaml`. Use `replace_all: false` and match the whole existing line to replace.
 
-**Hard paywalls — `skip: true`:**
+**Hard paywalls — `strategy: "skip"`:**
 
-- `Financial Times` — add `enrich: { skip: true }` inside the braces before the closing `}`.
+- `Financial Times` — add `enrich: { strategy: "skip" }` inside the braces before the closing `}`.
 - `The Economist (Finance & Economics)` — same.
 - `Nikkei Asia` — same, with a comment `# re-evaluate after body-fallback fix shows real summaries`.
 - `Nature` — same.
@@ -1546,14 +1230,14 @@ Example for FT — before:
 ```
 After:
 ```yaml
-    - { url: "https://www.ft.com/rss/home", name: "Financial Times", cap: 5, category: "econ-trade", reliability: "primary-reporting", enrich: { skip: true } }
+    - { url: "https://www.ft.com/rss/home", name: "Financial Times", cap: 5, category: "econ-trade", reliability: "primary-reporting", enrich: { strategy: "skip" } }
 ```
 
 Apply the same pattern for the other four feeds.
 
 **Authenticated subscription — `cookies_file`:**
 
-- `The Atlantic` — set `fetch_article: true` and `cookies_file: "cookies/atlantic.cookies.txt"`:
+- `The Atlantic` — set `strategy: "fetch_with_cookies"` and `cookies_file: "cookies/atlantic.cookies.txt"`:
 
 Before:
 ```yaml
@@ -1561,12 +1245,12 @@ Before:
 ```
 After:
 ```yaml
-    - { url: "https://www.theatlantic.com/feed/all/", name: "The Atlantic", cap: 8, category: "western-analysis", reliability: "analysis-opinion", enrich: { fetch_article: true, cookies_file: "cookies/atlantic.cookies.txt" } }
+    - { url: "https://www.theatlantic.com/feed/all/", name: "The Atlantic", cap: 8, category: "western-analysis", reliability: "analysis-opinion", enrich: { strategy: "fetch_with_cookies", cookies_file: "cookies/atlantic.cookies.txt" } }
 ```
 
-**html_index scrapers — opt-in to enrichment:**
+**html_index scrapers — force fetch:**
 
-- `Brad Setser` — add `enrich: { fetch_article: true }`.
+- `Brad Setser` — add `enrich: { strategy: "fetch" }`.
 - `China Global South Project` — same.
 - `Reuters Markets` — same.
 - `The Diff (Byrne Hobart)` — same.
@@ -1577,7 +1261,7 @@ Example for Brad Setser — before:
 ```
 After:
 ```yaml
-    - { url: "https://www.cfr.org/series/follow-the-money", name: "Brad Setser", cap: 3, category: "econ-trade", reliability: "analysis-opinion", mode: "html_index", enrich: { fetch_article: true } }
+    - { url: "https://www.cfr.org/series/follow-the-money", name: "Brad Setser", cap: 3, category: "econ-trade", reliability: "analysis-opinion", mode: "html_index", enrich: { strategy: "fetch" } }
 ```
 
 - [ ] **Step 8.4: Verify the config parses and the stage is registered**
@@ -1593,28 +1277,53 @@ assert stages[i-1] == 'collect', (stages[i-1], 'expected collect before enrich_a
 assert stages[i+1] == 'compress', (stages[i+1], 'expected compress after enrich_articles')
 assert cfg['enrich_articles']['enabled'] is True
 ft = [f for f in cfg['rss']['feeds'] if f['name'] == 'Financial Times'][0]
-assert ft['enrich']['skip'] is True
+assert ft['enrich']['strategy'] == 'skip'
 atl = [f for f in cfg['rss']['feeds'] if f['name'] == 'The Atlantic'][0]
-assert atl['enrich']['fetch_article'] is True
+assert atl['enrich']['strategy'] == 'fetch_with_cookies'
 assert atl['enrich']['cookies_file'] == 'cookies/atlantic.cookies.txt'
 setser = [f for f in cfg['rss']['feeds'] if f['name'] == 'Brad Setser'][0]
-assert setser['enrich']['fetch_article'] is True
+assert setser['enrich']['strategy'] == 'fetch'
 print('config ok')
 "
 ```
 Expected: `config ok`.
 
-- [ ] **Step 8.5: Commit**
+- [ ] **Step 8.5: Register the stage in pipeline metadata**
+
+In `pipeline.py`, add an `_STAGE_METADATA["enrich_articles"]` entry:
+
+```python
+"enrich_articles": {
+    "artifact_key": "enrich_articles",
+    "context_keys": ["raw_sources", "enrich_articles"],
+    "non_critical": True,
+    "empty_output": {"enrich_articles": {"records": []}},
+    "model_defaults": {},
+    "turn_model_overrides": None,
+},
+```
+
+Important: if the stage fails, `_empty_stage_output("enrich_articles")` must not replace `raw_sources`. The existing context still has collected sources, so the pipeline can continue with unenriched summaries.
+
+Update `tests/test_pipeline.py` and `tests/test_pipeline_advanced.py` so `enrich_articles` appears in known-stage metadata and artifact-key expectations.
+
+- [ ] **Step 8.6: Run pipeline metadata tests**
 
 ```bash
-git add config.yaml
+docker compose run --rm --entrypoint "" morning-digest pytest tests/test_pipeline.py tests/test_pipeline_advanced.py -v
+```
+
+- [ ] **Step 8.7: Commit**
+
+```bash
+git add config.yaml pipeline.py tests/test_pipeline.py tests/test_pipeline_advanced.py
 git commit -m "Register enrich_articles stage and pre-seed per-feed enrichment config
 
 Adds the stage to the pipeline manifest between collect and compress,
 the global enrich_articles block with sensible defaults, and per-feed
-overrides: skip: true for hard paywalls (FT, Economist, Nikkei, Nature,
-Science), fetch_article + cookies_file for The Atlantic, and
-fetch_article: true for html_index scrapers (Brad Setser, China Global
+overrides: strategy: skip for hard paywalls (FT, Economist, Nikkei, Nature,
+Science), fetch_with_cookies + cookies_file for The Atlantic, and
+strategy: fetch for html_index scrapers (Brad Setser, China Global
 South, Reuters Markets, The Diff)."
 ```
 
@@ -1698,7 +1407,7 @@ class TestRecommendAction:
         rec = recommend_action(
             items=6, median_chars=0, empty_rate=1.0, paywall_rate=None, mode="html_index", enrich_cfg={}
         )
-        assert "fetch_article" in rec
+        assert "fetch" in rec
 
     def test_fat_summary_recommends_ok(self):
         rec = recommend_action(
@@ -1713,7 +1422,7 @@ class TestRecommendAction:
             empty_rate=0.0,
             paywall_rate=0.05,
             mode="rss",
-            enrich_cfg={"fetch_article": True, "cookies_file": "x"},
+            enrich_cfg={"strategy": "fetch_with_cookies", "cookies_file": "x"},
         )
         assert "ok" in rec.lower()
 
@@ -1850,9 +1559,13 @@ def merge_enrich_metrics(feed_metrics: dict, enrich_records: list[dict]) -> None
         if src not in feed_metrics:
             continue
         n = len(statuses)
-        paywall = sum(1 for s in statuses if s == "paywall" or s == "http_error")
+        paywall = sum(1 for s in statuses if s == "paywall")
+        http_error = sum(1 for s in statuses if s == "http_error")
+        extraction_failed = sum(1 for s in statuses if s == "extraction_failed")
         llm_failed = sum(1 for s in statuses if s == "llm_failed")
         feed_metrics[src]["paywall_rate"] = paywall / n if n else None
+        feed_metrics[src]["http_error_rate"] = http_error / n if n else None
+        feed_metrics[src]["extraction_failed_rate"] = extraction_failed / n if n else None
         feed_metrics[src]["llm_fallback_rate"] = llm_failed / n if n else None
     for src, m in feed_metrics.items():
         m.setdefault("paywall_rate", None)
@@ -1883,28 +1596,30 @@ def recommend_action(
     mode: str,
     enrich_cfg: dict,
 ) -> str:
-    already_opted_in = enrich_cfg.get("fetch_article", False)
-    already_skipping = enrich_cfg.get("skip", False)
+    strategy = enrich_cfg.get("strategy")
+    legacy_fetch = enrich_cfg.get("fetch_article", False)
+    already_fetching = strategy in {"fetch", "fetch_with_cookies"} or legacy_fetch
+    already_skipping = strategy == "skip" or enrich_cfg.get("skip", False)
     has_cookies = bool(enrich_cfg.get("cookies_file"))
 
     if paywall_rate is not None and paywall_rate >= 0.8:
         if has_cookies:
             return "refresh cookies (paywall rate high)"
-        if already_opted_in:
-            return "skip: true (paywall consumes budget)"
-        return "skip: true"
+        if already_fetching:
+            return 'strategy: "skip" (paywall consumes budget)'
+        return 'strategy: "skip"'
 
-    if already_opted_in and paywall_rate is not None and paywall_rate < 0.3:
+    if already_fetching and paywall_rate is not None and paywall_rate < 0.3:
         return "ok (enrichment working)"
 
     if already_skipping:
         return "ok (intentionally skipped)"
 
     if median_chars == 0 and mode == "html_index":
-        return "fetch_article: true"
+        return 'strategy: "fetch"'
 
     if median_chars < 200:
-        return "fetch_article: true"
+        return 'strategy: "fetch"'
 
     return "ok"
 
@@ -1993,7 +1708,7 @@ git commit -m "Add RSS feed quality audit tool
 Reads output/artifacts/*/raw_sources.json and optional
 enrich_articles.json across a configurable window (default 14 days),
 ranks feeds by median summary length, and recommends per-feed
-actions (fetch_article, skip, cookies refresh, ok). Graceful on
+actions (strategy fetch/rss_only/skip, cookies refresh, ok). Graceful on
 empty input: reports a no-artifacts notice rather than crashing."
 
 git push
@@ -2096,6 +1811,7 @@ dockerignored to avoid committing session tokens."
 ## Task 11: Prompt updates — enrichment context note
 
 **Files:**
+- Modify: `stages/seams.py`
 - Modify: `prompts/analyze_domain_system.md`
 - Modify: `prompts/seam_candidates.md`
 - Modify: `prompts/seam_annotations.md`
@@ -2103,67 +1819,72 @@ dockerignored to avoid committing session tokens."
 - Modify: `prompts/cross_domain_execute.md`
 - Modify: `prompts/cross_domain_system.md` (if exists)
 
-- [ ] **Step 11.1: Prepare the note text**
+- [ ] **Step 11.1: Defensively sanitize seam raw-source snippets**
+
+`enrich_articles` sanitizes final summaries before writing `item["summary"]`, but `stages/seams.py` should also defend its own prompt boundary. In `_build_raw_source_summary`, replace the direct slice of `item.get("summary", "")[:500]` with `sanitize_source_content(item.get("summary", ""), max_chars=500)`.
+
+Add or update a focused test in `tests/test_seams.py` that passes a raw RSS summary containing an injection-pattern line and verifies it does not appear in `_build_raw_source_summary`.
+
+- [ ] **Step 11.2: Prepare the note text**
 
 The canonical note (identical in every prompt):
 ```
-Note on source material: Some item summaries include extracted article body text, not just the RSS description. Article bodies may have been captured up to 30 days ago (on the day the URL was first seen) rather than fetched fresh today; prefer analysis grounded in items from the most recent 24–48 hours but don't ignore context from older captures when it clarifies a current story.
+Note on source material: Item summaries are canonicalized from the best available source text: RSS body fields when available, otherwise fetched article text where feed policy allows. Article text may have been captured up to 30 days ago (on the day the URL was first seen) rather than fetched fresh today; prefer analysis grounded in items from the most recent 24-48 hours but don't ignore context from older captures when it clarifies a current story.
 ```
 
-- [ ] **Step 11.2: Add the note to `prompts/analyze_domain_system.md`**
+- [ ] **Step 11.3: Add the note to `prompts/analyze_domain_system.md`**
 
 Open the file. Find the first occurrence of `source` or `item` in the body (where source materials are introduced). Insert the note as a new paragraph in the most natural location — typically right before the task instructions. If unsure, append as the final paragraph before the output-format instructions.
 
 Verify:
 ```bash
-grep -c "Article bodies may have been captured" prompts/analyze_domain_system.md
+grep -c "Item summaries are canonicalized" prompts/analyze_domain_system.md
 ```
 Expected: `1`.
 
-- [ ] **Step 11.3: Add the note to `prompts/seam_candidates.md` and `prompts/seam_annotations.md`**
+- [ ] **Step 11.4: Add the note to `prompts/seam_candidates.md` and `prompts/seam_annotations.md`**
 
 Same pattern — insert as a paragraph near where source material is introduced. Verify each:
 ```bash
-grep -c "Article bodies may have been captured" prompts/seam_candidates.md
-grep -c "Article bodies may have been captured" prompts/seam_annotations.md
+grep -c "Item summaries are canonicalized" prompts/seam_candidates.md
+grep -c "Item summaries are canonicalized" prompts/seam_annotations.md
 ```
 Both expected `1`.
 
-- [ ] **Step 11.4: Add the note to `prompts/cross_domain_plan.md` and `prompts/cross_domain_execute.md`**
+- [ ] **Step 11.5: Add the note to `prompts/cross_domain_plan.md` and `prompts/cross_domain_execute.md`**
 
 Same pattern. Verify:
 ```bash
-grep -c "Article bodies may have been captured" prompts/cross_domain_plan.md
-grep -c "Article bodies may have been captured" prompts/cross_domain_execute.md
+grep -c "Item summaries are canonicalized" prompts/cross_domain_plan.md
+grep -c "Item summaries are canonicalized" prompts/cross_domain_execute.md
 ```
 Both expected `1`.
 
-- [ ] **Step 11.5: Handle `cross_domain_system.md` if present**
+- [ ] **Step 11.6: Handle `cross_domain_system.md` if present**
 
 ```bash
 ls prompts/cross_domain_system.md 2>/dev/null && echo "exists" || echo "absent"
 ```
 If it exists, add the note and verify with grep. If absent, skip.
 
-- [ ] **Step 11.6: Run the prompts test to confirm the files still load**
+- [ ] **Step 11.7: Run the prompts/seams tests to confirm the files still load**
 
 ```bash
-docker compose run --rm --entrypoint "" morning-digest pytest tests/test_prompts.py -v
+docker compose run --rm --entrypoint "" morning-digest pytest tests/test_prompts.py tests/test_seams.py -v
 ```
 Expected: pass. If any test enforces an exact prompt length or hash, update it to reflect the additions.
 
-- [ ] **Step 11.7: Commit**
+- [ ] **Step 11.8: Commit**
 
 ```bash
-git add prompts/analyze_domain_system.md prompts/seam_candidates.md prompts/seam_annotations.md prompts/cross_domain_plan.md prompts/cross_domain_execute.md
+git add stages/seams.py tests/test_seams.py prompts/analyze_domain_system.md prompts/seam_candidates.md prompts/seam_annotations.md prompts/cross_domain_plan.md prompts/cross_domain_execute.md
 # Only include cross_domain_system.md if it exists and was edited.
 git commit -m "Note enrichment context in analysis prompts
 
-Downstream prompts now mention that some item summaries include
-extracted article body text (possibly captured up to 30 days ago)
-rather than live RSS descriptions. Prompts still prefer recent
-items; the note just prevents the model from assuming every summary
-is a fresh RSS blurb."
+Downstream prompts now mention that item summaries are canonicalized
+from the best available RSS or fetched article text. Prompts still
+prefer recent items; the note just prevents the model from assuming
+every summary is a raw RSS blurb."
 ```
 
 ---
@@ -2187,7 +1908,7 @@ Before:
 After:
 ```markdown
    - **collect** — Fetches raw sources in parallel...
-   - **enrich_articles** — For RSS items with thin/empty summaries, fetches the article URL via curl-cffi (Chrome TLS fingerprint), extracts the body with trafilatura, and distills to 300–500 words via a cheap LLM pass. 30-day disk cache; per-run fetch cap; per-feed opt-in or skip via config.yaml. Authenticated subscriptions supported via Netscape cookies.txt.
+   - **enrich_articles** — Normalizes RSS items to one canonical sanitized summary, using full RSS body fields when available and fetching article URLs via curl-cffi/trafilatura when native RSS text is insufficient or feed policy requires it. 30-day disk cache; per-run fetch cap; per-feed strategy config. Authenticated subscriptions supported via Netscape cookies.txt.
    - **compress** — Pre-compresses YouTube transcripts to ~400–800 word summaries
 ```
 
@@ -2218,13 +1939,15 @@ Template:
 ````markdown
 ### Article enrichment
 
-Some RSS feeds arrive with empty or too-short summaries — index-page scrapers (e.g. Brad Setser, Reuters Markets) and a handful of outlets that publish headline-only RSS (FT, Atlantic teaser, several Substacks). The `enrich_articles` stage fetches the article URL, extracts the body with trafilatura, and distills it to 300–500 words so downstream analysis has real substance instead of a title.
+RSS feeds expose article content inconsistently: some provide full bodies in `content:encoded`, some provide usable summaries, some provide teasers, and some provide only title + URL. The `enrich_articles` stage chooses the best native RSS text first, fetches the article URL only when needed or configured, and normalizes the result to a 500-700 character canonical summary so downstream analysis sees the same shape regardless of acquisition path.
 
 **Global config** (`config.yaml`):
 ```yaml
 enrich_articles:
   enabled: true
-  threshold_chars: 200         # any item with summary shorter than this gets fetched
+  min_usable_chars: 200        # auto mode fetches if native RSS text is shorter
+  summarize_above_chars: 800   # long native/fetched source text is LLM-normalized
+  canonical_summary_max_chars: 700
   max_fetches_per_run: 40      # hard ceiling per pipeline run
   cache_ttl_days: 30           # reuse prior fetches for 30 days
   cache_failure_backoff_hours: 24
@@ -2236,8 +1959,7 @@ enrich_articles:
 **Per-feed overrides** (add an `enrich:` sub-block to any feed in `rss.feeds`):
 ```yaml
 enrich:
-  fetch_article: true          # always fetch this feed's items
-  skip: true                   # never enrich this feed (e.g. hard paywalls)
+  strategy: "auto"             # auto | rss_only | fetch | fetch_with_cookies | skip
   cookies_file: "cookies/atlantic.cookies.txt"  # Netscape cookies.txt for auth
   min_body_chars: 500          # override global minimum
   timeout_seconds: 30          # override global timeout
@@ -2245,7 +1967,7 @@ enrich:
   impersonate: "firefox"       # override browser profile (rare)
 ```
 
-Cached article bodies live in `cache/article_bodies/` (one JSON per URL, keyed by SHA-1). Pruning runs at the top of every stage invocation.
+Cached article records live in `cache/article_bodies/` (one JSON per URL, keyed by SHA-1). The cache stores canonical summary metadata and fetch/extraction status; prompt-visible provenance stays out of RSS items and appears in `enrich_articles.json`. Pruning runs at the top of every stage invocation.
 
 ### Authenticated fetches
 
@@ -2280,8 +2002,9 @@ docker compose run --rm --entrypoint "" morning-digest \
 ```
 
 The report's `Recommend` column suggests actions:
-- `fetch_article: true` — thin/empty summaries, worth enriching
-- `skip: true` — high paywall-fail rate; fetches waste budget
+- `strategy: fetch` — thin/empty summaries, worth fetching
+- `strategy: rss_only` — native RSS bodies are adequate; avoid fetches
+- `strategy: skip` — high paywall-fail rate; fetches waste budget
 - `refresh cookies (paywall rate high)` — cookies likely expired
 - `ok (enrichment working)` — current config is doing its job
 - `ok (intentionally skipped)` — feed is paywalled and explicitly skipped
@@ -2362,7 +2085,7 @@ Expected: a populated artifact; distribution of statuses includes `ok` (or `cach
 ```bash
 docker compose run --rm --entrypoint "" morning-digest python scripts/audit_rss_quality.py --window 1
 ```
-Expected: report includes paywall-rate and LLM-fallback columns populated from the enrichment artifact. Brad Setser / China Global South show non-zero median characters (enrichment worked). FT shows high paywall rate with `skip: true` recommendation (already applied — should read "ok (intentionally skipped)").
+Expected: report includes paywall-rate and LLM-fallback columns populated from the enrichment artifact. Brad Setser / China Global South show non-zero median characters (enrichment worked). FT should read "ok (intentionally skipped)" because it is configured with `strategy: "skip"`.
 
 - [ ] **Step 13.5: Push the final batch**
 
@@ -2372,7 +2095,7 @@ git push
 
 - [ ] **Step 13.6: Report back to the user**
 
-Summarize: tasks completed, any items from Task 0 that required adjustments, enrichment artifact counts from the first real run, and whether the audit tool output matches expectations. Flag anything that needs follow-up (e.g. cookies not yet exported for The Atlantic — `skip: true` on a paywall-heavy feed that should be opted-in with cookies, etc.).
+Summarize: tasks completed, any items from Task 0 that required adjustments, enrichment artifact counts from the first real run, and whether the audit tool output matches expectations. Flag anything that needs follow-up (e.g. cookies not yet exported for The Atlantic, or a paywall-heavy feed that should switch from `strategy: "fetch"` to `strategy: "skip"`).
 
 No commit for this task.
 

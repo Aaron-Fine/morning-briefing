@@ -1,0 +1,8 @@
+cookies/
+cache/article_bodies/
+output/
+.git/
+.codex
+.remember/
+__pycache__/
+*.pyc

@@ -18,6 +18,7 @@ import json
 from json import JSONDecodeError
 
 from morning_digest.llm import call_llm
+from morning_digest.sanitize import sanitize_source_content
 from utils.prompts import load_prompt
 
 log = logging.getLogger(__name__)
@@ -104,7 +105,7 @@ def _build_raw_source_summary(raw_sources: dict) -> str:
             parts.append(
                 f"  {item.get('source', '?')}{rel_note}: "
                 f"{item.get('title', '?')} — "
-                f"{item.get('summary', '')[:500]}"
+                f"{sanitize_source_content(item.get('summary', ''), max_chars=500)}"
             )
             if item.get("url"):
                 parts.append(f"    URL: {item['url']}")

@@ -226,6 +226,14 @@ _STAGE_METADATA = {
         "model_defaults": None,
         "turn_model_overrides": None,
     },
+    "enrich_articles": {
+        "artifact_key": "enrich_articles",
+        "context_keys": ["raw_sources", "enrich_articles"],
+        "non_critical": True,
+        "empty_output": {"enrich_articles": {"records": []}},
+        "model_defaults": {},
+        "turn_model_overrides": None,
+    },
     "compress": {
         "artifact_key": "compressed_transcripts",
         "context_keys": ["compressed_transcripts"],
