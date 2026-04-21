@@ -201,5 +201,11 @@ def test_rejects_meta_llm_summary_for_long_source(tmp_path):
 
 def test_bad_llm_summary_detection():
     assert _looks_like_bad_llm_summary("Let me analyze this article first.", "x" * 900)
+    assert _looks_like_bad_llm_summary(
+        "The source text is a blog post discussing the trend.", "x" * 900
+    )
+    assert _looks_like_bad_llm_summary(
+        "This is essentially author bio content, not article content.", "x" * 900
+    )
     assert _looks_like_bad_llm_summary("Too few", "x" * 900)
     assert not _looks_like_bad_llm_summary("A concrete summary with enough length.", "short")

@@ -367,11 +367,14 @@ def _looks_like_bad_llm_summary(summary: str, source_text: str) -> bool:
     lowered = summary[:300].lower()
     meta_markers = (
         "the user wants",
+        "the source text is",
         "let me analyze",
+        "let me identify",
         "i need to",
         "i'll create",
         "key points from the article",
         "core substance",
+        "not article content",
     )
     if any(marker in lowered for marker in meta_markers):
         return True
