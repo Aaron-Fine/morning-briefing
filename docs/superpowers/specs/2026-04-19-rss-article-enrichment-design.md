@@ -23,9 +23,46 @@ Downstream stages (`analyze_domain`, `seams`, `cross_domain`) only see `title + 
 
 ## Non-goals
 
-- No paywall circumvention (bot-wall, JS-only, login-gated sites are accepted losses).
+- No paywall circumvention. Browser rendering and cookies may be used only for
+  normal authenticated reader access or JS-rendered article DOMs; hard paywalls,
+  bot walls, and unavailable subscription access remain accepted losses.
 - No `robots.txt` compliance layer (these are outlets we already subscribe to via RSS; article fetch is within normal reader behavior).
 - No retrieval-augmented lookups of older cached articles. The 30-day cache exists for fetch-efficiency; downstream still only sees today's items.
+
+## Phase 2 amendment: browser fallback and known-source remediation
+
+The initial implementation leaves several real-source issues that should be
+handled as a follow-up rather than by changing downstream prompts:
+
+1. Nikkei Asia is still empty because it is currently configured to skip
+   enrichment and its latest RSS items do not expose a usable body.
+2. Atlantic cookie support is wired but needs a fresh dry-run validation with
+   `cookies/atlantic.cookies.txt` mounted in Docker.
+3. Some feeds need rendered-page extraction rather than plain HTTP plus
+   `trafilatura`.
+4. The audit tool needs a deterministic latest-artifact mode.
+5. Fetch budget should be prioritized so empty or explicitly configured feeds
+   are attempted before merely short/low-priority items.
+
+Add Crawl4AI as a targeted fallback after native RSS text and the existing
+`curl-cffi`/`trafilatura` path. It should be enabled only by feed policy
+(`strategy: "browser_fetch"`) or for `auto` feeds that remain empty after HTTP
+extraction. Browser extraction has its own run cap and status accounting because
+it is slower and more operationally sensitive than plain HTTP.
+
+Updated acquisition ladder:
+
+```text
+native RSS body
+  -> curl-cffi + trafilatura
+  -> Crawl4AI browser markdown
+  -> sanitized fallback / original summary
+```
+
+The canonical downstream contract is unchanged: prompt-visible items still get a
+sanitized `summary` of comparable density regardless of acquisition path.
+Browser provenance, raw lengths, failures, cookie usage, and extraction method
+stay in `enrich_articles.json` and the cache metadata.
 
 ## Architecture
 

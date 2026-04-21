@@ -43,6 +43,212 @@
 
 ---
 
+## Phase 2 remediation expansion captured 2026-04-20
+
+The first implementation proved the canonical enrichment stage works, but real dry
+runs exposed several feed-quality and operations issues that should be handled in
+a follow-up batch. This expansion explicitly excludes prompt tuning; the
+MiniMax normalizer prompt should be revisited later as part of the broader
+model-quality question.
+
+### Current observed issues
+
+1. **Nikkei Asia remains empty.** The feed is currently configured with
+   `enrich.strategy: "skip"`, so the 8 latest Nikkei items retained empty
+   summaries. The original body-field fallback did not recover useful text for
+   that feed on the latest run.
+
+2. **Browser-rendered extraction is missing.** The current acquisition ladder is
+   native RSS text, then `curl-cffi` HTTP fetch, then `trafilatura` extraction.
+   That handles many open pages but not JS-rendered pages, login/session
+   behaviors that need a browser context, or sites that serve better article DOMs
+   after hydration.
+
+3. **Atlantic cookies are now present but need validation.** The cookie file is
+   copied to `cookies/atlantic.cookies.txt` and mounted read-only into Docker,
+   but a fresh dry run should confirm the warnings disappear and that extracted
+   Atlantic summaries remain clean.
+
+4. **Audit `--window 0` is confusing.** It can report no artifacts because the
+   script compares against UTC dates while artifact directories are local-date
+   named. Operators need a deterministic "latest artifact only" mode.
+
+5. **Fetch budget is first-come, first-served.** `max_fetches_per_run` is now
+   60, but the stage still allocates network fetches in source order. Low-value
+   or merely short items can consume fetch budget before empty/high-priority
+   items.
+
+6. **Skipped paywall feeds can be thin.** FT, Economist, Nature, and Science are
+   intentionally skipped, but several still produce sub-80-character summaries.
+   These are acceptable only if the downstream value is the headline itself; the
+   policy should be explicit.
+
+7. **Source fetch warnings remain outside enrichment.** SpaceNews returns 429,
+   Reuters Markets returns 401, and Wikimedia On This Day returns 404. These
+   reduce source coverage and add log noise even when enrichment succeeds.
+
+8. **Cache invalidation is versioned but manual.** `cache_version` protects us
+   from reusing bad cached summaries, but future extraction, fallback, or guard
+   behavior changes require a manual version bump.
+
+### Crawl4AI role
+
+Add Crawl4AI as a targeted browser fallback, not as the default fetch path.
+Crawl4AI provides a headless browser crawler (`AsyncWebCrawler`) that generates
+clean markdown from rendered pages, plus browser/run configuration for cookies,
+headers, user agent, JavaScript waits, session reuse, popup removal, and
+anti-bot-ish interaction options. Relevant docs:
+
+- https://docs.crawl4ai.com/
+- https://docs.crawl4ai.com/core/installation/
+- https://docs.crawl4ai.com/core/browser-crawler-config/
+- https://docs.crawl4ai.com/core/page-interaction/
+
+The acquisition ladder becomes:
+
+```text
+native RSS body
+  -> curl-cffi + trafilatura
+  -> Crawl4AI browser markdown
+  -> sanitized fallback / original summary
+```
+
+Use Crawl4AI only for feeds configured with `strategy: "browser_fetch"` or for
+`auto` feeds that remain empty after the existing HTTP extraction path. Do not
+use it for already-good feeds or known hard paywalls unless a subscription cookie
+file exists.
+
+### New config shape
+
+Extend the existing per-feed `enrich:` block:
+
+```yaml
+enrich:
+  strategy: "browser_fetch"        # auto | rss_only | fetch | fetch_with_cookies | browser_fetch | skip
+  browser_wait_for: "css:article"  # optional Crawl4AI wait condition
+  browser_js: ""                   # optional JS snippet for site-specific setup
+  browser_timeout_seconds: 30
+  browser_magic: true              # optional Crawl4AI human-like helpers where supported
+  cookies_file: "cookies/atlantic.cookies.txt"
+```
+
+Extend global config:
+
+```yaml
+enrich_articles:
+  browser_fetch_enabled: true
+  max_browser_fetches_per_run: 15
+  browser_timeout_seconds: 30
+```
+
+Keep browser fetches under a separate cap because Playwright-backed extraction is
+slower and heavier than the current HTTP path.
+
+### Follow-up task list
+
+- [ ] **Task P2.1: Add Crawl4AI dependency and Docker setup**
+  - Add `crawl4ai` to `requirements.txt`.
+  - Update the Dockerfile to run the required browser setup during image build
+    (`crawl4ai-setup` or equivalent current command).
+  - Add a tiny smoke test script or test helper that imports Crawl4AI without
+    launching a live network crawl.
+  - Rebuild with `docker compose build`.
+
+- [ ] **Task P2.2: Add `sources/article_browser_fetch.py`**
+  - Implement `fetch_article_browser_markdown(url, feed_conf, enrich_cfg)`.
+  - Convert Netscape cookies.txt to the browser cookie dict/list format expected
+    by Crawl4AI.
+  - Use `BrowserConfig(headless=True, text_mode=True, light_mode=True, cookies=...)`.
+  - Use `CrawlerRunConfig` with optional `wait_for`, `js_code`,
+    `remove_overlay_elements`, `remove_consent_popups`, and cache bypass.
+  - Return a small dataclass parallel to `FetchResult`, with `status`,
+    `markdown`, `raw_length`, and `error`.
+
+- [ ] **Task P2.3: Wire browser fetch into `enrich_articles`**
+  - Add `browser_fetch` to `VALID_STRATEGIES`.
+  - Try Crawl4AI only after native text is insufficient and HTTP/trafilatura did
+    not produce usable text, unless strategy is explicitly `browser_fetch`.
+  - Preserve existing failure behavior: never fail the pipeline; keep original
+    summary when no usable source text exists.
+  - Record `source_text_origin: "browser_markdown"` and distinct statuses such
+    as `browser_ok`, `browser_failed`, or map success to `ok` with origin
+    metadata.
+
+- [ ] **Task P2.4: Run a real-source spike**
+  - Test 3 URLs each from Nikkei Asia, The Atlantic, Reuters Markets, and one
+    Substack edge feed.
+  - Compare native length, HTTP/trafilatura length, browser markdown length, and
+    first 300 chars.
+  - Promote feeds only when browser output is materially better and clean.
+
+- [ ] **Task P2.5: Fix Nikkei policy**
+  - If browser extraction succeeds, change Nikkei to
+    `enrich: { strategy: "browser_fetch", browser_wait_for: "css:article" }`.
+  - If browser extraction fails or is paywalled, choose one explicit policy:
+    retire feed, keep title-only with a `title_only_ok` marker in audit, or keep
+    `skip` and accept empty summaries.
+
+- [ ] **Task P2.6: Validate Atlantic cookies path**
+  - Run one dry run after copying `cookies/atlantic.cookies.txt`.
+  - Confirm no "Cookies file not found" warnings.
+  - Inspect Atlantic records in `enrich_articles.json`; if browser output is
+    cleaner than HTTP/trafilatura, switch Atlantic to `browser_fetch` with
+    cookies.
+
+- [ ] **Task P2.7: Add audit latest mode**
+  - Add `--latest` to `scripts/audit_rss_quality.py`.
+  - Make `--window 0` either an alias for `--latest` or reject it with a clear
+    message.
+  - Add tests for local-date artifact directories and latest-only selection.
+
+- [ ] **Task P2.8: Prioritize fetch budget**
+  - Rank fetch candidates before spending network budget:
+    1. empty native text;
+    2. explicit `fetch`, `fetch_with_cookies`, or `browser_fetch`;
+    3. high-priority categories / feeds;
+    4. shortest native text;
+    5. original feed order.
+  - Keep deduplication by URL before prioritization.
+  - Report `skipped_fetch_cap` with rank reason and candidate count.
+
+- [ ] **Task P2.9: Make skipped-feed policy explicit**
+  - Add audit annotations for `strategy: skip` feeds with median summary under
+    80 chars.
+  - For FT/Economist/Nature/Science, decide per feed:
+    `ok_title_or_teaser_only`, `browser_fetch`, `fetch_with_cookies`, or
+    `retire`.
+  - Do not silently treat "skip + empty" as healthy except when a feed is marked
+    title-only acceptable.
+
+- [ ] **Task P2.10: Handle noisy source warnings**
+  - SpaceNews 429: keep cooldown, consider lowering cap or replacing with
+    alternate space/defense source.
+  - Reuters Markets 401: test browser fetch; if still blocked, retire or replace.
+  - Wikimedia On This Day 404: fix endpoint/date construction or disable until
+    corrected.
+  - Add source-count/audit visibility for these non-RSS source failures.
+
+- [ ] **Task P2.11: Improve cache metadata, without prompt tuning**
+  - Store `extractor_version`, `browser_fetch_version`, and
+    `normalizer_guard_version` alongside `cache_version`.
+  - Cache invalidation should depend on the component that produced the cached
+    value, so a browser extractor change does not invalidate RSS-only records.
+  - Leave prompt-quality experimentation for the later model/prompt work.
+
+### Acceptance criteria for Phase 2
+
+- Nikkei is no longer silently empty, or its title-only/retire policy is explicit
+  in config and audit output.
+- Atlantic runs with cookies and no missing-cookie warnings.
+- Browser fallback is used only for configured/problem feeds and has its own
+  cap/status accounting.
+- `scripts/audit_rss_quality.py --latest` works predictably.
+- No known meta-summary phrases appear in `raw_sources.json`.
+- `skipped_fetch_cap` items, if any, are lower-priority than fetched items.
+- Full Docker tests pass.
+
+---
+
 ## File Structure
 
 **New files:**
