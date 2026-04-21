@@ -12,6 +12,8 @@ from typing import Optional
 
 log = logging.getLogger(__name__)
 
+_CACHE_VERSION = 2
+
 
 @dataclass
 class CacheEntry:
@@ -52,6 +54,8 @@ class ArticleCache:
             fetched_at = datetime.fromisoformat(data["fetched_at"])
         except (json.JSONDecodeError, KeyError, ValueError, OSError):
             return None
+        if data.get("cache_version") != _CACHE_VERSION:
+            return None
 
         age = datetime.now(timezone.utc) - fetched_at
         status = data.get("status", "")
@@ -73,6 +77,7 @@ class ArticleCache:
         error: str,
     ) -> None:
         data = {
+            "cache_version": _CACHE_VERSION,
             "url": url,
             "fetched_at": datetime.now(timezone.utc).isoformat(),
             "status": status,

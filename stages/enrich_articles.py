@@ -353,7 +353,29 @@ def _canonical_summary(
             "llm_failed",
             "empty LLM response",
         )
+    if _looks_like_bad_llm_summary(summary, source_text):
+        return (
+            sanitize_source_content(source_text, max_chars=max_chars),
+            "llm_failed",
+            "invalid LLM summary",
+        )
     return summary, "ok", ""
+
+
+def _looks_like_bad_llm_summary(summary: str, source_text: str) -> bool:
+    """Reject meta-reasoning or unusably short summaries from normalizer models."""
+    lowered = summary[:300].lower()
+    meta_markers = (
+        "the user wants",
+        "let me analyze",
+        "i need to",
+        "i'll create",
+        "key points from the article",
+        "core substance",
+    )
+    if any(marker in lowered for marker in meta_markers):
+        return True
+    return len(source_text) >= 800 and len(summary) < 80
 
 
 def _record(

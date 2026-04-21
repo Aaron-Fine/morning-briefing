@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from stages.enrich_articles import _dedup_by_url, run
+from stages.enrich_articles import _dedup_by_url, _looks_like_bad_llm_summary, run
 
 
 def _config(tmp_path, feeds=None, enrich=None):
@@ -68,9 +68,13 @@ def test_long_native_text_is_distilled_like_fetched_text(tmp_path):
         "_rss_body": "Long native body. " * 80,
     }
     model = {"provider": "fireworks", "model": "x"}
-    with patch("stages.enrich_articles.call_llm", return_value="Canonical summary"):
+    canonical = (
+        "Canonical summary with enough concrete detail to pass length checks "
+        "for a long source article."
+    )
+    with patch("stages.enrich_articles.call_llm", return_value=canonical):
         out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path, feeds=feeds), model)
-    assert out["raw_sources"]["rss"][0]["summary"] == "Canonical summary"
+    assert out["raw_sources"]["rss"][0]["summary"] == canonical
     assert out["enrich_articles"]["records"][0]["source_text_origin"] == "rss_body"
 
 
@@ -121,10 +125,14 @@ def test_duplicate_gets_canonical_summary(tmp_path):
         {"source": "B", "url": "https://x/1", "summary": "duplicate teaser"},
     ]
     model = {"provider": "fireworks", "model": "x"}
-    with patch("stages.enrich_articles.call_llm", return_value="Canonical"):
+    canonical = (
+        "Canonical summary with enough concrete detail to pass length checks "
+        "for a long source article."
+    )
+    with patch("stages.enrich_articles.call_llm", return_value=canonical):
         out = run({"raw_sources": {"rss": items}}, _config(tmp_path), model)
-    assert out["raw_sources"]["rss"][0]["summary"] == "Canonical"
-    assert out["raw_sources"]["rss"][1]["summary"] == "Canonical"
+    assert out["raw_sources"]["rss"][0]["summary"] == canonical
+    assert out["raw_sources"]["rss"][1]["summary"] == canonical
 
 
 def test_sanitizes_final_summary(tmp_path):
@@ -154,14 +162,44 @@ def test_fetch_cap_limits_network_fetches_not_native_normalization(tmp_path):
         }
     )
     cfg = _config(tmp_path, enrich={"max_fetches_per_run": 1})
+    canonical = (
+        "Native canonical summary with enough concrete detail to pass length "
+        "checks for a long source article."
+    )
     with patch("stages.enrich_articles.fetch_article_html") as fetch:
         fetch.return_value.status = "http_error"
         fetch.return_value.http_status = 500
         fetch.return_value.html = ""
         fetch.return_value.error = "boom"
-        with patch("stages.enrich_articles.call_llm", return_value="Native canonical"):
+        with patch("stages.enrich_articles.call_llm", return_value=canonical):
             out = run({"raw_sources": {"rss": items}}, cfg, {"provider": "fireworks"})
     assert fetch.call_count == 1
     statuses = [r["status"] for r in out["enrich_articles"]["records"]]
     assert statuses.count("skipped_fetch_cap") == 2
-    assert out["raw_sources"]["rss"][-1]["summary"] == "Native canonical"
+    assert out["raw_sources"]["rss"][-1]["summary"] == canonical
+
+
+def test_rejects_meta_llm_summary_for_long_source(tmp_path):
+    feeds = [{"name": "A", "url": "x", "enrich": {"strategy": "rss_only"}}]
+    item = {
+        "source": "A",
+        "url": "https://x/1",
+        "summary": "teaser",
+        "_rss_body": "Full source sentence. " * 80,
+    }
+    model = {"provider": "fireworks", "model": "x"}
+    with patch(
+        "stages.enrich_articles.call_llm",
+        return_value="The user wants me to summarize this article.",
+    ):
+        out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path, feeds=feeds), model)
+    summary = out["raw_sources"]["rss"][0]["summary"]
+    assert "The user wants" not in summary
+    assert "Full source sentence." in summary
+    assert out["enrich_articles"]["records"][0]["status"] == "llm_failed"
+
+
+def test_bad_llm_summary_detection():
+    assert _looks_like_bad_llm_summary("Let me analyze this article first.", "x" * 900)
+    assert _looks_like_bad_llm_summary("Too few", "x" * 900)
+    assert not _looks_like_bad_llm_summary("A concrete summary with enough length.", "short")

@@ -137,7 +137,7 @@ enrich_articles:
   min_usable_chars: 200
   summarize_above_chars: 800
   canonical_summary_max_chars: 700
-  max_fetches_per_run: 40
+  max_fetches_per_run: 60
   cache_ttl_days: 30
   cache_failure_backoff_hours: 24
   per_host_concurrency: 2

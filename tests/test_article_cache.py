@@ -49,6 +49,16 @@ def test_cache_corrupt_json_is_miss(tmp_path):
     assert cache.get("https://x/") is None
 
 
+def test_cache_without_current_version_is_miss(tmp_path):
+    cache = ArticleCache(tmp_path)
+    cache.put("https://x/", "ok", 200, "Summary", 1200, "fetched_html", "Src", "")
+    path = next(tmp_path.glob("*.json"))
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data.pop("cache_version")
+    path.write_text(json.dumps(data), encoding="utf-8")
+    assert cache.get("https://x/") is None
+
+
 def test_cache_prune_removes_stale_entries(tmp_path):
     cache = ArticleCache(tmp_path, ttl_days=30)
     cache.put("https://fresh/", "ok", 200, "Fresh", 1200, "rss_body", "Src", "")

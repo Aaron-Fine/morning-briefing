@@ -16,4 +16,4 @@ Strip all of the following:
 - Author bios, publication metadata, ad copy
 - Social-share widgets, comment counts, reaction prompts
 
-Output plain text only. No JSON. No markdown headers. No preamble.
+Output only the final summary text. Do not explain your reasoning, mention the user, describe your task, list key points, or include a preamble. No JSON. No markdown headers.
