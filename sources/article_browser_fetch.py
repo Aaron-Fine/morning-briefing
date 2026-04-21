@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import threading
 from dataclasses import dataclass
 from http.cookiejar import MozillaCookieJar
 from typing import Any, Optional
@@ -12,6 +13,7 @@ from typing import Any, Optional
 from sources.article_fetch import load_cookies_file
 
 log = logging.getLogger(__name__)
+_BROWSER_FETCH_LOCK = threading.Lock()
 
 
 @dataclass
@@ -29,6 +31,15 @@ def fetch_article_browser_markdown(
     enrich_cfg: dict,
 ) -> BrowserFetchResult:
     """Fetch rendered article markdown via Crawl4AI. Never raises."""
+    with _BROWSER_FETCH_LOCK:
+        return _fetch_article_browser_markdown_locked(url, feed_conf, enrich_cfg)
+
+
+def _fetch_article_browser_markdown_locked(
+    url: str,
+    feed_conf: dict,
+    enrich_cfg: dict,
+) -> BrowserFetchResult:
     try:
         asyncio.get_running_loop()
     except RuntimeError:
@@ -94,6 +105,7 @@ async def _fetch_article_browser_markdown_async(
         remove_forms=True,
         exclude_external_links=True,
         magic=bool(per_feed.get("browser_magic", enrich_cfg.get("browser_magic", False))),
+        verbose=False,
         word_count_threshold=10,
     )
 

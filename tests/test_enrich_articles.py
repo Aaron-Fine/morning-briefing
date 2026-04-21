@@ -253,6 +253,32 @@ def test_browser_fetch_has_separate_cap(tmp_path):
     assert statuses.count("skipped_browser_fetch_cap") == 1
 
 
+def test_auto_browser_fallback_only_candidates_empty_native_text(tmp_path):
+    items = [
+        {"source": "A", "url": "https://x/short", "summary": "short"},
+        {"source": "A", "url": "https://x/empty", "summary": ""},
+    ]
+    cfg = _config(
+        tmp_path,
+        enrich={"browser_fetch_enabled": True, "max_browser_fetches_per_run": 1},
+    )
+    with patch("stages.enrich_articles.fetch_article_html") as http_fetch:
+        http_fetch.return_value.status = "http_error"
+        http_fetch.return_value.http_status = 500
+        http_fetch.return_value.html = ""
+        http_fetch.return_value.error = "boom"
+        with patch("stages.enrich_articles.fetch_article_browser_markdown") as browser:
+            browser.return_value.status = "browser_failed"
+            browser.return_value.http_status = None
+            browser.return_value.markdown = ""
+            browser.return_value.raw_length = 0
+            browser.return_value.error = "blocked"
+            out = run({"raw_sources": {"rss": items}}, cfg)
+    statuses = [record["status"] for record in out["enrich_articles"]["records"]]
+    assert "skipped_browser_fetch_cap" not in statuses
+    assert browser.call_count == 1
+
+
 def test_rejects_meta_llm_summary_for_long_source(tmp_path):
     feeds = [{"name": "A", "url": "x", "enrich": {"strategy": "rss_only"}}]
     item = {

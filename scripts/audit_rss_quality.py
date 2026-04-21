@@ -204,6 +204,7 @@ def recommend_action(
     paywall_rate: float | None,
     mode: str,
     enrich_cfg: dict,
+    browser_failure_rate: float | None = None,
 ) -> str:
     """Recommend a feed config action."""
     strategy = enrich_cfg.get("strategy")
@@ -216,6 +217,9 @@ def recommend_action(
             strategy = "auto"
 
     has_cookies = bool(enrich_cfg.get("cookies_file"))
+    if strategy == "browser_fetch" and browser_failure_rate is not None:
+        if browser_failure_rate >= 0.8:
+            return "browser_fetch failing; revise wait/policy"
     if strategy == "skip":
         if enrich_cfg.get("title_only_ok"):
             return "ok (title/teaser-only accepted)"
@@ -259,6 +263,7 @@ def render_markdown_report(feed_metrics: dict[str, dict]) -> str:
             paywall_rate=metric.get("paywall_rate"),
             mode=metric.get("mode", "rss"),
             enrich_cfg=metric.get("enrich_cfg", {}),
+            browser_failure_rate=metric.get("browser_failure_rate"),
         )
         lines.append(
             "| {source} | {items} | {median} | {empty} | {paywall} | {http} | {browser} | {mode} | {strategy} | {policy} | {rec} |".format(

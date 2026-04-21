@@ -125,3 +125,16 @@ def test_recommend_action_accepts_title_only_skip_policy():
         {"strategy": "skip", "title_only_ok": True},
     )
     assert rec == "ok (title/teaser-only accepted)"
+
+
+def test_recommend_action_flags_browser_fetch_failures():
+    rec = recommend_action(
+        8,
+        0,
+        1.0,
+        None,
+        "rss",
+        {"strategy": "browser_fetch"},
+        browser_failure_rate=1.0,
+    )
+    assert rec == "browser_fetch failing; revise wait/policy"

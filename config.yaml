@@ -201,7 +201,7 @@ rss:
     # "What's missing" layer — flag when framing diverges from wire coverage
     - { url: "https://www.aljazeera.com/xml/rss/all.xml", name: "Al Jazeera", cap: 7, category: "non-western", reliability: "primary-reporting" }
     - { url: "https://scmp.com/rss/91/feed", name: "South China Morning Post", cap: 10, category: "non-western", reliability: "primary-reporting" }
-    - { url: "https://asia.nikkei.com/rss/feed/nar", name: "Nikkei Asia", cap: 8, category: "non-western", reliability: "primary-reporting", enrich: { strategy: "browser_fetch", browser_wait_for: "css:article" } }
+    - { url: "https://asia.nikkei.com/rss/feed/nar", name: "Nikkei Asia", cap: 8, category: "non-western", reliability: "primary-reporting", enrich: { strategy: "browser_fetch" } }
     - { url: "https://www.thehindu.com/feeder/default.rss", name: "The Hindu", cap: 5, category: "non-western", reliability: "primary-reporting" }
     - { url: "https://www.dawn.com/feeds/home", name: "Dawn", cap: 5, category: "non-western", reliability: "primary-reporting" }
     - { url: "https://asiatimes.com/feed", name: "Asia Times", cap: 5, category: "non-western", reliability: "analysis-opinion" }

@@ -226,7 +226,7 @@ def _browser_fetch_candidate(
         return True
     if strategy != "auto":
         return False
-    return len(native_text or "") < min_usable_chars
+    return not native_text
 
 
 def _candidate_priority(
