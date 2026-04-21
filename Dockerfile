@@ -12,6 +12,7 @@ WORKDIR /app
 # Install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN crawl4ai-setup
 
 # Create cache directory for weather data
 RUN mkdir -p /app/cache/weather

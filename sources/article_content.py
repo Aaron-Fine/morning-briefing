@@ -5,7 +5,14 @@ from __future__ import annotations
 from html.parser import HTMLParser
 from typing import Any
 
-VALID_STRATEGIES = {"auto", "rss_only", "fetch", "fetch_with_cookies", "skip"}
+VALID_STRATEGIES = {
+    "auto",
+    "rss_only",
+    "fetch",
+    "fetch_with_cookies",
+    "browser_fetch",
+    "skip",
+}
 
 
 class _StripTags(HTMLParser):
@@ -89,7 +96,7 @@ def resolve_strategy(feed_conf: dict) -> str:
 
 def needs_fetch(source_text: str, strategy: str, min_usable_chars: int) -> bool:
     """Return whether article HTML should be fetched."""
-    if strategy in {"skip", "rss_only"}:
+    if strategy in {"skip", "rss_only", "browser_fetch"}:
         return False
     if strategy in {"fetch", "fetch_with_cookies"}:
         return True

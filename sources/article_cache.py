@@ -12,7 +12,19 @@ from typing import Optional
 
 log = logging.getLogger(__name__)
 
-_CACHE_VERSION = 2
+_CACHE_VERSION = 3
+_EXTRACTOR_VERSION = 1
+_BROWSER_FETCH_VERSION = 1
+_NORMALIZER_GUARD_VERSION = 2
+_COMPONENT_VERSIONS = {
+    "rss_body": _NORMALIZER_GUARD_VERSION,
+    "content": _NORMALIZER_GUARD_VERSION,
+    "content_encoded": _NORMALIZER_GUARD_VERSION,
+    "summary": _NORMALIZER_GUARD_VERSION,
+    "description": _NORMALIZER_GUARD_VERSION,
+    "fetched_html": _EXTRACTOR_VERSION,
+    "browser_markdown": _BROWSER_FETCH_VERSION,
+}
 
 
 @dataclass
@@ -27,6 +39,9 @@ class CacheEntry:
     source_text_origin: str
     source_name: str
     error: str
+    extractor_version: int
+    browser_fetch_version: int
+    normalizer_guard_version: int
 
 
 class ArticleCache:
@@ -56,6 +71,10 @@ class ArticleCache:
             return None
         if data.get("cache_version") != _CACHE_VERSION:
             return None
+        if data.get("component_version") != _component_version(
+            data.get("source_text_origin", "")
+        ):
+            return None
 
         age = datetime.now(timezone.utc) - fetched_at
         status = data.get("status", "")
@@ -78,6 +97,10 @@ class ArticleCache:
     ) -> None:
         data = {
             "cache_version": _CACHE_VERSION,
+            "component_version": _component_version(source_text_origin),
+            "extractor_version": _EXTRACTOR_VERSION,
+            "browser_fetch_version": _BROWSER_FETCH_VERSION,
+            "normalizer_guard_version": _NORMALIZER_GUARD_VERSION,
             "url": url,
             "fetched_at": datetime.now(timezone.utc).isoformat(),
             "status": status,
@@ -128,4 +151,11 @@ def _entry_from_dict(data: dict, fetched_at: datetime) -> CacheEntry:
         source_text_origin=data.get("source_text_origin", ""),
         source_name=data.get("source_name", ""),
         error=data.get("error", ""),
+        extractor_version=data.get("extractor_version", 0),
+        browser_fetch_version=data.get("browser_fetch_version", 0),
+        normalizer_guard_version=data.get("normalizer_guard_version", 0),
     )
+
+
+def _component_version(source_text_origin: str) -> int:
+    return _COMPONENT_VERSIONS.get(source_text_origin, _NORMALIZER_GUARD_VERSION)

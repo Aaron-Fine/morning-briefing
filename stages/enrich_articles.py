@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 from morning_digest.llm import call_llm
 from morning_digest.sanitize import sanitize_source_content
+from sources.article_browser_fetch import fetch_article_browser_markdown
 from sources.article_cache import ArticleCache
 from sources.article_content import (
     best_native_text,
@@ -65,6 +66,20 @@ class _HostLimiter:
             return fn()
 
 
+@dataclass
+class _Candidate:
+    item: dict
+    feed_conf: dict
+    native_text: str
+    strategy: str
+    http_fetch_needed: bool
+    browser_fetch_candidate: bool
+    priority: tuple[int, int, int, int]
+    priority_reason: str
+    http_fetch_allowed: bool = False
+    browser_fetch_allowed: bool = False
+
+
 def run(
     context: dict, config: dict, model_config: dict | None = None, **kwargs
 ) -> dict:
@@ -89,8 +104,9 @@ def run(
     canonical_by_url, order = _dedup_by_url(items)
 
     max_fetches = int(enrich_cfg.get("max_fetches_per_run", 40))
-    fetch_budget_used = 0
-    jobs = []
+    max_browser_fetches = int(enrich_cfg.get("max_browser_fetches_per_run", 0))
+    browser_enabled = bool(enrich_cfg.get("browser_fetch_enabled", False))
+    candidates = []
     skipped_records = []
     for url in order:
         item = canonical_by_url[url]
@@ -102,12 +118,49 @@ def run(
             strategy,
             int(enrich_cfg.get("min_usable_chars", 200)),
         )
-        if fetch_needed:
-            if fetch_budget_used >= max_fetches:
-                skipped_records.append(_record(item, "skipped_fetch_cap", "fetch cap hit"))
-                continue
-            fetch_budget_used += 1
-        jobs.append((item, feed_conf, fetch_needed))
+        browser_candidate = _browser_fetch_candidate(
+            native_text,
+            strategy,
+            browser_enabled,
+            int(enrich_cfg.get("min_usable_chars", 200)),
+        )
+        priority, reason = _candidate_priority(
+            item,
+            feed_conf,
+            native_text,
+            strategy,
+            len(candidates),
+        )
+        candidates.append(
+            _Candidate(
+                item=item,
+                feed_conf=feed_conf,
+                native_text=native_text,
+                strategy=strategy,
+                http_fetch_needed=fetch_needed,
+                browser_fetch_candidate=browser_candidate,
+                priority=priority,
+                priority_reason=reason,
+            )
+        )
+
+    _allocate_budget(
+        candidates,
+        attr_needed="http_fetch_needed",
+        attr_allowed="http_fetch_allowed",
+        cap=max_fetches,
+        skipped_status="skipped_fetch_cap",
+        skipped_records=skipped_records,
+    )
+    _allocate_budget(
+        candidates,
+        attr_needed="browser_fetch_candidate",
+        attr_allowed="browser_fetch_allowed",
+        cap=max_browser_fetches,
+        skipped_status="skipped_browser_fetch_cap",
+        skipped_records=skipped_records,
+    )
+    jobs = sorted(candidates, key=lambda candidate: candidate.priority)
 
     limiter = _HostLimiter(
         enrich_cfg.get("per_host_concurrency", 2),
@@ -120,16 +173,17 @@ def run(
         futures = {
             pool.submit(
                 _normalize_one,
-                item,
-                feed_conf,
-                fetch_needed,
+                candidate.item,
+                candidate.feed_conf,
+                candidate.http_fetch_allowed,
+                candidate.browser_fetch_allowed,
                 enrich_cfg,
                 cache,
                 limiter,
                 system_prompt,
                 model_config,
-            ): item
-            for item, feed_conf, fetch_needed in jobs
+            ): candidate.item
+            for candidate in jobs
         }
         for future in as_completed(futures):
             item = futures[future]
@@ -160,10 +214,72 @@ def _dedup_by_url(items: list[dict]) -> tuple[dict[str, dict], list[str]]:
     return canonical, order
 
 
+def _browser_fetch_candidate(
+    native_text: str,
+    strategy: str,
+    browser_enabled: bool,
+    min_usable_chars: int,
+) -> bool:
+    if not browser_enabled:
+        return False
+    if strategy == "browser_fetch":
+        return True
+    if strategy != "auto":
+        return False
+    return len(native_text or "") < min_usable_chars
+
+
+def _candidate_priority(
+    item: dict,
+    feed_conf: dict,
+    native_text: str,
+    strategy: str,
+    index: int,
+) -> tuple[tuple[int, int, int, int], str]:
+    if strategy == "skip":
+        return (5, 1, len(native_text or ""), index), "skip"
+    if not native_text:
+        return (0, 0, 0, index), "empty_native_text"
+    if strategy in {"fetch", "fetch_with_cookies", "browser_fetch"}:
+        return (1, 0, len(native_text), index), f"explicit_{strategy}"
+    priority = int((feed_conf or {}).get("priority", 5) or 5)
+    if priority <= 2:
+        return (2, priority, len(native_text), index), "high_priority_feed"
+    return (3, priority, len(native_text), index), "short_native_text"
+
+
+def _allocate_budget(
+    candidates: list[_Candidate],
+    *,
+    attr_needed: str,
+    attr_allowed: str,
+    cap: int,
+    skipped_status: str,
+    skipped_records: list[dict],
+) -> None:
+    budget = max(0, int(cap or 0))
+    needed = [candidate for candidate in candidates if getattr(candidate, attr_needed)]
+    needed.sort(key=lambda candidate: candidate.priority)
+    for idx, candidate in enumerate(needed):
+        if idx < budget:
+            setattr(candidate, attr_allowed, True)
+            continue
+        skipped_records.append(
+            _record(
+                candidate.item,
+                skipped_status,
+                f"{skipped_status.replace('_', ' ')} hit; rank_reason={candidate.priority_reason}; candidates={len(needed)}",
+                source_text_origin="",
+                native_length=len(candidate.native_text or ""),
+            )
+        )
+
+
 def _normalize_one(
     item: dict,
     feed_conf: dict,
-    fetch_needed: bool,
+    http_fetch_allowed: bool,
+    browser_fetch_allowed: bool,
     enrich_cfg: dict,
     cache: ArticleCache,
     limiter: _HostLimiter,
@@ -194,7 +310,11 @@ def _normalize_one(
             cached.error,
             source_text_origin=cached.source_text_origin,
             native_length=native_length,
-            fetched_length=cached.raw_length if cached.source_text_origin == "fetched_html" else 0,
+            fetched_length=(
+                cached.raw_length
+                if cached.source_text_origin in {"fetched_html", "browser_markdown"}
+                else 0
+            ),
             summary_length=cached.summary_length,
             http_status=cached.http_status,
         )
@@ -208,13 +328,84 @@ def _normalize_one(
     fetched_length = 0
     fetch_error = ""
 
-    if fetch_needed:
+    if browser_fetch_allowed and strategy == "browser_fetch":
+        browser_text, browser_status, browser_http_status, browser_length, browser_error = (
+            _fetch_browser_source_text(url, feed_conf, enrich_cfg, limiter)
+        )
+        if browser_status == "ok":
+            source_text = browser_text
+            origin = "browser_markdown"
+            http_status = browser_http_status
+            fetched_length = browser_length
+        elif not native_text:
+            cache.put(
+                url,
+                browser_status,
+                browser_http_status,
+                "",
+                browser_length,
+                "browser_markdown",
+                source,
+                browser_error,
+            )
+            return _record(
+                item,
+                browser_status,
+                browser_error,
+                source_text_origin="browser_markdown",
+                native_length=native_length,
+                fetched_length=browser_length,
+                http_status=browser_http_status,
+            )
+        else:
+            fetch_error = f"browser {browser_status}: {browser_error}".strip()
+
+    if http_fetch_allowed and origin != "browser_markdown":
         fetched_text, fetch_status, http_status, fetched_length, error = _fetch_source_text(
             url, feed_conf, enrich_cfg, limiter
         )
         if fetch_status == "ok":
             source_text = fetched_text
             origin = "fetched_html"
+        elif browser_fetch_allowed:
+            browser_text, browser_status, browser_http_status, browser_length, browser_error = (
+                _fetch_browser_source_text(url, feed_conf, enrich_cfg, limiter)
+            )
+            if browser_status == "ok":
+                source_text = browser_text
+                origin = "browser_markdown"
+                http_status = browser_http_status
+                fetched_length = browser_length
+                fetch_error = f"fetch {fetch_status}: {error}".strip()
+            elif native_text and native_origin in {"rss_body", "content", "content_encoded"}:
+                fetch_error = "; ".join(
+                    part
+                    for part in [
+                        f"fetch {fetch_status}: {error}".strip(),
+                        f"browser {browser_status}: {browser_error}".strip(),
+                    ]
+                    if part
+                )
+            else:
+                cache.put(
+                    url,
+                    browser_status,
+                    browser_http_status,
+                    "",
+                    browser_length,
+                    "browser_markdown",
+                    source,
+                    browser_error,
+                )
+                return _record(
+                    item,
+                    browser_status,
+                    browser_error,
+                    source_text_origin="browser_markdown",
+                    native_length=native_length,
+                    fetched_length=browser_length,
+                    http_status=browser_http_status,
+                )
         elif native_text and native_origin in {"rss_body", "content", "content_encoded"}:
             fetch_error = f"fetch {fetch_status}: {error}".strip()
         else:
@@ -305,6 +496,33 @@ def _fetch_source_text(
     if extracted.status != "ok":
         return "", extracted.status, fetched.http_status, extracted.raw_length, ""
     return extracted.text, "ok", fetched.http_status, extracted.raw_length, ""
+
+
+def _fetch_browser_source_text(
+    url: str,
+    feed_conf: dict,
+    enrich_cfg: dict,
+    limiter: _HostLimiter,
+) -> tuple[str, str, int | None, int, str]:
+    fetched = limiter.run(
+        url,
+        lambda: fetch_article_browser_markdown(url, feed_conf, enrich_cfg),
+    )
+    if fetched.status != "ok":
+        return "", fetched.status, fetched.http_status, fetched.raw_length, fetched.error
+    min_body_chars = int(
+        ((feed_conf or {}).get("enrich", {}) or {}).get("min_body_chars")
+        or enrich_cfg.get("min_body_chars", 300)
+    )
+    if fetched.raw_length < min_body_chars:
+        return (
+            "",
+            "extraction_failed",
+            fetched.http_status,
+            fetched.raw_length,
+            "browser markdown shorter than min_body_chars",
+        )
+    return fetched.markdown, "ok", fetched.http_status, fetched.raw_length, ""
 
 
 def _canonical_summary(

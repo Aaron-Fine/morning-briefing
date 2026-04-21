@@ -2,6 +2,7 @@
 
 import os
 import sys
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -177,6 +178,79 @@ def test_fetch_cap_limits_network_fetches_not_native_normalization(tmp_path):
     statuses = [r["status"] for r in out["enrich_articles"]["records"]]
     assert statuses.count("skipped_fetch_cap") == 2
     assert out["raw_sources"]["rss"][-1]["summary"] == canonical
+
+
+def test_fetch_cap_prioritizes_empty_native_text(tmp_path):
+    items = [
+        {"source": "A", "url": "https://x/short", "summary": "short"},
+        {"source": "A", "url": "https://x/empty", "summary": ""},
+    ]
+    cfg = _config(tmp_path, enrich={"max_fetches_per_run": 1})
+    with patch("stages.enrich_articles.fetch_article_html") as fetch:
+        fetch.return_value.status = "http_error"
+        fetch.return_value.http_status = 500
+        fetch.return_value.html = ""
+        fetch.return_value.error = "boom"
+        out = run({"raw_sources": {"rss": items}}, cfg)
+    skipped = [
+        record
+        for record in out["enrich_articles"]["records"]
+        if record["status"] == "skipped_fetch_cap"
+    ]
+    assert fetch.call_count == 1
+    assert skipped[0]["url"] == "https://x/short"
+    assert "empty" in [call.args[0] for call in fetch.call_args_list][0]
+
+
+def test_browser_fetch_strategy_uses_browser_markdown(tmp_path):
+    feeds = [{"name": "A", "url": "x", "enrich": {"strategy": "browser_fetch"}}]
+    item = {"source": "A", "url": "https://x/1", "summary": ""}
+    cfg = _config(
+        tmp_path,
+        feeds=feeds,
+        enrich={
+            "browser_fetch_enabled": True,
+            "max_browser_fetches_per_run": 1,
+            "min_body_chars": 20,
+        },
+    )
+    result = SimpleNamespace(
+        status="ok",
+        http_status=200,
+        markdown="Browser markdown body with useful article detail.",
+        raw_length=47,
+        error="",
+    )
+    with patch("stages.enrich_articles.fetch_article_browser_markdown", return_value=result):
+        out = run({"raw_sources": {"rss": [item]}}, cfg)
+    assert "Browser markdown body" in out["raw_sources"]["rss"][0]["summary"]
+    assert out["enrich_articles"]["records"][0]["source_text_origin"] == "browser_markdown"
+
+
+def test_browser_fetch_has_separate_cap(tmp_path):
+    feeds = [
+        {"name": "A", "url": "x", "enrich": {"strategy": "browser_fetch"}},
+        {"name": "B", "url": "x", "enrich": {"strategy": "browser_fetch"}},
+    ]
+    items = [
+        {"source": "A", "url": "https://x/1", "summary": ""},
+        {"source": "B", "url": "https://x/2", "summary": ""},
+    ]
+    cfg = _config(
+        tmp_path,
+        feeds=feeds,
+        enrich={"browser_fetch_enabled": True, "max_browser_fetches_per_run": 1},
+    )
+    with patch("stages.enrich_articles.fetch_article_browser_markdown") as fetch:
+        fetch.return_value.status = "browser_failed"
+        fetch.return_value.http_status = None
+        fetch.return_value.markdown = ""
+        fetch.return_value.raw_length = 0
+        fetch.return_value.error = "blocked"
+        out = run({"raw_sources": {"rss": items}}, cfg)
+    statuses = [record["status"] for record in out["enrich_articles"]["records"]]
+    assert fetch.call_count == 1
+    assert statuses.count("skipped_browser_fetch_cap") == 1
 
 
 def test_rejects_meta_llm_summary_for_long_source(tmp_path):

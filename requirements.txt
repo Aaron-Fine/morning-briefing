@@ -12,3 +12,4 @@ pytest>=8.0
 ruff>=0.4
 trafilatura>=1.8
 curl-cffi>=0.7
+crawl4ai>=0.8

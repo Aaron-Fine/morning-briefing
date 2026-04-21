@@ -17,44 +17,70 @@ _ARTIFACTS_DIR = _ROOT / "output" / "artifacts"
 _CONFIG_PATH = _ROOT / "config.yaml"
 
 
-def load_artifacts(artifacts_root: Path, window_days: int) -> list[dict]:
+def load_artifacts(
+    artifacts_root: Path,
+    window_days: int,
+    *,
+    latest: bool = False,
+) -> list[dict]:
     """Load recent raw_sources and enrichment artifacts."""
     if not artifacts_root.exists():
         return []
+    directories = sorted(path for path in artifacts_root.iterdir() if path.is_dir())
+    if latest:
+        directory = _latest_artifact_dir(directories)
+        return [_load_artifact_dir(directory)] if directory else []
+
     cutoff = (datetime.now(timezone.utc) - timedelta(days=window_days)).date()
     artifacts = []
-    for directory in sorted(path for path in artifacts_root.iterdir() if path.is_dir()):
+    for directory in directories:
         try:
             artifact_day = datetime.fromisoformat(directory.name).date()
         except ValueError:
             continue
         if artifact_day < cutoff:
             continue
-        raw_path = directory / "raw_sources.json"
-        if not raw_path.exists():
-            continue
-        try:
-            rss_items = json.loads(raw_path.read_text(encoding="utf-8")).get("rss", [])
-        except json.JSONDecodeError:
-            continue
-
-        enrich_records = []
-        enrich_path = directory / "enrich_articles.json"
-        if enrich_path.exists():
-            try:
-                enrich_records = json.loads(
-                    enrich_path.read_text(encoding="utf-8")
-                ).get("records", [])
-            except json.JSONDecodeError:
-                pass
-        artifacts.append(
-            {
-                "date": directory.name,
-                "rss_items": rss_items or [],
-                "enrich_records": enrich_records or [],
-            }
-        )
+        artifact = _load_artifact_dir(directory)
+        if artifact:
+            artifacts.append(artifact)
     return artifacts
+
+
+def _latest_artifact_dir(directories: list[Path]) -> Path | None:
+    valid = []
+    for directory in directories:
+        try:
+            datetime.fromisoformat(directory.name).date()
+        except ValueError:
+            continue
+        if (directory / "raw_sources.json").exists():
+            valid.append(directory)
+    return max(valid, key=lambda path: path.name) if valid else None
+
+
+def _load_artifact_dir(directory: Path) -> dict | None:
+    raw_path = directory / "raw_sources.json"
+    if not raw_path.exists():
+        return None
+    try:
+        rss_items = json.loads(raw_path.read_text(encoding="utf-8")).get("rss", [])
+    except json.JSONDecodeError:
+        return None
+
+    enrich_records = []
+    enrich_path = directory / "enrich_articles.json"
+    if enrich_path.exists():
+        try:
+            enrich_records = json.loads(enrich_path.read_text(encoding="utf-8")).get(
+                "records", []
+            )
+        except json.JSONDecodeError:
+            pass
+    return {
+        "date": directory.name,
+        "rss_items": rss_items or [],
+        "enrich_records": enrich_records or [],
+    }
 
 
 def compute_feed_metrics(items: list[dict]) -> dict[str, dict]:
@@ -105,6 +131,15 @@ def merge_enrich_metrics(feed_metrics: dict[str, dict], records: list[dict]) -> 
         feed_metrics[source]["http_error_rate"] = _rate(
             statuses, lambda value: value == "http_error"
         )
+        feed_metrics[source]["browser_failure_rate"] = _rate(
+            statuses, lambda value: value.startswith("browser_")
+        )
+        feed_metrics[source]["fetch_cap_skipped"] = sum(
+            1 for value in statuses if value == "skipped_fetch_cap"
+        )
+        feed_metrics[source]["browser_cap_skipped"] = sum(
+            1 for value in statuses if value == "skipped_browser_fetch_cap"
+        )
         feed_metrics[source]["extraction_failed_rate"] = _rate(
             statuses, lambda value: value == "extraction_failed"
         )
@@ -124,6 +159,9 @@ def merge_enrich_metrics(feed_metrics: dict[str, dict], records: list[dict]) -> 
         metric.setdefault("success_rate", None)
         metric.setdefault("paywall_rate", None)
         metric.setdefault("http_error_rate", None)
+        metric.setdefault("browser_failure_rate", None)
+        metric.setdefault("fetch_cap_skipped", 0)
+        metric.setdefault("browser_cap_skipped", 0)
         metric.setdefault("extraction_failed_rate", None)
         metric.setdefault("llm_fallback_rate", None)
         metric.setdefault("native_mean_chars", 0)
@@ -154,6 +192,9 @@ def annotate_with_config(feed_metrics: dict[str, dict], config_path: Path) -> No
         metric["cap"] = feed.get("cap", "")
         metric["strategy"] = strategy
         metric["enrich_cfg"] = enrich
+        metric["skip_policy"] = enrich.get("skip_reason") or (
+            "title_only_ok" if enrich.get("title_only_ok") else ""
+        )
 
 
 def recommend_action(
@@ -176,6 +217,10 @@ def recommend_action(
 
     has_cookies = bool(enrich_cfg.get("cookies_file"))
     if strategy == "skip":
+        if enrich_cfg.get("title_only_ok"):
+            return "ok (title/teaser-only accepted)"
+        if median_chars < 80 or empty_rate > 0:
+            return "define skip policy or retire"
         return "ok (intentionally skipped)"
     if paywall_rate is not None and paywall_rate >= 0.8:
         if has_cookies:
@@ -201,8 +246,8 @@ def render_markdown_report(feed_metrics: dict[str, dict]) -> str:
     lines = [
         "# RSS Feed Quality Audit",
         "",
-        "| Feed | Items | Median chars | Empty % | Paywall % | HTTP % | Mode | Strategy | Recommend |",
-        "|---|---:|---:|---:|---:|---:|---|---|---|",
+        "| Feed | Items | Median chars | Empty % | Paywall % | HTTP % | Browser fail % | Mode | Strategy | Policy | Recommend |",
+        "|---|---:|---:|---:|---:|---:|---:|---|---|---|---|",
     ]
     for source, metric in sorted(
         feed_metrics.items(), key=lambda item: (item[1]["median_chars"], item[0])
@@ -216,15 +261,17 @@ def render_markdown_report(feed_metrics: dict[str, dict]) -> str:
             enrich_cfg=metric.get("enrich_cfg", {}),
         )
         lines.append(
-            "| {source} | {items} | {median} | {empty} | {paywall} | {http} | {mode} | {strategy} | {rec} |".format(
+            "| {source} | {items} | {median} | {empty} | {paywall} | {http} | {browser} | {mode} | {strategy} | {policy} | {rec} |".format(
                 source=source,
                 items=metric["items"],
                 median=metric["median_chars"],
                 empty=_pct(metric["empty_rate"]),
                 paywall=_pct(metric.get("paywall_rate")),
                 http=_pct(metric.get("http_error_rate")),
+                browser=_pct(metric.get("browser_failure_rate")),
                 mode=metric.get("mode", "rss"),
                 strategy=metric.get("strategy", "auto"),
+                policy=metric.get("skip_policy", ""),
                 rec=rec,
             )
         )
@@ -251,12 +298,18 @@ def _pct(value: float | None) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Audit RSS feed quality.")
     parser.add_argument("--window", type=int, default=14)
+    parser.add_argument(
+        "--latest",
+        action="store_true",
+        help="Audit only the newest artifact directory. --window 0 is an alias.",
+    )
     parser.add_argument("--output", type=str, default=None)
     parser.add_argument("--artifacts-dir", type=str, default=str(_ARTIFACTS_DIR))
     parser.add_argument("--config", type=str, default=str(_CONFIG_PATH))
     args = parser.parse_args()
 
-    artifacts = load_artifacts(Path(args.artifacts_dir), args.window)
+    latest = args.latest or args.window == 0
+    artifacts = load_artifacts(Path(args.artifacts_dir), args.window, latest=latest)
     if not artifacts:
         report = (
             "# RSS Feed Quality Audit\n\n"

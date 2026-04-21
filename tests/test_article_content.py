@@ -44,6 +44,7 @@ def test_best_native_text_ignores_blank_and_html_only_values():
 
 def test_resolve_strategy_supports_explicit_and_legacy_flags():
     assert resolve_strategy({"enrich": {"strategy": "rss_only"}}) == "rss_only"
+    assert resolve_strategy({"enrich": {"strategy": "browser_fetch"}}) == "browser_fetch"
     assert resolve_strategy({"enrich": {"strategy": "skip"}}) == "skip"
     assert resolve_strategy({"enrich": {"skip": True}}) == "skip"
     assert resolve_strategy({"enrich": {"fetch_article": True}}) == "fetch"
@@ -60,6 +61,7 @@ def test_needs_fetch_respects_strategy_and_length():
     assert needs_fetch("", "auto", 200) is True
     assert needs_fetch("x" * 250, "auto", 200) is False
     assert needs_fetch("x" * 250, "fetch", 200) is True
+    assert needs_fetch("", "browser_fetch", 200) is False
     assert needs_fetch("", "rss_only", 200) is False
     assert needs_fetch("", "skip", 200) is False
 

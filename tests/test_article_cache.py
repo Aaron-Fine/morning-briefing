@@ -18,6 +18,7 @@ def test_cache_put_then_get(tmp_path):
     assert entry.canonical_summary == "Summary"
     assert entry.source_text_origin == "fetched_html"
     assert entry.summary_length == len("Summary")
+    assert entry.extractor_version > 0
 
 
 def test_cache_ok_entry_expires_after_ttl(tmp_path):
@@ -55,6 +56,16 @@ def test_cache_without_current_version_is_miss(tmp_path):
     path = next(tmp_path.glob("*.json"))
     data = json.loads(path.read_text(encoding="utf-8"))
     data.pop("cache_version")
+    path.write_text(json.dumps(data), encoding="utf-8")
+    assert cache.get("https://x/") is None
+
+
+def test_cache_component_version_mismatch_is_miss(tmp_path):
+    cache = ArticleCache(tmp_path)
+    cache.put("https://x/", "ok", 200, "Summary", 1200, "browser_markdown", "Src", "")
+    path = next(tmp_path.glob("*.json"))
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["component_version"] = 0
     path.write_text(json.dumps(data), encoding="utf-8")
     assert cache.get("https://x/") is None
 

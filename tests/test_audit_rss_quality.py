@@ -82,6 +82,15 @@ def test_load_artifacts_reads_raw_and_enrichment(tmp_path):
     assert loaded[0]["enrich_records"][0]["status"] == "ok"
 
 
+def test_load_artifacts_latest_reads_newest_artifact(tmp_path):
+    _write_artifact(tmp_path, "2026-04-18", [{"source": "Old", "summary": "x"}])
+    _write_artifact(tmp_path, "2026-04-19", [{"source": "New", "summary": "x"}])
+    loaded = load_artifacts(tmp_path, 0, latest=True)
+    assert len(loaded) == 1
+    assert loaded[0]["date"] == "2026-04-19"
+    assert loaded[0]["rss_items"][0]["source"] == "New"
+
+
 def test_render_markdown_report_outputs_rows():
     report = render_markdown_report(
         {
@@ -99,3 +108,20 @@ def test_render_markdown_report_outputs_rows():
     )
     assert "| Feed |" in report
     assert "| A |" in report
+
+
+def test_recommend_action_flags_thin_skip_without_policy():
+    rec = recommend_action(5, 0, 1.0, None, "rss", {"strategy": "skip"})
+    assert rec == "define skip policy or retire"
+
+
+def test_recommend_action_accepts_title_only_skip_policy():
+    rec = recommend_action(
+        5,
+        0,
+        1.0,
+        None,
+        "rss",
+        {"strategy": "skip", "title_only_ok": True},
+    )
+    assert rec == "ok (title/teaser-only accepted)"
