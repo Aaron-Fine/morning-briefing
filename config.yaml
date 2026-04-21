@@ -58,8 +58,8 @@ pipeline:
 
     - name: prepare_spiritual_weekly
       model:
-        provider: anthropic
-        model: "claude-sonnet-4-6"
+        provider: fireworks
+        model: "accounts/fireworks/models/minimax-m2p7"
         max_tokens: 8192
         temperature: 0.3
 
@@ -75,8 +75,8 @@ pipeline:
 
     - name: seams
       model:
-        provider: anthropic
-        model: "claude-sonnet-4-6"
+        provider: fireworks
+        model: "accounts/fireworks/models/minimax-m2p7"
         max_tokens: 8192
         temperature: 0.3
       turns:
