@@ -24,7 +24,6 @@ Last updated: 2026-04-21
 
 - **`config.yaml` is doing four jobs** (pipeline manifest, LLM routing, source catalog, delivery prefs). 246 lines. Split into `config/pipeline.yaml`, `config/sources.yaml`, `config/delivery.yaml` and merge at load.
 - **Stage I/O is untyped dicts.** `context.get("domain_analysis", {})` everywhere. Pydantic models for `DomainAnalysis`, `CrossDomainOutput`, `SeamData` would catch schema drift — that seam is the most likely silent-regression spot.
-- **`stages/cross_domain.py` at 525 lines** likely mixes prompt construction, LLM call, and response parsing. Split into `cross_domain/prompt.py`, `cross_domain/parse.py`, `cross_domain/stage.py`.
 
 ### High — Performance
 
@@ -125,6 +124,12 @@ Last updated: 2026-04-21
 - **Moved email CSS out of the Python template.** `templates/email_template.py` now loads `templates/digest.css` at import and injects it into the rendered `<style>` block.
 - **Kept tag vocabulary contracts pointed at the stylesheet.** The CSS tag-variable contract now reads `templates/digest.css`, so tag drift remains covered after the extraction.
 - **Tests:** Email template and contract tests cover rendered CSS and tag-variable consistency.
+
+### 2026-04-21 — Cross-domain stage split
+
+- **Separated cross-domain responsibilities.** Prompt assembly now lives in `cross_domain/prompt.py`, normalization/fallback parsing in `cross_domain/parse.py`, and stage orchestration in `cross_domain/stage.py`.
+- **Preserved the configured stage import.** `stages/cross_domain.py` remains as a compatibility module for pipeline loading and existing private helper imports.
+- **Tests:** Cross-domain and contract tests cover the split implementation through the existing public stage path.
 
 ### 2026-04-17 — Weather: AQI overlay restored
 
