@@ -55,7 +55,7 @@ Last updated: 2026-04-22
 - **Closed stale docs and contract drift items.** `assemble.py` no longer documents the removed Phase 0 `synthesis_output` path, README desk guidance now matches `_DOMAIN_CONFIGS` plus the shared prompt, and tag contract tests now cover `_TAG_KEYWORDS` plus the prompt allowed-tag list.
 - **Consolidated shared helpers.** AQI label/color classification now lives in `utils/aqi.py`; dated artifact directory/list/load/save helpers now live in `utils/artifacts.py`.
 - **Fed cross-domain connections into follow-up context.** `briefing_packet` now includes `cross_domain_connections`, matching the chat briefer prompt's existing instruction to check them first.
-- **Tests:** Dockerized full suite passed before the final briefing-packet wire-up (`913 passed`); focused briefing-packet suite passed after the final wire-up (`9 passed`). Final full-suite rerun pending.
+- **Tests:** Dockerized full suite passed after final wire-up (`914 passed`).
 
 ### 2026-04-22 — Seams LLM output stabilized
 
