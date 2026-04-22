@@ -1,9 +1,8 @@
 """Stage: assemble — Merge all stage outputs and render the HTML digest.
 
-Supports three pipeline configurations:
+Supports two pipeline configurations:
   Phase 3+: cross_domain_output present → use editor-in-chief output
   Phase 1:  domain_analysis present → merge domain artifacts into template format
-  Phase 0:  synthesis_output present → use directly (backward compat)
 
 Inputs (Phase 3+):
   cross_domain_output (dict), calendar (dict), weather (dict),
@@ -12,9 +11,6 @@ Inputs (Phase 3+):
 Inputs (Phase 1):
   domain_analysis (dict), calendar (dict), weather (dict),
   spiritual (dict), local_items (list), seam_data (dict), raw_sources (dict)
-
-Inputs (Phase 0 fallback):
-  synthesis_output (dict), seam_data (dict), raw_sources (dict)
 
 Outputs: html (str), template_data (dict), digest_json (dict)
 
@@ -59,7 +55,7 @@ def _item_to_glance(item: dict) -> dict:
 
     Preserves facts, analysis, and cross_domain_note as separate fields so the
     template can render them with distinct voice labels (SOURCES / ANALYSIS / THREAD).
-    Also builds a flat `context` string as a fallback for Phase 0 rendering.
+    Also builds a flat `context` string as a fallback for degraded rendering.
     """
     tag = item.get("tag", "")
     facts = item.get("facts", "")

@@ -16,7 +16,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from morning_digest.config import load_config
 from morning_digest.validate import VALID_TAGS, VALID_TAG_LABELS
-from stages.cross_domain import _VALID_TAGS, _TAG_LABELS, _SYSTEM_PROMPT
+from stages.cross_domain import (
+    _EXECUTE_PROMPT,
+    _SYSTEM_PROMPT,
+    _TAG_KEYWORDS,
+    _TAG_LABELS,
+    _VALID_TAGS,
+)
 from stages.assemble import _TAG_LABELS as ASSEMBLE_TAG_LABELS
 from stages.prepare_calendar import _parse_date
 from stages.prepare_local import CONSUMED_RSS_CATEGORIES
@@ -32,7 +38,7 @@ def _configured_stage_names() -> list[str]:
 
 
 class TestTagVocabularyConsistency:
-    """Tag vocabulary must be identical across validate, cross_domain, assemble, and CSS."""
+    """Tag vocabulary must stay synchronized across all tag contract surfaces."""
 
     def test_validate_tags_match_cross_domain_tags(self):
         assert VALID_TAGS == _VALID_TAGS, (
@@ -67,6 +73,27 @@ class TestTagVocabularyConsistency:
             f"CSS tag variables != validate.VALID_TAGS. "
             f"Missing from CSS: {VALID_TAGS - css_tags}, "
             f"Extra in CSS: {css_tags - VALID_TAGS}"
+        )
+
+    def test_cross_domain_keywords_cover_all_valid_tags(self):
+        keyword_tags = {tag for _, tag in _TAG_KEYWORDS}
+        assert keyword_tags == VALID_TAGS, (
+            f"cross_domain._TAG_KEYWORDS tag coverage != validate.VALID_TAGS. "
+            f"Missing keyword coverage: {VALID_TAGS - keyword_tags}, "
+            f"Extra keyword tags: {keyword_tags - VALID_TAGS}"
+        )
+
+    def test_execute_prompt_allowed_tag_list_matches_valid_tags(self):
+        match = re.search(
+            r'"tag": "must be exactly one of: ([^"]+)"',
+            _EXECUTE_PROMPT,
+        )
+        assert match, "Could not find allowed tag list in cross_domain_execute prompt"
+        prompt_tags = {tag.strip() for tag in match.group(1).split(",")}
+        assert prompt_tags == VALID_TAGS, (
+            f"cross_domain_execute prompt tag list != validate.VALID_TAGS. "
+            f"Missing from prompt: {VALID_TAGS - prompt_tags}, "
+            f"Extra in prompt: {prompt_tags - VALID_TAGS}"
         )
 
 

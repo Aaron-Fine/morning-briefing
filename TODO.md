@@ -22,7 +22,9 @@ Last updated: 2026-04-22
 ### Low — Review sweep (2026-04-21)
 
 - **Documentation still references dead or misleading architecture.** `stages/assemble.py` advertises a Phase 0 `synthesis_output` mode in its docstring but the implementation no longer has a `synthesis_output` branch. README says adding a desk means creating `prompts/desk_<name>.md`, while current desks are hard-coded in `_DOMAIN_CONFIGS` and use one shared prompt. This is the kind of stale doc that makes the next change worse than it needs to be.
+  - Status 2026-04-22: stale assemble docstring and README desk guidance updated; awaiting tests before closeout.
 - **Tag contract tests miss half the promised contract.** AGENTS says tag vocabulary is synchronized across five surfaces, including `_TAG_KEYWORDS` and the prompt tag list. `tests/test_contracts.py` checks labels/CSS and merely checks field names in `_SYSTEM_PROMPT`; it does not parse the allowed tag list in `prompts/cross_domain_execute.md`, and it does not assert keyword coverage for new tags. Add tests that fail when a tag is added without prompt and keyword updates.
+  - Status 2026-04-22: contract tests added for `_TAG_KEYWORDS` coverage and prompt allowed-tag parsing; awaiting tests before closeout.
 - **`cross_domain_connections` are generated and then mostly thrown in a drawer.** `assemble` saves them only in `digest_json["cross_domain_connections"]`; the email does not render them, and anomaly checks do not inspect them. Either render a compact section, feed them into seam annotations, or stop spending output tokens on them.
   - Decision: keep them. Cross-domain connections are a key analytical input that the final report generator should draw on.
 
@@ -52,6 +54,7 @@ Last updated: 2026-04-22
 
 - **Tracked in `plan.md` Slice 0: timezone/date audit.** The current plan now covers `TZ` authority, shared helper adoption, artifact dates, and user-visible date formatting across the codebase.
 - **Phase 0 dead code in `assemble.py`.** The "empty fallback" branch is only reachable when Phase 3 (`cross_domain`) produces nothing, which hasn't happened since the `_failed` flag landed. Verify unreachable and delete, or keep but document the invariant.
+  - Status 2026-04-22: stale Phase 0 references removed from the docstring; runtime empty-output fallback left in place as degraded rendering guard.
 - **Tracked in `plan.md` Slice 0: `_empty_domain_result` contract drift.** Keep follow-up notes here only if additional edge cases appear during implementation.
 
 ---

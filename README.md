@@ -281,7 +281,7 @@ docker build -t morning-digest:latest .
 
 **`youtube.lookback_hours`** — How far back to look for new videos (default: 48)
 
-**`desks`** — Desk manifest mapping desk names to RSS feed categories. Each desk runs a specialist analysis pass in parallel. To add a desk, add an entry here and create a matching `prompts/desk_<name>.md` file.
+**`desks`** — Desk manifest mapping desk names to RSS feed categories. Each desk runs a specialist analysis pass in parallel. The desk names must exist in `stages/analyze_domain.py` (`_DOMAIN_CONFIGS`); the manifest controls which categories feed each active desk. All desks currently share `prompts/analyze_domain_system.md`.
 
 ```yaml
 desks:
@@ -487,13 +487,14 @@ morning-digest/
 │   ├── holidays.py          # Holiday calendar
 │   └── economic_calendar.py # Economic events
 ├── prompts/                 # Prompt files for LLM stages
+│   ├── analyze_domain_system.md # Shared specialist desk prompt
 │   ├── seam_annotations.md  # Per-item seam annotation prompt
 │   ├── seam_candidates.md   # Broad seam candidate scan prompt
 │   ├── prepare_spiritual_weekly.md # Weekly spiritual artifact prompt
 │   ├── cross_domain_plan.md # Cross-domain Turn 1: editorial planning
 │   ├── cross_domain_execute.md  # Cross-domain Turn 2: writing
 │   ├── coverage_gaps.md     # Coverage gap diagnostic
-│   └── ...                  # Per-desk and system prompts
+│   └── ...                  # Other stage prompts
 ├── utils/
 │   ├── prompts.py           # Prompt loader (template substitution from prompts/)
 │   ├── time.py              # Shared timezone helper (reads TZ env var)
