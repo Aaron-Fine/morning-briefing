@@ -127,10 +127,9 @@ class TestEntrypointMain:
     @patch("entrypoint.run")
     @patch("entrypoint.time.sleep")
     @patch("entrypoint.datetime")
-    @patch("yaml.safe_load")
-    @patch("builtins.open")
+    @patch("entrypoint.load_config")
     def test_scheduler_mode_sleeps(
-        self, mock_open, mock_yaml_load, mock_dt, mock_sleep, mock_run
+        self, mock_load_config, mock_dt, mock_sleep, mock_run
     ):
         import sys
         from entrypoint import main
@@ -146,8 +145,7 @@ class TestEntrypointMain:
 
         mock_sleep.side_effect = fake_sleep
         mock_dt.now.return_value = datetime(2026, 4, 10, 12, 0, 0)
-        # Mock config to avoid reading real config.yaml
-        mock_yaml_load.return_value = {"schedule": {"cron": "0 6 * * *"}}
+        mock_load_config.return_value = {"schedule": {"cron": "0 6 * * *"}}
 
         with pytest.raises(KeyboardInterrupt):
             main()

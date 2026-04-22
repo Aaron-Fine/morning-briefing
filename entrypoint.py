@@ -10,10 +10,9 @@ import sys
 import time
 import logging
 import traceback
-import yaml
 from datetime import datetime, timedelta
-from pathlib import Path
 
+from morning_digest.config import load_config
 from pipeline import run_pipeline as run
 from utils.time import get_local_tz
 
@@ -59,10 +58,7 @@ def main():
             sys.exit(1)
         return
 
-    # Load schedule from config
-    config_path = Path(__file__).parent / "config.yaml"
-    with open(config_path) as f:
-        config = yaml.safe_load(f)
+    config = load_config()
 
     cron = config.get("schedule", {}).get("cron", "0 6 * * *")
     tz = get_local_tz()

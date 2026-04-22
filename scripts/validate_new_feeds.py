@@ -21,7 +21,7 @@ from pathlib import Path
 
 import feedparser
 import requests
-import yaml
+from morning_digest.config import load_config
 
 from sources.rss_feeds import _items_from_html_index
 
@@ -137,9 +137,7 @@ def print_table(results: list[dict]) -> None:
 
 
 def _load_configured_feeds() -> list[dict]:
-    config_path = Path(__file__).parent.parent / "config.yaml"
-    with open(config_path) as f:
-        config = yaml.safe_load(f)
+    config = load_config(Path(__file__).parent.parent)
     return config.get("rss", {}).get("feeds", [])
 
 

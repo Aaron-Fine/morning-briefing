@@ -28,7 +28,7 @@ import time
 from datetime import timedelta
 from pathlib import Path
 
-import yaml
+from morning_digest.config import load_config
 from utils.time import artifact_date, iso_now_local, now_local
 
 log = logging.getLogger("pipeline")
@@ -36,16 +36,6 @@ log = logging.getLogger("pipeline")
 _ROOT = Path(__file__).parent
 _OUTPUT_DIR = _ROOT / "output"
 _ARTIFACTS_BASE = _OUTPUT_DIR / "artifacts"
-
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
-
-
-def load_config() -> dict:
-    with open(_ROOT / "config.yaml") as f:
-        return yaml.safe_load(f)
-
 
 # ---------------------------------------------------------------------------
 # Logging

@@ -13,6 +13,7 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD}
     volumes:
       # Mount config for easy editing without rebuilding
+      - ./config:/app/config:ro
       - ./config.yaml:/app/config.yaml:ro
       # Optional: persist fallback HTML output
       - ./output:/app/output

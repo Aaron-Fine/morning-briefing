@@ -1,0 +1,143 @@
+llm:
+  model: accounts/fireworks/models/minimax-m2p7
+  max_tokens: 12000
+  temperature: 0.4
+pipeline:
+  retry:
+    max_retries: 1
+    backoff_base_seconds: 5
+  stages:
+  - name: collect
+    retry:
+      max_retries: 1
+      backoff_base_seconds: 5
+  - name: enrich_articles
+    retry:
+      max_retries: 0
+    model:
+      provider: fireworks
+      model: accounts/fireworks/models/minimax-m2p7
+      max_tokens: 500
+      temperature: 0.2
+  - name: compress
+    retry:
+      max_retries: 0
+    model:
+      provider: fireworks
+      model: accounts/fireworks/models/minimax-m2p7
+      max_tokens: 2000
+      temperature: 0.2
+  - name: analyze_domain
+    retry:
+      max_retries: 0
+    model:
+      provider: fireworks
+      model: accounts/fireworks/models/minimax-m2p7
+      max_tokens: 10000
+      temperature: 0.6
+  - name: prepare_calendar
+  - name: prepare_weather
+  - name: prepare_spiritual_weekly
+    retry:
+      max_retries: 0
+    model:
+      provider: fireworks
+      model: accounts/fireworks/models/minimax-m2p7
+      max_tokens: 8192
+      temperature: 0.3
+  - name: prepare_spiritual
+    retry:
+      max_retries: 0
+    model:
+      provider: fireworks
+      model: accounts/fireworks/models/minimax-m2p7
+      max_tokens: 512
+      temperature: 0.5
+  - name: prepare_local
+  - name: seams
+    retry:
+      max_retries: 0
+    model:
+      provider: fireworks
+      model: accounts/fireworks/models/minimax-m2p7
+      max_tokens: 8192
+      temperature: 0.3
+    turns:
+      candidates:
+        max_tokens: 6000
+        temperature: 0.4
+      annotations:
+        max_tokens: 8192
+        temperature: 0.3
+  - name: cross_domain
+    retry:
+      max_retries: 0
+    model:
+      provider: fireworks
+      model: accounts/fireworks/models/minimax-m2p7
+      max_tokens: 16000
+      temperature: 0.3
+    turns:
+      plan:
+        max_tokens: 4000
+        temperature: 0.4
+      execute:
+        max_tokens: 16000
+        temperature: 0.3
+  - name: coverage_gaps
+    retry:
+      max_retries: 0
+    model:
+      provider: fireworks
+      model: accounts/fireworks/models/minimax-m2p7
+      max_tokens: 3000
+      temperature: 0.5
+  - name: assemble
+  - name: anomaly
+  - name: briefing_packet
+  - name: send
+desks:
+- name: geopolitics
+  categories:
+  - non-western
+  - western-analysis
+  - substack-independent
+  - global-south
+  - perspective-diversity
+- name: defense_space
+  categories:
+  - defense-mil
+- name: ai_tech
+  categories:
+  - ai-tech
+  - cyber
+- name: energy_materials
+  categories:
+  - energy-materials
+- name: culture_structural
+  categories:
+  - culture-structural
+  - legal-institutional
+  - demographics
+- name: science_biotech
+  categories:
+  - science-biotech
+- name: econ
+  categories:
+  - econ-trade
+enrich_articles:
+  enabled: true
+  min_usable_chars: 200
+  summarize_above_chars: 800
+  canonical_summary_max_chars: 700
+  max_fetches_per_run: 60
+  browser_fetch_enabled: true
+  max_browser_fetches_per_run: 15
+  browser_timeout_seconds: 30
+  cache_ttl_days: 30
+  cache_failure_backoff_hours: 24
+  per_host_concurrency: 2
+  per_host_min_interval_ms: 500
+  min_body_chars: 300
+  timeout_seconds: 15
+  impersonate: chrome

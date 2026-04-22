@@ -1,0 +1,47 @@
+schedule:
+  cron: 0 6 * * *
+delivery:
+  method: smtp
+  smtp_host: smtp.gmail.com
+  smtp_port: 587
+  to_address: morningDigest@lurkers.us
+  from_name: Morning Digest
+  subject_template: Morning Digest — {date}
+topics:
+  primary:
+  - World news / geopolitics / active conflicts
+  - AI / LLMs / agentic technology
+  secondary:
+  - Defense / DoD / missile warning / missile defense
+  - UARC / FFRDC news
+  - Space technology and launch
+  tertiary:
+  - Self-hosting / privacy / open source
+  - EVs / right-to-repair / consumer tech
+  - Local news / Utah news
+digest:
+  failure_visibility: artifacts_only
+  at_a_glance:
+    min_items: 4
+    normal_items: 5
+    max_items: 7
+  deep_dives:
+    count: 2
+    include_further_reading: true
+  youtube:
+    analysis_synthesis: true
+  worth_reading:
+    enabled: true
+    count: 3
+  week_ahead:
+    enabled: true
+    count: 5
+  markets:
+    enabled: true
+  spiritual:
+    enabled: true
+    source: come_follow_me
+  local:
+    enabled: true
+    max_items: 4
+quiet_day_policy: always_send

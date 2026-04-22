@@ -11,10 +11,10 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
-import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from morning_digest.config import load_config
 from morning_digest.validate import VALID_TAGS, VALID_TAG_LABELS
 from stages.cross_domain import _VALID_TAGS, _TAG_LABELS, _SYSTEM_PROMPT
 from stages.assemble import _TAG_LABELS as ASSEMBLE_TAG_LABELS
@@ -23,8 +23,7 @@ from stages.prepare_local import CONSUMED_RSS_CATEGORIES
 
 
 def _configured_stage_names() -> list[str]:
-    config_path = Path(__file__).parent.parent / "config.yaml"
-    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config = load_config(Path(__file__).parent.parent)
     return [
         stage["name"]
         for stage in config.get("pipeline", {}).get("stages", [])
@@ -196,8 +195,7 @@ class TestRssCategoryRoutingContract:
     def test_all_configured_rss_categories_have_active_consumers(self):
         from stages.analyze_domain import _resolve_domain_configs
 
-        config_path = Path(__file__).parent.parent / "config.yaml"
-        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        config = load_config(Path(__file__).parent.parent)
         rss_categories = {
             feed.get("category")
             for feed in config.get("rss", {}).get("feeds", [])

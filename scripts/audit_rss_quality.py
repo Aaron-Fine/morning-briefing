@@ -12,6 +12,8 @@ from pathlib import Path
 
 import yaml
 
+from morning_digest.config import load_config
+
 _ROOT = Path(__file__).resolve().parent.parent
 _ARTIFACTS_DIR = _ROOT / "output" / "artifacts"
 _CONFIG_PATH = _ROOT / "config.yaml"
@@ -179,10 +181,13 @@ def merge_enrich_metrics(feed_metrics: dict[str, dict], records: list[dict]) -> 
 
 def annotate_with_config(feed_metrics: dict[str, dict], config_path: Path) -> None:
     """Add feed mode/cap/enrichment strategy from config.yaml."""
-    if not config_path.exists():
-        return
     try:
-        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        if config_path.name == "config.yaml":
+            config = load_config(config_path.parent)
+        else:
+            if not config_path.exists():
+                return
+            config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     except Exception:
         return
     feeds = {feed.get("name"): feed for feed in config.get("rss", {}).get("feeds", [])}

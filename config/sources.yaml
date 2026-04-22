@@ -1,0 +1,364 @@
+location:
+  city: Logan
+  state: UT
+  region: Cache Valley
+  latitude: 41.737
+  longitude: -111.834
+youtube:
+  analysis_channels:
+  - handle: roadswithbeau
+    name: Beau of the Fifth Column
+  - handle: t3dotgg
+    name: Theo - t3.gg
+  - handle: PerunAU
+    name: Perun
+  - handle: FoldingIdeas
+    name: Folding Ideas
+  lookback_hours: 48
+weather:
+  provider: nws
+  nws_station: KLGU
+  aqi_strip: true
+  record_band: true
+  normal_band: true
+markets:
+  symbols:
+  - symbol: SPY
+    label: S&P 500
+  - symbol: DIA
+    label: Dow
+  - symbol: XAR
+    label: Defense
+  - symbol: XLE
+    label: Energy
+rss:
+  provider: direct
+  freshrss_url: ''
+  freshrss_user: ''
+  freshrss_password: ''
+  feeds:
+  - url: https://www.aljazeera.com/xml/rss/all.xml
+    name: Al Jazeera
+    cap: 7
+    category: non-western
+    reliability: primary-reporting
+  - url: https://scmp.com/rss/91/feed
+    name: South China Morning Post
+    cap: 10
+    category: non-western
+    reliability: primary-reporting
+  - url: https://asia.nikkei.com/rss/feed/nar
+    name: Nikkei Asia
+    cap: 8
+    category: non-western
+    reliability: primary-reporting
+    enrich:
+      strategy: browser_fetch
+  - url: https://www.thehindu.com/feeder/default.rss
+    name: The Hindu
+    cap: 5
+    category: non-western
+    reliability: primary-reporting
+  - url: https://www.dawn.com/feeds/home
+    name: Dawn
+    cap: 5
+    category: non-western
+    reliability: primary-reporting
+  - url: https://asiatimes.com/feed
+    name: Asia Times
+    cap: 5
+    category: non-western
+    reliability: analysis-opinion
+  - url: https://www.theatlantic.com/feed/all/
+    name: The Atlantic
+    cap: 8
+    category: western-analysis
+    reliability: analysis-opinion
+    enrich:
+      strategy: fetch_with_cookies
+      cookies_file: cookies/atlantic.cookies.txt
+  - url: https://breakingdefense.com/feed/
+    name: Breaking Defense
+    category: defense-mil
+    reliability: primary-reporting
+  - url: https://www.airandspaceforces.com/feed/
+    name: Air & Space Forces
+    category: defense-mil
+    reliability: primary-reporting
+  - url: https://spacenews.com/feed/
+    name: SpaceNews
+    category: defense-mil
+    reliability: primary-reporting
+    cooldown_on_429_seconds: 21600
+  - url: https://warontherocks.com/feed/
+    name: War on the Rocks
+    cap: 5
+    category: defense-mil
+    reliability: analysis-opinion
+  - url: https://defenseacquisition.substack.com/feed
+    name: Defense Tech and Acquisition
+    cap: 5
+    category: defense-mil
+    reliability: analysis-opinion
+  - url: https://malcontentnews.substack.com/feed
+    name: Malcontent News
+    category: substack-independent
+    reliability: primary-reporting
+  - url: https://adamtooze.substack.com/feed
+    name: Adam Tooze — Chartbook
+    cap: 3
+    category: substack-independent
+    reliability: analysis-opinion
+  - url: https://chinatalk.substack.com/feed
+    name: China Talk
+    cap: 3
+    category: substack-independent
+    reliability: analysis-opinion
+  - url: https://sinification.substack.com/feed
+    name: Sinification
+    cap: 3
+    category: substack-independent
+    reliability: analysis-opinion
+  - url: https://proximities.substack.com/feed
+    name: Proximities
+    cap: 5
+    category: substack-independent
+    reliability: analysis-opinion
+  - url: https://danieldrezner.substack.com/feed
+    name: Daniel Drezner
+    cap: 3
+    category: substack-independent
+    reliability: analysis-opinion
+  - url: https://claireberlinski.substack.com/feed
+    name: The Cosmopolitan Globalist
+    cap: 3
+    category: substack-independent
+    reliability: analysis-opinion
+  - url: https://menatrack.substack.com/feed
+    name: MenaTrack
+    cap: 5
+    category: substack-independent
+    reliability: analysis-opinion
+  - url: https://oneusefulthing.substack.com/feed
+    name: One Useful Thing (Ethan Mollick)
+    cap: 3
+    category: ai-tech
+    reliability: analysis-opinion
+  - url: https://importai.substack.com/feed
+    name: Import AI (Jack Clark)
+    cap: 3
+    category: ai-tech
+    reliability: analysis-opinion
+  - url: https://simonwillison.net/atom/everything/
+    name: Simon Willison
+    cap: 8
+    category: ai-tech
+    reliability: analysis-opinion
+  - url: https://theovershoot.co/feed
+    name: The Overshoot (Matt Klein)
+    cap: 3
+    category: econ-trade
+    reliability: analysis-opinion
+  - url: https://www.cfr.org/series/follow-the-money
+    name: Brad Setser
+    cap: 3
+    category: econ-trade
+    reliability: analysis-opinion
+    mode: html_index
+    enrich:
+      strategy: fetch
+  - url: https://www.ft.com/rss/home
+    name: Financial Times
+    cap: 5
+    category: econ-trade
+    reliability: primary-reporting
+    enrich:
+      strategy: skip
+      title_only_ok: true
+      skip_reason: RSS teaser/title only; do not fetch hard paywall without separate
+        subscription workflow
+  - url: https://www.economist.com/finance-and-economics/rss.xml
+    name: The Economist (Finance & Economics)
+    cap: 5
+    category: econ-trade
+    reliability: analysis-opinion
+    enrich:
+      strategy: skip
+      title_only_ok: true
+      skip_reason: RSS teaser/title only; do not fetch hard paywall without separate
+        subscription workflow
+  - url: https://www.reuters.com/markets/
+    name: Reuters Markets
+    cap: 5
+    category: econ-trade
+    reliability: primary-reporting
+    mode: html_index
+    cooldown_on_error_seconds: 21600
+    enrich:
+      strategy: browser_fetch
+      browser_wait_for: css:article
+  - url: https://www.ipsnews.net/news/headlines/feed/
+    name: Inter Press Service
+    cap: 5
+    category: global-south
+    reliability: primary-reporting
+  - url: https://chinaglobalsouth.com/news-feed/
+    name: China Global South Project
+    cap: 3
+    category: global-south
+    reliability: analysis-opinion
+    mode: html_index
+    enrich:
+      strategy: fetch
+  - url: https://diff.substack.com/
+    name: The Diff (Byrne Hobart)
+    cap: 3
+    category: perspective-diversity
+    reliability: analysis-opinion
+    mode: html_index
+    enrich:
+      strategy: fetch
+  - url: https://slowboring.substack.com/feed
+    name: Slow Boring (Matt Yglesias)
+    cap: 3
+    category: perspective-diversity
+    reliability: analysis-opinion
+  - url: https://ventureinsecurity.net/feed
+    name: Venture in Security
+    cap: 3
+    category: cyber
+    reliability: analysis-opinion
+  - url: https://risky.biz/feeds/risky-business-news/
+    name: Risky Business
+    cap: 3
+    category: cyber
+    reliability: analysis-opinion
+  - url: https://utilitydive.com/feeds/news/
+    name: Utility Dive
+    cap: 5
+    category: energy-materials
+    reliability: primary-reporting
+  - url: https://www.mining.com/feed/
+    name: Mining.com
+    cap: 5
+    category: energy-materials
+    reliability: primary-reporting
+  - url: https://oilprice.com/rss/main
+    name: OilPrice.com
+    cap: 5
+    category: energy-materials
+    reliability: primary-reporting
+  - url: https://www.carbonbrief.org/feed
+    name: Carbon Brief
+    cap: 5
+    category: energy-materials
+    reliability: analysis-opinion
+  - url: https://www.theamericanconservative.com/feed/
+    name: The American Conservative
+    cap: 3
+    category: culture-structural
+    reliability: analysis-opinion
+  - url: https://worksinprogress.substack.com/feed
+    name: Works in Progress
+    cap: 3
+    category: culture-structural
+    reliability: analysis-opinion
+  - url: https://www.thenewatlantis.com/feed
+    name: The New Atlantis
+    cap: 3
+    category: culture-structural
+    reliability: analysis-opinion
+  - url: https://comment.org/feed/
+    name: Comment Magazine
+    cap: 3
+    category: culture-structural
+    reliability: analysis-opinion
+  - url: https://www.nature.com/nature.rss
+    name: Nature
+    cap: 5
+    category: science-biotech
+    reliability: primary-reporting
+    enrich:
+      strategy: skip
+      title_only_ok: true
+      skip_reason: RSS teaser/title only; avoid publisher access edge cases until
+        source-specific policy is revisited
+  - url: https://www.science.org/rss/news_current.xml
+    name: Science Magazine
+    cap: 5
+    category: science-biotech
+    reliability: primary-reporting
+    enrich:
+      strategy: skip
+      title_only_ok: true
+      skip_reason: RSS teaser/title only; avoid publisher access edge cases until
+        source-specific policy is revisited
+  - url: https://www.statnews.com/feed/
+    name: STAT News
+    cap: 5
+    category: science-biotech
+    reliability: primary-reporting
+  - url: https://endpts.com/feed/
+    name: Endpoints News
+    cap: 3
+    category: science-biotech
+    reliability: primary-reporting
+  - url: https://feeds.feedburner.com/lawfare
+    name: Lawfare
+    cap: 5
+    category: legal-institutional
+    reliability: analysis-opinion
+  - url: https://www.scotusblog.com/feed/
+    name: SCOTUSblog
+    cap: 3
+    category: legal-institutional
+    reliability: analysis-opinion
+  - url: https://www.justsecurity.org/feed/
+    name: Just Security
+    cap: 3
+    category: legal-institutional
+    reliability: analysis-opinion
+  - url: https://www.deseret.com/arc/outboundfeeds/rss/category/utah/
+    name: Deseret News (Utah)
+    cap: 5
+    category: regional-west
+    reliability: primary-reporting
+  - url: https://www.sltrib.com/arc/outboundfeeds/news/?outputType=xml
+    name: Salt Lake Tribune (Utah)
+    cap: 5
+    category: regional-west
+    reliability: primary-reporting
+  - url: https://www.sltrib.com/arc/outboundfeeds/religion/?outputType=xml
+    name: Salt Lake Tribune (Religion)
+    cap: 5
+    category: regional-west
+    reliability: primary-reporting
+  - url: https://www.sltrib.com/arc/outboundfeeds/culture/?outputType=xml
+    name: Salt Lake Tribune (Culture)
+    cap: 5
+    category: regional-west
+    reliability: primary-reporting
+  - url: https://www.kuer.org/news.rss
+    name: KUER public radio
+    cap: 5
+    category: regional-west
+    reliability: primary-reporting
+  - url: https://www.pewresearch.org/feed/
+    name: Pew Research Center
+    cap: 3
+    category: demographics
+    reliability: primary-reporting
+  - url: https://ifstudies.org/blog/rss
+    name: Institute for Family Studies
+    cap: 3
+    category: demographics
+    reliability: primary-reporting
+come_follow_me:
+  base_url: https://www.churchofjesuschrist.org/study/manual/come-follow-me-for-home-and-church-old-testament-2026
+  year: 2026
+local_news:
+  sources:
+  - url: https://www.cachevalleydaily.com/search/?f=rss&t=article&l=25&s=start_time&sd=desc
+    name: Cache Valley Daily
+  - url: https://www.hjnews.com/search/?f=rss&t=article&c=news/local&l=25&s=start_time&sd=desc
+    name: Herald Journal
