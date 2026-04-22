@@ -20,7 +20,6 @@ EMAIL_TEMPLATE = _env.from_string("""\
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@400;500;600&display=swap');
   /* ── Light palette (default) ─────────────────────────────── */
   :root {
     --bg-page:    #e8e6e2;
@@ -105,7 +104,9 @@ EMAIL_TEMPLATE = _env.from_string("""\
   .bar { padding: 12px 32px; background: var(--bg-bar); border-bottom: 1px solid var(--border); font-size: 14px; color: var(--text-secondary); }
   .bar-mono { font-family: 'Courier New', monospace; font-weight: 500; color: var(--text); }
   .bar-detail { font-size: 13px; color: var(--text-muted); }
-  .markets { font-family: 'Courier New', monospace; font-size: 13px; display: flex; gap: 18px; flex-wrap: wrap; }
+  .markets-table { width: 100%; border-collapse: collapse; font-family: 'Courier New', monospace; font-size: 13px; }
+  .market-cell { padding: 0 18px 0 0; white-space: nowrap; vertical-align: baseline; }
+  .market-cell:last-child { padding-right: 0; }
   .mkt-context { font-size: 13px; color: var(--text-secondary); margin-top: 8px; line-height: 1.5; font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
   .mkt-label { color: var(--text-muted); }
   .mkt-val { color: var(--text); font-weight: 500; }
@@ -119,8 +120,10 @@ EMAIL_TEMPLATE = _env.from_string("""\
   /* ── At a Glance ─────────────────────────────────────────── */
   .scan-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
   .scan-item:last-child { border-bottom: none; }
-  .scan-header { display: flex; align-items: flex-start; flex-wrap: nowrap; gap: 8px; margin-bottom: 3px; }
-  .tag { font-size: 10px; letter-spacing: 1px; padding: 2px 7px; border-radius: 3px; display: inline-block; flex-shrink: 0; margin-top: 2px; }
+  .scan-header-table { width: 100%; border-collapse: collapse; margin-bottom: 3px; }
+  .scan-tag-cell { width: 1%; padding: 2px 8px 0 0; vertical-align: top; white-space: nowrap; }
+  .scan-headline-cell { padding: 0; vertical-align: top; }
+  .tag { font-size: 11px; letter-spacing: 1px; padding: 2px 7px; border-radius: 3px; display: inline-block; margin-top: 2px; }
   .tag-war      { color: var(--tag-war-text);      background: var(--tag-war-bg); }
   .tag-ai       { color: var(--tag-ai-text);       background: var(--tag-ai-bg); }
   .tag-domestic { color: var(--tag-domestic-text); background: var(--tag-domestic-bg); }
@@ -133,7 +136,7 @@ EMAIL_TEMPLATE = _env.from_string("""\
   .tag-cyber    { color: var(--tag-cyber-text);    background: var(--tag-cyber-bg); }
   .tag-energy   { color: var(--tag-energy-text);   background: var(--tag-energy-bg); }
   .tag-biotech  { color: var(--tag-biotech-text);  background: var(--tag-biotech-bg); }
-  .scan-hl { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; line-height: 1.4; }
+  .scan-hl { font-size: 15px; font-weight: 600; line-height: 1.4; }
   .scan-ctx { font-size: 14px; color: var(--text-secondary); line-height: 1.45; }
   .scan-ctx-block { margin-bottom: 6px; padding-left: 8px; border-left: 2px solid transparent; }
   .scan-ctx-block:last-child { margin-bottom: 0; }
@@ -167,7 +170,9 @@ EMAIL_TEMPLATE = _env.from_string("""\
   .wim p { font-size: 14px; color: var(--text); line-height: 1.55; margin: 0; }
   .fr { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
   .fr-label { font-size: 10px; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 6px; }
-  .fr a { display: block; font-size: 14px; color: var(--link); text-decoration: none; line-height: 1.5; margin-bottom: 2px; }
+  .fr-item { padding: 5px 0; border-top: 1px dotted var(--border); }
+  .fr-item:first-of-type { border-top: none; }
+  .fr a { display: block; font-size: 14px; color: var(--link); text-decoration: none; line-height: 1.5; }
   .fr .src { color: var(--text-muted); font-size: 13px; }
 
   /* ── Perspective Seams ───────────────────────────────────── */
@@ -192,6 +197,16 @@ EMAIL_TEMPLATE = _env.from_string("""\
   /* ── Footer ─────────────────────────────────────────────── */
   .footer { padding: 20px 32px; background: var(--bg-chrome); color: var(--text-chrome-muted); font-size: 11px; line-height: 1.6; text-align: center; }
   .footer a { color: var(--text-chrome-link); text-decoration: none; }
+
+  @media (max-width: 480px) {
+    .header { padding: 24px 16px 20px; }
+    .spiritual { padding: 18px 16px; }
+    .bar { padding: 12px 16px; }
+    .section { padding: 22px 16px; }
+    .footer { padding: 18px 16px; }
+    .card { padding: 18px 16px; }
+    .market-cell { display: block; padding: 0 0 4px 0; }
+  }
 </style>
 </head>
 <body>
@@ -242,15 +257,17 @@ EMAIL_TEMPLATE = _env.from_string("""\
   <!-- MARKETS -->
   {% if markets %}
   <div class="bar">
-    <div class="markets">
+    <table class="markets-table" role="presentation" cellpadding="0" cellspacing="0">
+      <tr>
       {% for m in markets %}
-      <span>
+      <td class="market-cell">
         <span class="mkt-label">{{ m.label }}</span>
         <span class="mkt-val">{{ m.price }}</span>
         <span class="{{ m.direction }}" aria-label="{{ 'up' if m.direction == 'up' else 'down' }} {{ m.change_pct|abs }}%"><span aria-hidden="true">{% if m.direction == 'up' %}▲{% else %}▼{% endif %}</span> {{ m.change_pct|abs }}%</span>
-      </span>
+      </td>
       {% endfor %}
-    </div>
+      </tr>
+    </table>
     {% if market_context %}
     <div class="mkt-context">{{ market_context }}</div>
     {% endif %}
@@ -263,10 +280,12 @@ EMAIL_TEMPLATE = _env.from_string("""\
     <h2 class="mono-label sec-label">At a Glance</h2>
     {% for item in at_a_glance %}
     <div class="scan-item">
-      <div class="scan-header">
-        <span class="mono-label tag tag-{{ item.tag }}">{{ item.tag_label }}</span>
-        <span class="scan-hl">{{ item.headline }}</span>
-      </div>
+      <table class="scan-header-table" role="presentation" cellpadding="0" cellspacing="0">
+        <tr>
+          <td class="scan-tag-cell"><span class="mono-label tag tag-{{ item.tag }}">{{ item.tag_label }}</span></td>
+          <td class="scan-headline-cell"><span class="scan-hl">{{ item.headline }}</span></td>
+        </tr>
+      </table>
       <div class="scan-ctx">{% if item.facts or item.analysis or item.cross_domain_note %}{% if item.facts %}<div class="scan-ctx-block"><span class="mono-label scan-voice scan-voice-src">Sources</span>{{ item.facts }}</div>{% endif %}{% if item.analysis %}<div class="scan-ctx-block scan-ctx-block-analysis"><span class="mono-label scan-voice scan-voice-analysis">Analysis</span>{{ item.analysis }}</div>{% endif %}{% if item.cross_domain_note %}<div class="scan-ctx-block scan-ctx-block-thread"><span class="mono-label scan-voice scan-voice-thread">Thread</span>{{ item.cross_domain_note }}</div>{% endif %}{% else %}{{ item.context }}{% endif %}</div>
       {% if item.seam_annotation %}
       <div class="scan-seam">{{ item.seam_annotation.one_line }}</div>
@@ -358,7 +377,7 @@ EMAIL_TEMPLATE = _env.from_string("""\
       <div class="fr">
         <div class="mono-label fr-label">Further Reading</div>
         {% for fr in dive.further_reading %}
-        <a href="{{ fr.url }}">{{ fr.label or fr.title }}{% if fr.source %} <span class="src">— {{ fr.source }}</span>{% endif %}</a>
+        <div class="fr-item"><a href="{{ fr.url }}">{{ fr.label or fr.title }}{% if fr.source %} <span class="src">— {{ fr.source }}</span>{% endif %}</a></div>
         {% endfor %}
       </div>
       {% endif %}

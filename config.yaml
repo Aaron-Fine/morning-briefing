@@ -178,7 +178,6 @@ weather:
   aqi_strip: true
   record_band: true
   normal_band: true
-  dark_theme: true
 
 markets:
   # Using Finnhub — set FINNHUB_API_KEY as env var

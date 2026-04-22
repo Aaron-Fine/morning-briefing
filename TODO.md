@@ -24,12 +24,6 @@ Last updated: 2026-04-21
 
 - **Weather bar inline-style soup.** Chart is emitted as one long line of inline `style=""` attributes per day row — hard to scan, hard to tune, inflates the email payload. Promote the repeating styles (day-name cell, temp cell, gradient-bar cell, right column) to classes in `templates/email_template.py`'s `<style>` block; keep only per-row dynamic values (widths, colors, text) inline.
 - **Restore Normal / Record / Forecast Hi-Lo bar overlays.** `sources/weather.py::_compute_normals_and_records` still collects `normal_hi`, `normal_lo`, `record_hi`, `record_lo` per day and exposes the `normals` array; `config.yaml` has `record_band: true` and `normal_band: true`. These were meant to gate band overlays on each day's temp bar — the original positioning relied on `position:absolute` which Gmail strips, so they silently disappeared (same fate as AQI before the 2026-04-17 restoration). Restore using the same approach as `_build_chart_html`'s AQI row (spacer-cell width inside a nested table), gated by the `record_band`/`normal_band` flags. Until restored, those flags are no-ops — see `test_band_flags_accepted`.
-- **Clean up dark mode drift.** Dark mode did not work consistently and was supposed to be mostly removed, but `config.yaml` still sets `weather.dark_theme: true` while the email palette is fixed light. Since the email is sent from Gmail and read in Proton Mail, remove dead dark-mode flags or make Proton-specific behavior explicit; do not add a broad `prefers-color-scheme` implementation unless Proton testing proves it helps.
-- **Mobile padding too tight.** `.section { padding: 24px 32px }` leaves ~310 px of usable width on a 375 px phone. Add `@media (max-width: 480px)` halving horizontal padding to 16 px.
-- **Audit Google Fonts `@import`.** `email_template.py:23` loads JetBrains Mono + DM Sans. Gmail strips `@import` in email HTML; Proton behavior varies by client. Verify in both clients whether the imported fonts ever actually resolve; if they never do, drop the `@import` (system-font fallbacks already specified). If they do in some clients, document *which* so the tradeoff is visible.
-- **Flexbox in `.markets` and `.scan-header` breaks in Outlook.** Fall back to a table-based layout for the market strip.
-- **Deep Dive `Further Reading` links have no visual separation** (`email_template.py:334`). Each anchor is block-level; add bullet separators or spacing.
-- **10 px uppercase tags** at the edge of legibility. Bump to 11 px.
 
 ### High — Design (architecture)
 
@@ -103,6 +97,13 @@ Last updated: 2026-04-21
 - **Made cross-domain fallback paths honor the stage contract.** No-item, LLM-failure, and malformed-output paths now return `cross_domain_plan`, `cross_domain_output`, and `validation_diagnostics`.
 - **Added explicit fallback diagnostics.** The diagnostics artifact records reason codes such as `no_domain_analysis_items`, `llm_call_failed`, and `non_dict_llm_output` when normal editorial validation did not run.
 - **Tests:** Fallback tests now assert the full artifact contract.
+
+### 2026-04-21 — Email rendering compatibility cleanup
+
+- **Removed dead web-font import and dark-mode drift.** The template now relies on existing system font stacks, and the unused `weather.dark_theme` flag is gone from config.
+- **Improved mobile and Outlook rendering.** Mobile section/header/bar/footer padding now narrows at 480 px, markets render as a presentation table, and At-a-Glance headers no longer depend on flexbox.
+- **Improved scanability.** Tags are 11 px instead of 10 px, and Deep Dive further-reading links render as separated rows.
+- **Tests:** Added email-template render tests for mobile CSS, table-based market/scan layout, and further-reading separators.
 
 ### 2026-04-17 — Weather: AQI overlay restored
 
