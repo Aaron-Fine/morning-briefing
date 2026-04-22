@@ -213,6 +213,17 @@ def _extract_peripheral_data(context: dict, raw_sources: dict) -> dict:
     }
 
 
+def _visible_stage_failures(context: dict, config: dict, dry_run: bool) -> list[dict]:
+    """Return stage failures that should be visible in rendered email."""
+    failures = context.get("run_meta", {}).get("stage_failures", []) or []
+    mode = config.get("digest", {}).get("failure_visibility", "artifacts_only")
+    if mode == "always":
+        return failures
+    if mode == "dry_run" and dry_run:
+        return failures
+    return []
+
+
 def run(
     context: dict, config: dict, model_config: dict | None = None, **kwargs
 ) -> dict:
@@ -284,6 +295,7 @@ def run(
     raw_rss_count = len(raw_sources.get("rss", []))
     analysis_unavailable = bool(domain_failures) and not at_a_glance and raw_rss_count > 0
     coverage_gap_diagnostics = context.get("coverage_gaps", {}) if dry_run else {}
+    stage_failures = _visible_stage_failures(context, config, dry_run)
     at_a_glance = _select_inline_seam_annotations(at_a_glance, seam_annotations)
 
     template_data = {
@@ -308,6 +320,7 @@ def run(
         "week_ahead": week_ahead,
         "worth_reading": worth_reading,
         "deep_dives": deep_dives,
+        "stage_failures": stage_failures,
     }
 
     html = render_email(template_data)

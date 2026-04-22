@@ -216,6 +216,7 @@ EMAIL_TEMPLATE = _env.from_string("""\
   /* ── Footer ─────────────────────────────────────────────── */
   .footer { padding: 20px 32px; background: var(--bg-chrome); color: var(--text-chrome-muted); font-size: 11px; line-height: 1.6; text-align: center; }
   .footer a { color: var(--text-chrome-link); text-decoration: none; }
+  .footer-failures { margin-bottom: 8px; color: #f0c0a0; }
 
   @media (max-width: 480px) {
     .header { padding: 24px 16px 20px; }
@@ -446,6 +447,14 @@ EMAIL_TEMPLATE = _env.from_string("""\
 
   <!-- FOOTER -->
   <div class="footer">
+    {% if stage_failures %}
+    <div class="footer-failures">
+      Pipeline notices:
+      {% for failure in stage_failures %}
+      {{ failure.stage }}{% if failure.error %} ({{ failure.error }}){% endif %}{% if not loop.last %}; {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
     Generated at {{ generated_at }}<br>
     Sources: {{ rss_source_names }}<br>
     {% if yt_source_names %}Analysis transcripts: {{ yt_source_names }}<br>{% endif %}

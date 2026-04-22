@@ -326,6 +326,8 @@ topics:
     - "Local news / Utah news"
 
 digest:
+  # artifacts_only | dry_run | always
+  failure_visibility: artifacts_only
   at_a_glance:
     min_items: 4
     normal_items: 5

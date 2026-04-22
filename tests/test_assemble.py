@@ -16,6 +16,7 @@ from stages.assemble import (
     _domain_item_to_deep_dive,
     _build_from_domain_analysis,
     _extract_peripheral_data,
+    _visible_stage_failures,
     _select_inline_seam_annotations,
     _TAG_LABELS,
     run,
@@ -407,6 +408,32 @@ class TestExtractPeripheralData:
         assert result["week_ahead"] == []
 
 
+class TestVisibleStageFailures:
+    def test_artifacts_only_hides_failures(self):
+        context = {"run_meta": {"stage_failures": [{"stage": "weather"}]}}
+        assert _visible_stage_failures(
+            context,
+            {"digest": {"failure_visibility": "artifacts_only"}},
+            dry_run=True,
+        ) == []
+
+    def test_dry_run_mode_shows_failures_only_in_dry_run(self):
+        context = {"run_meta": {"stage_failures": [{"stage": "weather"}]}}
+        config = {"digest": {"failure_visibility": "dry_run"}}
+        assert _visible_stage_failures(context, config, dry_run=True) == [
+            {"stage": "weather"}
+        ]
+        assert _visible_stage_failures(context, config, dry_run=False) == []
+
+    def test_always_mode_shows_failures(self):
+        context = {"run_meta": {"stage_failures": [{"stage": "weather"}]}}
+        assert _visible_stage_failures(
+            context,
+            {"digest": {"failure_visibility": "always"}},
+            dry_run=False,
+        ) == [{"stage": "weather"}]
+
+
 class TestAssembleRun:
     @patch("stages.assemble.render_email")
     def test_phase_3_cross_domain_output(self, mock_render):
@@ -705,3 +732,28 @@ class TestAssembleRun:
 
         assert dry_run_result["template_data"]["coverage_gap_diagnostics"]["gaps"][0]["topic"] == "Gap A"
         assert normal_result["template_data"]["coverage_gap_diagnostics"] == {}
+
+    @patch("stages.assemble.render_email")
+    def test_stage_failures_passed_to_template_when_configured(self, mock_render):
+        mock_render.return_value = "<html>failures</html>"
+        context = {
+            "cross_domain_output": {
+                "at_a_glance": [],
+                "deep_dives": [],
+                "cross_domain_connections": [],
+                "worth_reading": [],
+            },
+            "raw_sources": {},
+            "run_meta": {
+                "stage_failures": [
+                    {"stage": "prepare_weather", "error": "timeout"}
+                ]
+            },
+        }
+        config = {"digest": {"failure_visibility": "dry_run"}}
+
+        result = run(context, config, dry_run=True)
+
+        assert result["template_data"]["stage_failures"] == [
+            {"stage": "prepare_weather", "error": "timeout"}
+        ]

@@ -89,3 +89,18 @@ def test_further_reading_links_have_separating_rows():
 
     assert html.count('class="fr-item"') == 2
     assert ".fr-item { padding: 5px 0; border-top: 1px dotted var(--border); }" in html
+
+
+def test_stage_failures_render_in_footer_when_present():
+    html = render_email(
+        _base_data(
+            stage_failures=[
+                {"stage": "prepare_weather", "error": "timeout"},
+                {"stage": "coverage_gaps", "error": "bad response"},
+            ]
+        )
+    )
+
+    assert "Pipeline notices:" in html
+    assert "prepare_weather" in html
+    assert "coverage_gaps" in html
