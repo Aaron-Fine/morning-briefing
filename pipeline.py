@@ -29,6 +29,12 @@ from datetime import timedelta
 from pathlib import Path
 
 from morning_digest.config import load_config
+from utils.artifacts import (
+    artifact_dir as _shared_artifact_dir,
+    find_most_recent_dir,
+    load_artifact,
+    save_artifact,
+)
 from utils.time import artifact_date, iso_now_local, now_local
 
 log = logging.getLogger("pipeline")
@@ -62,44 +68,22 @@ def _setup_log_file() -> None:
 
 
 def _artifact_dir(run_date: str) -> Path:
-    d = _ARTIFACTS_BASE / run_date
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    return _shared_artifact_dir(_ARTIFACTS_BASE, run_date)
 
 
 def _save_artifact(artifact_dir: Path, name: str, data) -> None:
     """Save a stage output value as a JSON file."""
-    path = artifact_dir / f"{name}.json"
-    try:
-        path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
-    except Exception as e:
-        log.warning(f"Failed to save artifact {name}.json: {e}")
+    save_artifact(artifact_dir, name, data)
 
 
 def _load_artifact(artifact_dir: Path, name: str):
     """Load a previously saved artifact. Returns None if not found."""
-    path = artifact_dir / f"{name}.json"
-    if path.exists():
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except Exception as e:
-            log.warning(f"Failed to load artifact {name}.json: {e}")
-    return None
+    return load_artifact(artifact_dir, name)
 
 
 def _find_most_recent_artifact_dir(before_date: str | None = None) -> Path | None:
     """Find the most recent artifact directory (optionally before a given date)."""
-    if not _ARTIFACTS_BASE.exists():
-        return None
-    dirs = sorted(
-        [d for d in _ARTIFACTS_BASE.iterdir() if d.is_dir() and len(d.name) == 10],
-        reverse=True,
-    )
-    for d in dirs:
-        if before_date and d.name >= before_date:
-            continue
-        return d
-    return None
+    return find_most_recent_dir(_ARTIFACTS_BASE, before_date=before_date)
 
 
 def _prune_artifacts(keep_days: int = 30) -> None:

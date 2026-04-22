@@ -10,6 +10,7 @@ from pathlib import Path
 import yaml
 
 from sources._http import http_get_json
+from utils.aqi import aqi_label
 
 log = logging.getLogger(__name__)
 
@@ -692,19 +693,7 @@ def _extract_precip_timing(detailed: str) -> str:
 
 def _aqi_to_label(aqi: int | None) -> str:
     """Convert US AQI value to EPA category label."""
-    if aqi is None:
-        return "unavailable"
-    if aqi <= 50:
-        return "Good"
-    if aqi <= 100:
-        return "Moderate"
-    if aqi <= 150:
-        return "Unhealthy for Sensitive Groups"
-    if aqi <= 200:
-        return "Unhealthy"
-    if aqi <= 300:
-        return "Very Unhealthy"
-    return "Hazardous"
+    return aqi_label(aqi)
 
 
 # ====================================================================

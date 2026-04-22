@@ -10,13 +10,13 @@ Five deterministic checks to catch digest quality issues:
 Non-blocking — logs warnings, never fails the pipeline.
 """
 
-import json
 import logging
 import re
 from pathlib import Path
 from urllib.parse import urlparse
 
 from stages.analyze_domain import _resolve_domain_configs
+from utils.artifacts import iter_recent_dirs, load_artifact
 
 log = logging.getLogger(__name__)
 
@@ -191,22 +191,13 @@ def _check_digest_length(total_items: int) -> list:
     anomalies = []
 
     prior_counts = []
-    if _ARTIFACTS_BASE.exists():
-        dirs = sorted(
-            [d for d in _ARTIFACTS_BASE.iterdir() if d.is_dir() and len(d.name) == 10],
-            reverse=True,
-        )
-        for d in dirs[:7]:
-            digest_path = d / "digest_json.json"
-            if not digest_path.exists():
-                continue
-            try:
-                data = json.loads(digest_path.read_text(encoding="utf-8"))
-                glance = data.get("at_a_glance", [])
-                dives = data.get("deep_dives", [])
-                prior_counts.append(len(glance) + len(dives))
-            except Exception:
-                continue
+    for d in iter_recent_dirs(_ARTIFACTS_BASE, limit=7):
+        data = load_artifact(d, "digest_json")
+        if not isinstance(data, dict):
+            continue
+        glance = data.get("at_a_glance", [])
+        dives = data.get("deep_dives", [])
+        prior_counts.append(len(glance) + len(dives))
 
     if len(prior_counts) < 3:
         return anomalies

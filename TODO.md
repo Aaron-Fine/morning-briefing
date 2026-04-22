@@ -11,6 +11,12 @@ Last updated: 2026-04-22
 
 ## Open
 
+## In Progress
+
+- **Open TODO sweep (2026-04-22)** — started by Codex.
+  - In progress: AQI helper consolidation, artifact helper consolidation, tag contract tests, stale docs, and `assemble.py` fallback/doc cleanup.
+  - Deferred pending design choice: rendering `cross_domain_connections` in email vs. feeding them into another stage.
+
 ### High — Review sweep (2026-04-21)
 
 ### Low — Review sweep (2026-04-21)
@@ -32,8 +38,10 @@ Last updated: 2026-04-22
 
 - ~~**Tracked in `plan.md` Slice 6: consolidate tag vocabulary helpers.**~~ Done — `energy` and `biotech` tags added to all 5 synchronized surfaces (validate, cross_domain, assemble, CSS, TAG_KEYWORDS). Contract tests verify consistency.
 - **Consolidate AQI breakpoint ladder.** The `if aqi <= 50: "Good" / <= 100: "Moderate" / ...` ladder appears in `sources/weather.py::_aqi_to_label` and twice more in `modules/weather_display.py` (label + color). Extract to `utils/aqi.py` with `aqi_label(aqi)` and `aqi_color(aqi)`.
+  - Status 2026-04-22: helper extracted and call sites wired; awaiting tests before closeout.
 - **Extract retry backoff helper.** `morning_digest/llm.py::_retry_loop` and `pipeline.py` both implement exponential backoff with jitter. Once the 3-layer retry stack is consolidated (see above), keep one implementation in `utils/retry.py`.
 - **Extract artifact helpers.** `_ARTIFACTS_BASE` path + date-directory iteration is duplicated in `pipeline.py` and `stages/anomaly.py`. Move to `utils/artifacts.py` (`artifact_dir(date)`, `iter_recent_dirs(n)`, `load_artifact(date, key)`).
+  - Status 2026-04-22: shared helper module added and call sites wired; awaiting tests before closeout.
 - **Investigate recurring dry-run source warnings.** Current end-to-end dry-runs complete successfully, but `output/digest.log` consistently shows non-fatal source issues for SpaceNews (`429`), Brad Setser (`404`), Reuters Markets (`401`), China Global South Project (`410`), and The Diff (`400`). Decide case by case whether to:
   - fix the feed URL,
   - add provider-specific throttling/backoff,

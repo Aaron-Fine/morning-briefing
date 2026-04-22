@@ -27,6 +27,7 @@ not absolute positioning, so they survive Gmail sanitization.
 
 import logging
 
+from utils.aqi import aqi_color
 from utils.time import format_display_date
 
 log = logging.getLogger(__name__)
@@ -406,19 +407,7 @@ def _aqi_text_color(aqi: int | None) -> str:
     The EPA signal colors (#00e400, #ffff00) are illegible on light
     backgrounds, so this returns darker, print-safe variants.
     """
-    if aqi is None:
-        return "#666666"
-    if aqi <= 50:
-        return "#15803d"   # Good: dark green
-    if aqi <= 100:
-        return "#854d0e"   # Moderate: amber
-    if aqi <= 150:
-        return "#c2410c"   # USG: dark orange
-    if aqi <= 200:
-        return "#dc2626"   # Unhealthy: red
-    if aqi <= 300:
-        return "#7c3aed"   # Very Unhealthy: purple
-    return "#991b1b"       # Hazardous: dark red
+    return aqi_color(aqi)
 
 
 def _precip_color(precip_type: str) -> str:
