@@ -13,16 +13,10 @@ Last updated: 2026-04-21
 
 ### High — Review sweep (2026-04-21)
 
-- **Cross-domain URL validation has two incompatible trust models.** `_validated_output` first allows links by known domain, including links already emitted by domain analysis (`stages/cross_domain.py:389-408`), then `validate_stage_output` immediately revalidates against exact URLs from `raw_sources` only (`morning_digest/validate.py:315`, `validate_urls` at `morning_digest/validate.py:82-119`). This can silently strip normalized-but-legitimate URLs that `analyze_domain` allowed by domain, especially from HTML index sources and publisher canonicalization. Pick one contract: exact source URL only, or canonicalized/domain-scoped URL with diagnostics. Right now it is both, which is how links disappear and everyone blames the model.
-  - Decision: use a URL canonicalization/resolution library if practical; otherwise store and validate against the final retrieved URL, not a hand-reconstructed variant.
 - **Article enrichment can overwrite `raw_sources`, but downstream stage contracts do not make that obvious.** `enrich_articles.run()` returns a new `raw_sources` artifact as well as `enrich_articles`; pipeline metadata allows that by listing `raw_sources` in context keys, but the primary artifact key is `enrich_articles`. This is clever in the bad way: a skipped/rerun pipeline may load a transformed source artifact from an enrichment stage while the stage name says otherwise. Document the contract explicitly in `_STAGE_METADATA`, rename the artifact side effect, or split "normalize source text" into a source-stage mutation with tests around `--stage analyze_domain` reload behavior.
   - Decision: prefer a separate enriched-source key/artifact unless that makes downstream use more confusing than the mutation. Data volume is not expected to be the constraint.
 - **Briefing packet metadata is pretending run metadata exists in context.** `_build_metadata` reads `context["run_meta"]` (`stages/briefing_packet.py:100-123`), but `pipeline.run_pipeline` keeps `run_meta` as a local variable and never merges it into `context` before `briefing_packet` runs (`pipeline.py:552-676`). So `stage_timings` and `stage_failures` in `latest_briefing_packet.json` are usually empty even when stages failed. Put `context["run_meta"] = run_meta` before stages that consume it, or load the saved artifact after finalization if the packet must be post-run.
 - **The pipeline can produce a "successful" dry run with no final editorial validation artifact.** If `cross_domain` has no items or its LLM call fails, it returns only `cross_domain_output` (`stages/cross_domain.py:453-455`, `stages/cross_domain.py:507-509`) and skips `cross_domain_plan` / `validation_diagnostics`, despite `_STAGE_METADATA["cross_domain"]["context_keys"]` expecting all three. Downstream code mostly survives because dicts are optional everywhere, but the contract is lying. Return empty plan + explicit validation diagnostics on every path, and assert that in tests.
-
-### Medium — Review sweep (2026-04-21)
-
-- **The source validator is exact-match only but diagnostics do not distinguish "canonicalization" from hallucination.** `validate_urls` logs every stripped URL as hallucinated (`morning_digest/validate.py:97-104`). That is lazy and misleading when a publisher canonicalizes `?utm` away or an HTML index source yields a normalized URL. Record reason codes: unknown domain, known domain but unknown path, exact mismatch after canonicalization, etc.
 
 ### Low — Review sweep (2026-04-21)
 
@@ -89,6 +83,14 @@ Last updated: 2026-04-21
 - **Removed stale validator candidates.** `scripts/validate_new_feeds.py` now validates the committed `config.yaml` feeds by default instead of maintaining a drifting static candidate list.
 - **Pipeline metadata now preserves related side outputs.** `domain_analysis_failures` and `regional_items` are included in stage metadata and empty-output contracts.
 - **Tests:** Dockerized full suite passed: `866 passed`.
+
+### 2026-04-21 — URL validation contract unified
+
+- **Unified cross-domain URL validation around exact-or-canonical source URLs.** Cross-domain output no longer gets a broad domain-only pass followed by raw-source exact matching. Both prevalidation and final validation now use the same source-backed URL set, including URLs emitted by domain analysis.
+- **Added conservative URL canonicalization.** The validator tolerates harmless drift such as scheme/host casing, fragments, trailing slashes, and common tracking query fields while still rejecting same-domain unknown paths.
+- **Recorded URL strip reason codes.** Validation diagnostics now distinguish `unknown_domain` from `known_domain_unknown_path` and include the canonical comparison URL.
+- **Recognized retrieved/canonical URL aliases.** Known URL collection now includes `final_url`, `resolved_url`, and `canonical_url` source fields when present.
+- **Tests:** Focused Dockerized URL/cross-domain suite passed: `148 passed`.
 
 ### 2026-04-17 — Weather: AQI overlay restored
 

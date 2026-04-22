@@ -25,7 +25,7 @@ import logging
 
 from morning_digest.llm import call_llm
 from utils.prompts import load_prompt
-from utils.urls import collect_known_urls, extract_domains, url_domain_allowed
+from utils.urls import collect_known_urls, url_known
 from morning_digest.validate import validate_stage_output
 
 log = logging.getLogger(__name__)
@@ -387,7 +387,6 @@ def _validated_output(
         result["market_context"] = econ.get("market_context", "")
 
     known_urls = collect_known_urls(raw_sources, domain_analysis)
-    known_domains = extract_domains(known_urls)
 
     for item in result["at_a_glance"]:
         item["tag"] = _normalize_tag(item.get("tag", ""))
@@ -395,16 +394,18 @@ def _validated_output(
 
     for item in result["at_a_glance"]:
         item["links"] = [
-            lnk for lnk in item.get("links", []) if url_domain_allowed(lnk.get("url", ""), known_domains)
+            lnk
+            for lnk in item.get("links", [])
+            if url_known(lnk.get("url", ""), known_urls)
         ]
     for dive in result["deep_dives"]:
         dive["further_reading"] = [
             lnk
             for lnk in dive.get("further_reading", [])
-            if url_domain_allowed(lnk.get("url", ""), known_domains)
+            if url_known(lnk.get("url", ""), known_urls)
         ]
     for read in result["worth_reading"]:
-        if not url_domain_allowed(read.get("url", ""), known_domains):
+        if not url_known(read.get("url", ""), known_urls):
             read["url"] = ""
 
     digest_cfg = config.get("digest", {})
@@ -519,6 +520,7 @@ def run(
         raw_sources,
         "cross_domain",
         collect_diagnostics=True,
+        domain_analysis=domain_analysis,
     )
     validation_diagnostics = result.pop(
         "_validation_diagnostics",

@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from utils.urls import collect_known_urls, extract_domains
+from utils.urls import canonicalize_url, collect_known_urls, extract_domains, url_known
 
 
 class TestCollectKnownUrls:
@@ -185,6 +185,51 @@ class TestCollectKnownUrls:
         domain_analysis = None
         result = collect_known_urls(raw_sources, domain_analysis)
         assert result == set()
+
+    def test_collects_final_url_aliases_from_sources(self):
+        raw_sources = {
+            "rss": [
+                {
+                    "url": "https://publisher.com/index",
+                    "final_url": "https://publisher.com/article",
+                }
+            ],
+            "local_news": [],
+            "analysis_transcripts": [],
+        }
+        result = collect_known_urls(raw_sources)
+        assert result == {
+            "https://publisher.com/index",
+            "https://publisher.com/article",
+        }
+
+
+class TestCanonicalizeUrl:
+    def test_strips_tracking_query_and_fragment(self):
+        result = canonicalize_url(
+            "HTTPS://Example.com/story/?utm_source=x&keep=1#section"
+        )
+        assert result == "https://example.com/story?keep=1"
+
+    def test_preserves_non_tracking_query(self):
+        result = canonicalize_url("https://example.com/search?q=ai&page=2")
+        assert result == "https://example.com/search?q=ai&page=2"
+
+    def test_invalid_url_returns_empty(self):
+        assert canonicalize_url("not-a-url") == ""
+
+
+class TestUrlKnown:
+    def test_exact_match(self):
+        assert url_known("https://example.com/a", {"https://example.com/a"}) is True
+
+    def test_canonical_match(self):
+        known = {"https://example.com/a?utm_source=rss"}
+        assert url_known("https://example.com/a", known) is True
+
+    def test_known_domain_unknown_path_rejected(self):
+        known = {"https://example.com/a"}
+        assert url_known("https://example.com/b", known) is False
 
 
 class TestExtractDomains:

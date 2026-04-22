@@ -170,6 +170,21 @@ class TestValidateUrls:
             "hallucinated" in caplog.text.lower() or "stripped" in caplog.text.lower()
         )
 
+    def test_keeps_canonicalized_known_urls(self):
+        known = {"https://example.com/a?utm_source=rss"}
+        data = {"url": "https://example.com/a"}
+        result = validate_urls(data, known)
+        assert result["url"] == "https://example.com/a"
+
+    def test_diagnostics_include_reason_for_stripped_url(self):
+        known = {"https://example.com/a"}
+        data = {"url": "https://example.com/b"}
+        diagnostics = []
+        result = validate_urls(data, known, diagnostics)
+        assert result["url"] == ""
+        assert diagnostics[0]["reason"] == "known_domain_unknown_path"
+        assert diagnostics[0]["canonical_url"] == "https://example.com/b"
+
     def test_handles_empty_url_string(self):
         known = {"https://example.com"}
         data = {"url": ""}
@@ -490,7 +505,28 @@ class TestValidateStageOutput:
             issue for issue in diagnostics["issues"] if issue["kind"] == "stripped_url"
         ]
         assert stripped[0]["url"] == "https://bad.com"
-        assert result["at_a_glance"][0]["links"] == []
+        assert stripped[0]["reason"] == "unknown_domain"
+
+    def test_cross_domain_validation_trusts_domain_analysis_urls(self):
+        output = {
+            "worth_reading": [
+                {"url": "https://accepted.com/story", "title": "Read"}
+            ]
+        }
+        domain_analysis = {
+            "ai_tech": {
+                "items": [
+                    {"links": [{"url": "https://accepted.com/story"}]},
+                ]
+            }
+        }
+        result = validate_stage_output(
+            output,
+            {"rss": []},
+            "cross_domain",
+            domain_analysis=domain_analysis,
+        )
+        assert result["worth_reading"][0]["url"] == "https://accepted.com/story"
 
     def test_non_dict_input_returns_empty(self, caplog):
         with caplog.at_level(logging.ERROR):

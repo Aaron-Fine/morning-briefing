@@ -14,7 +14,9 @@ import logging
 import re
 from typing import Any
 
-from utils.urls import collect_known_urls
+from urllib.parse import urlparse
+
+from utils.urls import canonicalize_url, collect_canonical_urls, collect_known_urls
 
 log = logging.getLogger(__name__)
 
@@ -84,24 +86,44 @@ def validate_urls(
     known_urls: set[str],
     diagnostics: list[dict] | None = None,
     path: str = "",
+    known_canonical_urls: set[str] | None = None,
 ) -> Any:
     """Strip URLs in output_json that are not in known_urls.
 
     Works recursively over dicts and lists. Returns cleaned structure.
     Logs a warning for each stripped URL.
     """
+    if known_canonical_urls is None:
+        known_canonical_urls = collect_canonical_urls(known_urls)
+
     if isinstance(output_json, dict):
         result = {}
         for k, v in output_json.items():
             if k == "url" and isinstance(v, str):
-                if v and v not in known_urls:
-                    log.warning(f"validate: stripped hallucinated URL: {v[:80]}")
+                canonical = canonicalize_url(v)
+                if v and v not in known_urls and canonical not in known_canonical_urls:
+                    known_domains = {
+                        urlparse(url).netloc.lower()
+                        for url in known_urls
+                        if urlparse(url).netloc
+                    }
+                    netloc = urlparse(v).netloc.lower()
+                    reason = (
+                        "known_domain_unknown_path"
+                        if netloc and netloc in known_domains
+                        else "unknown_domain"
+                    )
+                    log.warning(
+                        f"validate: stripped unsupported URL ({reason}): {v[:80]}"
+                    )
                     if diagnostics is not None:
                         diagnostics.append(
                             {
                                 "kind": "stripped_url",
                                 "path": f"{path}.{k}" if path else k,
                                 "url": v,
+                                "reason": reason,
+                                "canonical_url": canonical,
                             }
                         )
                     result[k] = ""
@@ -109,11 +131,23 @@ def validate_urls(
                     result[k] = v
             else:
                 child_path = f"{path}.{k}" if path else k
-                result[k] = validate_urls(v, known_urls, diagnostics, child_path)
+                result[k] = validate_urls(
+                    v,
+                    known_urls,
+                    diagnostics,
+                    child_path,
+                    known_canonical_urls,
+                )
         return result
     elif isinstance(output_json, list):
         return [
-            validate_urls(item, known_urls, diagnostics, f"{path}[{idx}]")
+            validate_urls(
+                item,
+                known_urls,
+                diagnostics,
+                f"{path}[{idx}]",
+                known_canonical_urls,
+            )
             for idx, item in enumerate(output_json)
         ]
     return output_json
@@ -294,6 +328,7 @@ def validate_stage_output(
     stage_name: str,
     *,
     collect_diagnostics: bool = False,
+    domain_analysis: dict | None = None,
 ) -> dict:
     """Validate and clean LLM stage output.
 
@@ -312,7 +347,7 @@ def validate_stage_output(
         )
         return {}
 
-    known_urls = collect_known_urls(source_data)
+    known_urls = collect_known_urls(source_data, domain_analysis)
     result = dict(output)
     diagnostics: list[dict] = []
 

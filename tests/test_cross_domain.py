@@ -392,6 +392,93 @@ class TestCrossDomainRun:
         assert links[0]["url"] == "https://example.com/valid"
 
     @patch("stages.cross_domain.call_llm")
+    def test_url_validation_rejects_known_domain_unknown_path(self, mock_llm):
+        mock_llm.side_effect = [
+            {
+                "schema_version": 1,
+                "cross_domain_connections": [],
+                "deep_dives": [],
+                "worth_reading": [],
+                "rejected_alternatives": [],
+            },
+            {
+                "at_a_glance": [
+                    {
+                        "tag": "war",
+                        "headline": "Test",
+                        "facts": "Facts",
+                        "analysis": "Analysis",
+                        "source_depth": "widely-reported",
+                        "links": [
+                            {"url": "https://example.com/other", "label": "Other"},
+                        ],
+                    }
+                ],
+                "deep_dives": [],
+                "cross_domain_connections": [],
+                "worth_reading": [],
+            },
+        ]
+        context = {
+            "domain_analysis": {"geopolitics": {"items": [{"headline": "Test"}]}},
+            "seam_data": {},
+            "raw_sources": {
+                "rss": [{"url": "https://example.com/valid", "source": "Example"}]
+            },
+        }
+        config = {"llm": {"provider": "fireworks"}}
+        result = run(context, config)
+        links = result["cross_domain_output"]["at_a_glance"][0]["links"]
+        assert links == []
+
+    @patch("stages.cross_domain.call_llm")
+    def test_final_validation_keeps_domain_analysis_link(self, mock_llm):
+        mock_llm.side_effect = [
+            {
+                "schema_version": 1,
+                "cross_domain_connections": [],
+                "deep_dives": [],
+                "worth_reading": [],
+                "rejected_alternatives": [],
+            },
+            {
+                "at_a_glance": [
+                    {
+                        "tag": "ai",
+                        "headline": "Test",
+                        "facts": "Facts",
+                        "analysis": "Analysis",
+                        "source_depth": "single-source",
+                        "links": [
+                            {"url": "https://analysis.example/story", "label": "A"},
+                        ],
+                    }
+                ],
+                "deep_dives": [],
+                "cross_domain_connections": [],
+                "worth_reading": [],
+            },
+        ]
+        context = {
+            "domain_analysis": {
+                "ai_tech": {
+                    "items": [
+                        {
+                            "headline": "Test",
+                            "links": [{"url": "https://analysis.example/story"}],
+                        }
+                    ]
+                }
+            },
+            "seam_data": {},
+            "raw_sources": {"rss": []},
+        }
+        config = {"llm": {"provider": "fireworks"}}
+        result = run(context, config)
+        links = result["cross_domain_output"]["at_a_glance"][0]["links"]
+        assert links == [{"url": "https://analysis.example/story", "label": "A"}]
+
+    @patch("stages.cross_domain.call_llm")
     def test_worth_reading_url_validation(self, mock_llm):
         mock_llm.side_effect = [
             {
