@@ -12,6 +12,7 @@ The chart renders:
   - a legend keying the AQI color bands used on the daily bars
   - a 7-day grid. Each row shows day name, low temp, a hi→lo gradient range
     bar with that day's AQI number overlaid at its scale position (0–200),
+    normal and record hi/lo bands when enabled,
     the high temp, and a right column with condition + precip chance.
   - a thin blue precip underline when the day has measurable precip.
 
@@ -20,9 +21,8 @@ multi-stop linear-gradient background (temp range colored, rest gray) and
 an inline-block spacer sized to the AQI's fraction of AQI_SCALE_MAX. This
 replaces an earlier position:absolute approach that Gmail stripped.
 
-Normal / record / Forecast-Hi / Forecast-Lo markers were part of the
-original design and relied on the same stripped positioning — they remain
-a TODO (see TODO.md). They are not referenced in the legend until restored.
+Normal and record bands are positioned with the same spacer-table approach,
+not absolute positioning, so they survive Gmail sanitization.
 """
 
 import logging
@@ -55,12 +55,20 @@ def render_weather_html(weather: dict, config: dict) -> str:
     if not weather or not weather.get("forecast"):
         return ""
 
-    show_aqi = config.get("weather", {}).get("aqi_strip", True)
+    weather_cfg = config.get("weather", {})
+    show_aqi = weather_cfg.get("aqi_strip", True)
+    show_normal = weather_cfg.get("normal_band", True)
+    show_record = weather_cfg.get("record_band", True)
 
     try:
         header = _build_header_html(weather)
-        legend = _build_legend_html(show_aqi) if show_aqi else ""
-        chart = _build_chart_html(weather, show_aqi=show_aqi)
+        legend = _build_legend_html(show_aqi, show_normal, show_record)
+        chart = _build_chart_html(
+            weather,
+            show_aqi=show_aqi,
+            show_normal=show_normal,
+            show_record=show_record,
+        )
         return f"{header}{legend}{chart}"
     except Exception as e:
         log.error(f"weather_display: chart render failed: {e}")
@@ -117,20 +125,30 @@ def _build_header_html(weather: dict) -> str:
     )
 
 
-def _build_legend_html(show_aqi: bool) -> str:
-    """Small AQI band key shown above the 7-day chart.
+def _build_legend_html(
+    show_aqi: bool,
+    show_normal: bool = False,
+    show_record: bool = False,
+) -> str:
+    """Small band key shown above the 7-day chart.
 
     Keyed to the colors used by the per-day AQI overlays so readers can
     translate a number on a bar into a health category at a glance.
     """
-    if not show_aqi:
+    if not (show_aqi or show_normal or show_record):
         return ""
-    bands = [
-        ("0-50 Good", "#15803d"),
-        ("51-100 Moderate", "#854d0e"),
-        ("101-150 USG", "#c2410c"),
-        ("151-200 Unhealthy", "#dc2626"),
-    ]
+    bands = []
+    if show_aqi:
+        bands.extend([
+            ("0-50 Good", "#15803d"),
+            ("51-100 Moderate", "#854d0e"),
+            ("101-150 USG", "#c2410c"),
+            ("151-200 Unhealthy", "#dc2626"),
+        ])
+    if show_normal:
+        bands.append(("Normal range", "#508c50"))
+    if show_record:
+        bands.append(("Record range", "#c0392b"))
     items = "".join(
         f'<span style="margin-right:10px;white-space:nowrap;">'
         f'<span style="display:inline-block;width:8px;height:8px;'
@@ -142,7 +160,7 @@ def _build_legend_html(show_aqi: bool) -> str:
     )
     return (
         f'<div style="font-family:monospace;margin:4px 0 2px 0;">'
-        f'<span style="font-size:9px;color:#888;margin-right:6px;">AQI</span>'
+        f'<span style="font-size:9px;color:#888;margin-right:6px;">BANDS</span>'
         f'{items}</div>'
     )
 
@@ -165,7 +183,12 @@ def _build_text_fallback(weather: dict) -> str:
     return "<p>" + "<br>".join(lines) + "</p>"
 
 
-def _build_chart_html(weather: dict, show_aqi: bool = True) -> str:
+def _build_chart_html(
+    weather: dict,
+    show_aqi: bool = True,
+    show_normal: bool = True,
+    show_record: bool = True,
+) -> str:
     """Build the HTML table chart — horizontal day rows with temp range bars."""
     forecast = weather.get("forecast", [])[:DAY_COUNT]
     aqi_forecast = weather.get("aqi_forecast", {}) or {}
@@ -198,6 +221,27 @@ def _build_chart_html(weather: dict, show_aqi: bool = True) -> str:
         lo_pct = _temp_to_pct(lo, temp_min, temp_max) if lo is not None else 0
         hi_pct = _temp_to_pct(hi, temp_min, temp_max) if hi is not None else 100
         bar_width = max(hi_pct - lo_pct, 1)
+        band_overlay_html = ""
+        if show_record:
+            band_overlay_html += _temp_range_overlay_html(
+                day,
+                temp_min,
+                temp_max,
+                low_key="record_lo",
+                high_key="record_hi",
+                color="#c0392b",
+                class_name="wx-record-band",
+            )
+        if show_normal:
+            band_overlay_html += _temp_range_overlay_html(
+                day,
+                temp_min,
+                temp_max,
+                low_key="normal_lo",
+                high_key="normal_hi",
+                color="#508c50",
+                class_name="wx-normal-band",
+            )
 
         # AQI number overlay row (Gmail-safe: positioned via spacer td width
         # instead of position:absolute, which Gmail strips).
@@ -295,6 +339,7 @@ def _build_chart_html(weather: dict, show_aqi: bool = True) -> str:
             f'border-radius:6px;"></td>'
             f'<td style="height:14px;padding:0;font-size:0;line-height:0;"></td>'
             f'</tr>'
+            f'{band_overlay_html}'
             f'{aqi_overlay_html}'
             f'</table>'
             f'</td>'
@@ -326,6 +371,40 @@ def _build_chart_html(weather: dict, show_aqi: bool = True) -> str:
 # ====================================================================
 # Helpers
 # ====================================================================
+
+
+def _temp_range_overlay_html(
+    day: dict,
+    temp_min: float,
+    temp_max: float,
+    *,
+    low_key: str,
+    high_key: str,
+    color: str,
+    class_name: str,
+) -> str:
+    """Build a Gmail-safe range marker row using spacer table cells."""
+    lo = day.get(low_key)
+    hi = day.get(high_key)
+    if lo is None or hi is None:
+        return ""
+
+    lo_pct = _temp_to_pct(min(lo, hi), temp_min, temp_max)
+    hi_pct = _temp_to_pct(max(lo, hi), temp_min, temp_max)
+    width_pct = max(hi_pct - lo_pct, 0.8)
+    return (
+        f'<tr><td colspan="3" style="padding:1px 0 0;">'
+        f'<table cellspacing="0" cellpadding="0" border="0" '
+        f'style="width:100%;border-collapse:collapse;">'
+        f'<tr>'
+        f'<td style="width:{lo_pct:.1f}%;font-size:0;line-height:0;'
+        f'padding:0;"></td>'
+        f'<td class="{class_name}" style="width:{width_pct:.1f}%;height:2px;'
+        f'background:{color};opacity:0.75;font-size:0;line-height:0;'
+        f'padding:0;"></td>'
+        f'<td style="padding:0;font-size:0;line-height:0;"></td>'
+        f'</tr></table></td></tr>'
+    )
 
 
 def _temp_to_pct(temp: float, temp_min: float, temp_max: float) -> float:

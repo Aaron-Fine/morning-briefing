@@ -170,15 +170,15 @@ class TestRenderWeatherHtmlIntegration:
         assert today_name in html
 
     def test_band_flags_accepted(self):
-        """aqi_strip gates the legend + per-bar AQI number; record_band and
-        normal_band are currently accepted but no-op (overlays pending
-        restoration — see TODO.md). Config-compatibility smoke test."""
+        """AQI, record, and normal flags gate their optional overlays."""
         weather = _load_fixture("weather_clear.json")
         config = _make_config(
             aqi_strip=False, record_band=False, normal_band=False
         )
         html = render_weather_html(weather, config)
         assert "<table" in html
+        assert "wx-record-band" not in html
+        assert "wx-normal-band" not in html
 
     def test_fallback_on_exception(self):
         """Force exception path by passing malformed data."""

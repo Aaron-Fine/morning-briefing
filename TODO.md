@@ -23,7 +23,6 @@ Last updated: 2026-04-21
 ### High — Design (HTML / email)
 
 - **Weather bar inline-style soup.** Chart is emitted as one long line of inline `style=""` attributes per day row — hard to scan, hard to tune, inflates the email payload. Promote the repeating styles (day-name cell, temp cell, gradient-bar cell, right column) to classes in `templates/email_template.py`'s `<style>` block; keep only per-row dynamic values (widths, colors, text) inline.
-- **Restore Normal / Record / Forecast Hi-Lo bar overlays.** `sources/weather.py::_compute_normals_and_records` still collects `normal_hi`, `normal_lo`, `record_hi`, `record_lo` per day and exposes the `normals` array; `config.yaml` has `record_band: true` and `normal_band: true`. These were meant to gate band overlays on each day's temp bar — the original positioning relied on `position:absolute` which Gmail strips, so they silently disappeared (same fate as AQI before the 2026-04-17 restoration). Restore using the same approach as `_build_chart_html`'s AQI row (spacer-cell width inside a nested table), gated by the `record_band`/`normal_band` flags. Until restored, those flags are no-ops — see `test_band_flags_accepted`.
 
 ### High — Design (architecture)
 
@@ -104,6 +103,12 @@ Last updated: 2026-04-21
 - **Improved mobile and Outlook rendering.** Mobile section/header/bar/footer padding now narrows at 480 px, markets render as a presentation table, and At-a-Glance headers no longer depend on flexbox.
 - **Improved scanability.** Tags are 11 px instead of 10 px, and Deep Dive further-reading links render as separated rows.
 - **Tests:** Added email-template render tests for mobile CSS, table-based market/scan layout, and further-reading separators.
+
+### 2026-04-21 — Weather normal and record overlays restored
+
+- **Restored normal and record bands on forecast bars.** `normal_band` and `record_band` now render Gmail-safe spacer-table overlays using each day's `normal_hi`/`normal_lo` and `record_hi`/`record_lo`.
+- **Made the weather legend reflect active overlays.** The legend now includes normal and record range entries when those overlays are enabled.
+- **Tests:** Weather display and integration tests now assert overlay rendering and flag-gated suppression.
 
 ### 2026-04-17 — Weather: AQI overlay restored
 

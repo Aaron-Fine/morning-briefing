@@ -267,10 +267,7 @@ class TestRenderWeatherHtml:
         assert "viewBox" not in html
 
     def test_band_flags_accepted(self):
-        """record_band/normal_band are currently no-ops (overlays pending
-        restoration — see TODO.md). aqi_strip gates the legend + per-bar AQI
-        overlay; the chart itself always draws the hi/lo gradient + precip
-        underline regardless."""
+        """Band flags gate the optional overlays without disabling the chart."""
         weather = _load_fixture("weather_clear.json")
         html = render_weather_html(
             weather,
@@ -279,6 +276,8 @@ class TestRenderWeatherHtml:
         assert "<table" in html
         # Legend and per-bar AQI numbers should be suppressed.
         assert "Moderate" not in html
+        assert "wx-record-band" not in html
+        assert "wx-normal-band" not in html
         for aqi_val in (e["aqi"] for e in weather["aqi_forecast"].values()):
             assert f">{aqi_val}<" not in html
 
@@ -468,7 +467,7 @@ class TestBuildLegendHtml:
 
     def test_shown_when_aqi_strip_true(self):
         html = _build_legend_html(True)
-        assert "AQI" in html
+        assert "BANDS" in html
         assert "Good" in html
         assert "Moderate" in html
         assert "USG" in html
@@ -484,6 +483,43 @@ class TestBuildLegendHtml:
         assert "#854d0e" in html   # Moderate (amber)
         # Bright EPA yellow (#ffff00) would be invisible on white — don't use it.
         assert "#ffff00" not in html
+
+    def test_normal_and_record_legend_entries(self):
+        html = _build_legend_html(False, show_normal=True, show_record=True)
+        assert "Normal range" in html
+        assert "Record range" in html
+
+
+class TestNormalRecordOverlayOnBar:
+    """Normal and record bands drawn with Gmail-safe spacer tables."""
+
+    def test_normal_and_record_bands_render_by_default(self):
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather)
+        assert "wx-normal-band" in html
+        assert "wx-record-band" in html
+
+    def test_normal_and_record_bands_can_be_suppressed(self):
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather, show_normal=False, show_record=False)
+        assert "wx-normal-band" not in html
+        assert "wx-record-band" not in html
+
+    def test_missing_normal_record_values_do_not_render_empty_bands(self):
+        weather = {
+            "forecast": [
+                {
+                    "date": "2026-04-08",
+                    "day_name": "Mon",
+                    "high_f": 70,
+                    "low_f": 50,
+                    "condition": "Clear",
+                }
+            ]
+        }
+        html = _build_chart_html(weather)
+        assert "wx-normal-band" not in html
+        assert "wx-record-band" not in html
 
 
 class TestAqiOverlayOnBar:
