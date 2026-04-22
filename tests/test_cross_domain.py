@@ -285,16 +285,34 @@ class TestCrossDomainRun:
     def test_llm_failure_returns_empty(self, mock_llm):
         mock_llm.side_effect = Exception("API error")
         context = {
-            "domain_analysis": {},
+            "domain_analysis": {
+                "geopolitics": {
+                    "items": [
+                        {
+                            "headline": "Fallback",
+                            "facts": "Facts",
+                            "analysis": "Analysis",
+                            "links": [],
+                        }
+                    ]
+                }
+            },
             "seam_data": {},
             "raw_sources": {"rss": []},
         }
         config = {"llm": {"provider": "fireworks"}}
         result = run(context, config)
+        assert "cross_domain_plan" in result
         assert "cross_domain_output" in result
+        assert "validation_diagnostics" in result
+        assert result["cross_domain_plan"]["schema_version"] == 1
         output = result["cross_domain_output"]
-        assert output["at_a_glance"] == []
+        assert output["at_a_glance"][0]["headline"] == "Fallback"
         assert output["deep_dives"] == []
+        diagnostics = result["validation_diagnostics"]
+        assert diagnostics["stage"] == "cross_domain"
+        assert diagnostics["issue_count"] == 1
+        assert diagnostics["issues"][0]["reason"] == "llm_call_failed"
 
     def test_no_domain_analysis_returns_empty(self):
         context = {
@@ -304,9 +322,52 @@ class TestCrossDomainRun:
         }
         config = {"llm": {"provider": "fireworks"}}
         result = run(context, config)
+        assert "cross_domain_plan" in result
         assert "cross_domain_output" in result
+        assert "validation_diagnostics" in result
+        assert result["cross_domain_plan"]["schema_version"] == 1
         output = result["cross_domain_output"]
         assert output["at_a_glance"] == []
+        diagnostics = result["validation_diagnostics"]
+        assert diagnostics["issues"][0]["reason"] == "no_domain_analysis_items"
+
+    @patch("stages.cross_domain.call_llm")
+    def test_non_dict_llm_output_returns_full_contract(self, mock_llm):
+        mock_llm.side_effect = [
+            {
+                "schema_version": 1,
+                "cross_domain_connections": [],
+                "deep_dives": [],
+                "worth_reading": [],
+                "rejected_alternatives": [],
+            },
+            "not a dict",
+        ]
+        context = {
+            "domain_analysis": {
+                "geopolitics": {
+                    "items": [
+                        {
+                            "headline": "Fallback",
+                            "facts": "Facts",
+                            "analysis": "Analysis",
+                            "links": [],
+                        }
+                    ]
+                }
+            },
+            "seam_data": {},
+            "raw_sources": {"rss": []},
+        }
+        config = {"llm": {"provider": "fireworks"}}
+
+        result = run(context, config)
+
+        assert result["cross_domain_plan"]["schema_version"] == 1
+        assert result["cross_domain_output"]["at_a_glance"][0]["headline"] == "Fallback"
+        assert result["validation_diagnostics"]["issues"][0]["reason"] == (
+            "non_dict_llm_output"
+        )
 
     @patch("stages.cross_domain.call_llm")
     def test_at_a_glance_cap_enforced(self, mock_llm):

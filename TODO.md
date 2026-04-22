@@ -13,8 +13,6 @@ Last updated: 2026-04-21
 
 ### High — Review sweep (2026-04-21)
 
-- **The pipeline can produce a "successful" dry run with no final editorial validation artifact.** If `cross_domain` has no items or its LLM call fails, it returns only `cross_domain_output` (`stages/cross_domain.py:453-455`, `stages/cross_domain.py:507-509`) and skips `cross_domain_plan` / `validation_diagnostics`, despite `_STAGE_METADATA["cross_domain"]["context_keys"]` expecting all three. Downstream code mostly survives because dicts are optional everywhere, but the contract is lying. Return empty plan + explicit validation diagnostics on every path, and assert that in tests.
-
 ### Low — Review sweep (2026-04-21)
 
 - **Documentation still references dead or misleading architecture.** `stages/assemble.py` advertises a Phase 0 `synthesis_output` mode in its docstring but the implementation no longer has a `synthesis_output` branch. README says adding a desk means creating `prompts/desk_<name>.md`, while current desks are hard-coded in `_DOMAIN_CONFIGS` and use one shared prompt. This is the kind of stale doc that makes the next change worse than it needs to be.
@@ -99,6 +97,12 @@ Last updated: 2026-04-21
 
 - **Exposed live pipeline run metadata to stages.** `run_pipeline` now stores the mutable `run_meta` object in shared context so `briefing_packet` can include prior stage timings, failures, and run options.
 - **Covered metadata propagation.** Tests assert `briefing_packet` sees the live run metadata during orchestration and that `_build_metadata` preserves timings and failures from context.
+
+### 2026-04-21 — Cross-domain fallback artifacts completed
+
+- **Made cross-domain fallback paths honor the stage contract.** No-item, LLM-failure, and malformed-output paths now return `cross_domain_plan`, `cross_domain_output`, and `validation_diagnostics`.
+- **Added explicit fallback diagnostics.** The diagnostics artifact records reason codes such as `no_domain_analysis_items`, `llm_call_failed`, and `non_dict_llm_output` when normal editorial validation did not run.
+- **Tests:** Fallback tests now assert the full artifact contract.
 
 ### 2026-04-17 — Weather: AQI overlay restored
 

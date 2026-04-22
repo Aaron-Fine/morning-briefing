@@ -205,6 +205,47 @@ _EXECUTE_PROMPT = load_prompt("cross_domain_execute.md")
 _SYSTEM_PROMPT = _EXECUTE_PROMPT
 
 
+def _empty_cross_domain_plan() -> dict:
+    """Return the minimal persisted plan shape for fallback paths."""
+    return {
+        "schema_version": 1,
+        "cross_domain_connections": [],
+        "deep_dives": [],
+        "worth_reading": [],
+        "rejected_alternatives": [],
+    }
+
+
+def _fallback_validation_diagnostics(reason: str, message: str = "") -> dict:
+    """Return explicit diagnostics when validation did not run on LLM output."""
+    issue = {
+        "kind": "cross_domain_fallback",
+        "reason": reason,
+    }
+    if message:
+        issue["message"] = message
+    return {
+        "stage": "cross_domain",
+        "issue_count": 1,
+        "issues": [issue],
+    }
+
+
+def _fallback_outputs(
+    domain_analysis: dict,
+    cross_domain_plan: dict | None = None,
+    *,
+    reason: str,
+    message: str = "",
+) -> dict:
+    """Return the full cross-domain artifact contract for fallback paths."""
+    return {
+        "cross_domain_plan": cross_domain_plan or _empty_cross_domain_plan(),
+        "cross_domain_output": _empty_output(domain_analysis),
+        "validation_diagnostics": _fallback_validation_diagnostics(reason, message),
+    }
+
+
 def _build_input(
     domain_analysis: dict,
     seam_data: dict,
@@ -453,10 +494,10 @@ def run(
     )
     if not has_items:
         log.warning("cross_domain: no domain analysis items — returning passthrough")
-        return {"cross_domain_output": _empty_output(domain_analysis)}
+        return _fallback_outputs(domain_analysis, reason="no_domain_analysis_items")
 
+    cross_domain_plan = context.get("cross_domain_plan")
     try:
-        cross_domain_plan = context.get("cross_domain_plan")
         if context.get("cross_domain_from_plan") and isinstance(cross_domain_plan, dict):
             log.info("Stage: cross_domain — reusing same-day cross_domain_plan")
         else:
@@ -507,12 +548,21 @@ def run(
         )
     except Exception as e:
         log.error(f"cross_domain: LLM call failed: {e}")
-        return {"cross_domain_output": _empty_output(domain_analysis)}
+        return _fallback_outputs(
+            domain_analysis,
+            cross_domain_plan if isinstance(cross_domain_plan, dict) else None,
+            reason="llm_call_failed",
+            message=str(e),
+        )
 
     # Normalize result
     if not isinstance(result, dict):
         log.warning("cross_domain: LLM returned non-dict, falling back to passthrough")
-        return {"cross_domain_output": _empty_output(domain_analysis)}
+        return _fallback_outputs(
+            domain_analysis,
+            cross_domain_plan,
+            reason="non_dict_llm_output",
+        )
 
     result = _validated_output(result, domain_analysis, raw_sources, config)
     result = validate_stage_output(
