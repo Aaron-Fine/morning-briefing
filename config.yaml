@@ -128,7 +128,7 @@ desks:
   - { name: "defense_space", categories: ["defense-mil"] }
   - { name: "ai_tech", categories: ["ai-tech", "cyber"] }
   - { name: "energy_materials", categories: ["energy-materials"] }
-  - { name: "culture_structural", categories: ["culture-structural"] }
+  - { name: "culture_structural", categories: ["culture-structural", "legal-institutional", "demographics"] }
   - { name: "science_biotech", categories: ["science-biotech"] }
   - { name: "econ", categories: ["econ-trade"] }
 

@@ -242,9 +242,9 @@ class TestAnomalySourceAbsence:
     def test_no_anomaly_when_category_covered(self):
         raw_sources = {
             "rss": [
-                {"url": "https://example.com/1", "category": "tech"},
-                {"url": "https://example.com/2", "category": "tech"},
-                {"url": "https://example.com/3", "category": "tech"},
+                {"url": "https://example.com/1", "category": "ai-tech"},
+                {"url": "https://example.com/2", "category": "ai-tech"},
+                {"url": "https://example.com/3", "category": "ai-tech"},
             ]
         }
         domain_analysis = {
@@ -263,9 +263,9 @@ class TestAnomalySourceAbsence:
     def test_anomaly_when_category_not_covered(self):
         raw_sources = {
             "rss": [
-                {"url": "https://example.com/1", "category": "econ"},
-                {"url": "https://example.com/2", "category": "econ"},
-                {"url": "https://example.com/3", "category": "econ"},
+                {"url": "https://example.com/1", "category": "econ-trade"},
+                {"url": "https://example.com/2", "category": "econ-trade"},
+                {"url": "https://example.com/3", "category": "econ-trade"},
             ]
         }
         domain_analysis = {
@@ -283,15 +283,33 @@ class TestAnomalySourceAbsence:
         assert any(a["check"] == "source_absence" for a in result)
 
     def test_source_absence_summarizes_excess_categories(self):
+        categories = [
+            "non-western",
+            "western-analysis",
+            "substack-independent",
+            "global-south",
+            "perspective-diversity",
+            "defense-mil",
+        ]
         raw_sources = {
             "rss": [
-                {"url": f"https://example.com/{i}", "category": f"cat{i}"}
-                for i in range(5)
-                for _ in range(3)
+                {"url": f"https://example.com/{category}/{i}", "category": category}
+                for category in categories
+                for i in range(3)
             ]
         }
         result = _check_source_absence(raw_sources, {})
         assert any("additional categories" in a["detail"] for a in result)
+
+    def test_source_absence_ignores_non_analysis_consumed_categories(self):
+        raw_sources = {
+            "rss": [
+                {"url": f"https://example.com/regional/{i}", "category": "regional-west"}
+                for i in range(3)
+            ]
+        }
+        result = _check_source_absence(raw_sources, {})
+        assert result == []
 
 
 class TestAnomalyDeepDives:

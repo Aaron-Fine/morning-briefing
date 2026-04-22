@@ -23,7 +23,9 @@ from sources.rss_feeds import (
     _clean_summary,
     _parse_feed_date,
     _fetch_direct,
+    _items_from_parsed_feed,
     _items_from_html_index,
+    _state_key,
     _skip_due_to_cooldown,
 )
 
@@ -187,6 +189,35 @@ class TestRssFeeds:
         result = _parse_feed_date(entry)
         assert isinstance(result, datetime)
         assert result.year == 2026
+        assert result.tzinfo == timezone.utc
+        assert result.hour == 14
+
+    def test_parse_feed_date_parsed_field_is_utc_not_local_time(self, monkeypatch):
+        import time
+
+        original_tz = os.environ.get("TZ")
+        monkeypatch.setenv("TZ", "America/Denver")
+        time.tzset()
+        try:
+            entry = MagicMock()
+            entry.get.side_effect = lambda k, d=None: {
+                "published_parsed": time.struct_time(
+                    (2026, 4, 15, 14, 30, 0, 2, 105, 0)
+                ),
+                "updated_parsed": None,
+                "published": None,
+                "updated": None,
+            }.get(k, d)
+
+            result = _parse_feed_date(entry)
+
+            assert result == datetime(2026, 4, 15, 14, 30, tzinfo=timezone.utc)
+        finally:
+            if original_tz is None:
+                monkeypatch.delenv("TZ", raising=False)
+            else:
+                monkeypatch.setenv("TZ", original_tz)
+            time.tzset()
 
     def test_parse_feed_date_with_string_field(self):
         entry = MagicMock()
@@ -335,8 +366,59 @@ class TestRssFeeds:
         assert len(items) == 2
         assert items[0]["url"] == "https://example.com/p/good-post"
         assert items[1]["url"] == "https://example.com/p/second-post"
+        assert items[0]["published"] == ""
+        assert items[0]["freshness"] == "retrieved_at"
+        assert datetime.fromisoformat(items[0]["fetched_at"]).tzinfo is not None
+
+    def test_items_from_parsed_feed_caps_after_age_filtering(self):
+        now = datetime.now(timezone.utc)
+        old = now - timedelta(days=3)
+        entries = [
+            {
+                "title": "Pinned old item",
+                "link": "https://example.com/old",
+                "summary": "Old",
+                "published": old.isoformat(),
+            },
+            {
+                "title": "Fresh one",
+                "link": "https://example.com/1",
+                "summary": "Fresh",
+                "published": now.isoformat(),
+            },
+            {
+                "title": "Fresh two",
+                "link": "https://example.com/2",
+                "summary": "Fresh",
+                "published": now.isoformat(),
+            },
+        ]
+
+        items = _items_from_parsed_feed(
+            {"name": "Feed", "url": "https://example.com/feed", "cap": 2},
+            entries,
+            now - timedelta(hours=36),
+        )
+
+        assert [item["title"] for item in items] == ["Fresh one", "Fresh two"]
 
     def test_skip_due_to_cooldown_returns_skip_result(self):
+        feed = {"name": "Cool Feed", "url": "https://example.com/feed.xml"}
+        state = {
+            _state_key(feed): {
+                "cooldown_until": datetime.now(timezone.utc).timestamp() + 300,
+                "last_status": 429,
+                "last_error": "too many requests",
+            }
+        }
+
+        result = _skip_due_to_cooldown(feed, state)
+
+        assert result is not None
+        assert result["skipped"] is True
+        assert result["status_code"] == 429
+
+    def test_skip_due_to_cooldown_reads_legacy_name_key(self):
         feed = {"name": "Cool Feed", "url": "https://example.com/feed.xml"}
         state = {
             "Cool Feed": {
@@ -350,4 +432,3 @@ class TestRssFeeds:
 
         assert result is not None
         assert result["skipped"] is True
-        assert result["status_code"] == 429

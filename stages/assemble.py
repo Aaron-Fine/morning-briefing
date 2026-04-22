@@ -209,6 +209,7 @@ def _extract_peripheral_data(context: dict, raw_sources: dict) -> dict:
         "weather_html": context.get("weather_html", ""),
         "week_ahead": calendar.get("events", []),
         "local_items": context.get("local_items") or raw_sources.get("local_news", []),
+        "regional_items": context.get("regional_items") or [],
     }
 
 
@@ -254,6 +255,7 @@ def run(
     weather_html = peripheral["weather_html"]
     week_ahead = peripheral["week_ahead"]
     local_items = peripheral["local_items"]
+    regional_items = peripheral["regional_items"]
     markets = raw_sources.get("markets", [])
 
     # Build source name lists for footer
@@ -301,6 +303,7 @@ def run(
         "key_assumptions": seam_data.get("key_assumptions", []),
         "coverage_gap_diagnostics": coverage_gap_diagnostics,
         "local_items": local_items,
+        "regional_items": regional_items,
         "market_context": market_context,
         "week_ahead": week_ahead,
         "worth_reading": worth_reading,

@@ -105,6 +105,8 @@ class TestEmptyStageOutput:
         output = _empty_stage_output("prepare_local")
         assert "local_items" in output
         assert isinstance(output["local_items"], list)
+        assert "regional_items" in output
+        assert isinstance(output["regional_items"], list)
 
     def test_anomaly_returns_report_structure(self):
         output = _empty_stage_output("anomaly")

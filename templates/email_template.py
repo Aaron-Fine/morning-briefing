@@ -307,6 +307,25 @@ EMAIL_TEMPLATE = _env.from_string("""\
   </div>
   {% endif %}
 
+  <!-- UTAH & WEST -->
+  {% if regional_items %}
+  <div class="section">
+    <h2 class="mono-label sec-label">Utah &amp; West</h2>
+    {% for item in regional_items %}
+    <div class="local-item">
+      {% if item is mapping %}
+        {% set headline = item.headline or item.title %}
+        {% set ctx = item.context or item.summary %}
+        {% if item.url %}<a href="{{ item.url }}">{{ headline }}</a>{% else %}<strong>{{ headline }}</strong>{% endif %}
+        {% if ctx %} — {{ ctx }}{% endif %}
+      {% else %}
+        {{ item }}
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
    <!-- WORTH READING -->
    {% if worth_reading %}
    <div class="section">

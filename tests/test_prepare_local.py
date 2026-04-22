@@ -90,3 +90,31 @@ def test_run_demotes_empty_summary_items():
         {"digest": {"local": {"max_items": 1}}},
     )
     assert result["local_items"][0]["title"] == "Council"
+
+
+def test_run_selects_regional_west_rss_separately():
+    raw_sources = {
+        "local_news": [],
+        "rss": [
+            {
+                "title": "State story",
+                "summary": "A detailed Utah story with enough context to be useful.",
+                "url": "https://example.com/utah",
+                "category": "regional-west",
+            },
+            {
+                "title": "Global story",
+                "summary": "A detailed global story with enough context to be useful.",
+                "url": "https://example.com/world",
+                "category": "non-western",
+            },
+        ],
+    }
+
+    result = run(
+        {"raw_sources": raw_sources},
+        {"digest": {"local": {"max_items": 1, "max_regional_items": 1}}},
+    )
+
+    assert result["local_items"] == []
+    assert [item["title"] for item in result["regional_items"]] == ["State story"]

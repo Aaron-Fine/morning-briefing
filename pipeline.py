@@ -244,7 +244,7 @@ _STAGE_METADATA = {
     },
     "analyze_domain": {
         "artifact_key": "domain_analysis",
-        "context_keys": ["domain_analysis"],
+        "context_keys": ["domain_analysis", "domain_analysis_failures"],
         "non_critical": False,
         "empty_output": None,
         "model_defaults": {},
@@ -284,9 +284,9 @@ _STAGE_METADATA = {
     },
     "prepare_local": {
         "artifact_key": "local_items",
-        "context_keys": ["local_items"],
+        "context_keys": ["local_items", "regional_items"],
         "non_critical": True,
-        "empty_output": {"local_items": []},
+        "empty_output": {"local_items": [], "regional_items": []},
         "model_defaults": None,
         "turn_model_overrides": None,
     },

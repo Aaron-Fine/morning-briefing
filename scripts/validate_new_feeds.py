@@ -136,40 +136,11 @@ def print_table(results: list[dict]) -> None:
                 print(f"  - {r['name']}: {r['error']}")
 
 
-# Candidate feeds for new categories
-CANDIDATE_FEEDS = [
-    # --- ENERGY / MATERIALS ---
-    {"url": "https://utilitydive.com/feeds/news/", "name": "Utility Dive", "category": "energy-materials", "cap": 5},
-    {"url": "https://www.mining.com/feed/", "name": "Mining.com", "category": "energy-materials", "cap": 5},
-    {"url": "https://oilprice.com/rss/main", "name": "OilPrice.com", "category": "energy-materials", "cap": 5},
-    {"url": "https://www.carbonbrief.org/feed", "name": "Carbon Brief", "category": "energy-materials", "cap": 5},
-
-    # --- CULTURE / STRUCTURAL ---
-    {"url": "https://www.theamericanconservative.com/feed/", "name": "The American Conservative", "category": "culture-structural", "cap": 3},
-    {"url": "https://worksinprogress.substack.com/feed", "name": "Works in Progress", "category": "culture-structural", "cap": 3},
-    {"url": "https://www.thenewatlantis.com/feed", "name": "The New Atlantis", "category": "culture-structural", "cap": 3},
-    {"url": "https://comment.org/feed/", "name": "Comment Magazine", "category": "culture-structural", "cap": 3},
-
-    # --- SCIENCE / BIOTECH ---
-    {"url": "https://www.nature.com/nature.rss", "name": "Nature", "category": "science-biotech", "cap": 5},
-    {"url": "https://www.science.org/rss/news_current.xml", "name": "Science Magazine", "category": "science-biotech", "cap": 5},
-    {"url": "https://www.statnews.com/feed/", "name": "STAT News", "category": "science-biotech", "cap": 5},
-    {"url": "https://endpts.com/feed/", "name": "Endpoints News", "category": "science-biotech", "cap": 3},
-
-    # --- LEGAL / INSTITUTIONAL ---
-    {"url": "https://feeds.feedburner.com/lawfare", "name": "Lawfare", "category": "legal-institutional", "cap": 5},
-    {"url": "https://www.scotusblog.com/feed/", "name": "SCOTUSblog", "category": "legal-institutional", "cap": 3},
-    {"url": "https://www.justsecurity.org/feed/", "name": "Just Security", "category": "legal-institutional", "cap": 3},
-
-    # --- REGIONAL / WESTERN US ---
-    {"url": "https://www.sltrib.com/arc/outboundfeeds/rss/category/news/", "name": "Salt Lake Tribune", "category": "regional-west", "cap": 5},
-    {"url": "https://www.deseret.com/arc/outboundfeeds/rss/category/utah/", "name": "Deseret News (Utah)", "category": "regional-west", "cap": 5},
-    {"url": "https://www.kuer.org/rss.xml", "name": "KUER (Utah NPR)", "category": "regional-west", "cap": 5},
-
-    # --- DEMOGRAPHICS ---
-    {"url": "https://www.pewresearch.org/feed/", "name": "Pew Research Center", "category": "demographics", "cap": 3},
-    {"url": "https://ifstudies.org/blog/feed", "name": "Institute for Family Studies", "category": "demographics", "cap": 3},
-]
+def _load_configured_feeds() -> list[dict]:
+    config_path = Path(__file__).parent.parent / "config.yaml"
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
+    return config.get("rss", {}).get("feeds", [])
 
 
 def main():
@@ -179,14 +150,11 @@ def main():
     args = parser.parse_args()
 
     if args.config:
-        config_path = Path(__file__).parent.parent / "config.yaml"
-        with open(config_path) as f:
-            config = yaml.safe_load(f)
-        feeds = config.get("rss", {}).get("feeds", [])
+        feeds = _load_configured_feeds()
         if args.category:
             feeds = [f for f in feeds if f.get("category") == args.category]
     else:
-        feeds = CANDIDATE_FEEDS
+        feeds = _load_configured_feeds()
         if args.category:
             feeds = [f for f in feeds if f.get("category") == args.category]
 

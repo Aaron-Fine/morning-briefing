@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -18,7 +19,18 @@ from morning_digest.validate import VALID_TAGS, VALID_TAG_LABELS
 from stages.cross_domain import _VALID_TAGS, _TAG_LABELS, _SYSTEM_PROMPT
 from stages.assemble import _TAG_LABELS as ASSEMBLE_TAG_LABELS
 from stages.prepare_calendar import _parse_date
+from stages.prepare_local import CONSUMED_RSS_CATEGORIES
 from templates.email_template import EMAIL_TEMPLATE
+
+
+def _configured_stage_names() -> list[str]:
+    config_path = Path(__file__).parent.parent / "config.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    return [
+        stage["name"]
+        for stage in config.get("pipeline", {}).get("stages", [])
+        if stage.get("name")
+    ]
 
 
 class TestTagVocabularyConsistency:
@@ -152,37 +164,18 @@ class TestStageArtifactKeyCoverage:
     """Every stage in the pipeline manifest must map to an explicit artifact key."""
 
     def test_all_stages_have_explicit_keys(self):
+        from pipeline import _STAGE_METADATA
         from pipeline import _stage_artifact_key
 
-        # All known stage names from the pipeline
-        stage_names = [
-            "collect",
-            "compress",
-            "analyze_domain",
-            "prepare_calendar",
-            "prepare_weather",
-            "prepare_spiritual_weekly",
-            "prepare_spiritual",
-            "prepare_local",
-            "seams",
-            "cross_domain",
-            "coverage_gaps",
-            "assemble",
-            "anomaly",
-            "briefing_packet",
-            "send",
-        ]
-
-        # Stages where artifact_key intentionally matches the stage name
-        _IDENTITY_KEY_STAGES = {"briefing_packet", "coverage_gaps"}
+        stage_names = _configured_stage_names()
 
         for stage in stage_names:
+            assert "artifact_key" in _STAGE_METADATA.get(stage, {}), (
+                f"Stage '{stage}' has no explicit artifact_key metadata"
+            )
             key = _stage_artifact_key(stage)
-            if stage in _IDENTITY_KEY_STAGES:
-                continue
-            assert key != stage, (
-                f"Stage '{stage}' falls through to identity fallback — "
-                f"add an explicit mapping in _stage_artifact_key"
+            assert key == _STAGE_METADATA[stage]["artifact_key"], (
+                f"Stage '{stage}' artifact key does not match metadata"
             )
 
 
@@ -192,23 +185,33 @@ class TestStageMetadataCoverage:
     def test_known_stages_have_metadata_entries(self):
         from pipeline import _STAGE_METADATA
 
-        stage_names = [
-            "collect",
-            "compress",
-            "analyze_domain",
-            "prepare_calendar",
-            "prepare_weather",
-            "prepare_spiritual_weekly",
-            "prepare_spiritual",
-            "prepare_local",
-            "seams",
-            "cross_domain",
-            "coverage_gaps",
-            "assemble",
-            "anomaly",
-            "briefing_packet",
-            "send",
-        ]
+        stage_names = _configured_stage_names()
 
         for stage in stage_names:
             assert stage in _STAGE_METADATA, f"Missing stage metadata for '{stage}'"
+
+
+class TestRssCategoryRoutingContract:
+    """Every configured RSS category must be consumed by a desk or explicit stage."""
+
+    def test_all_configured_rss_categories_have_active_consumers(self):
+        from stages.analyze_domain import _resolve_domain_configs
+
+        config_path = Path(__file__).parent.parent / "config.yaml"
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        rss_categories = {
+            feed.get("category")
+            for feed in config.get("rss", {}).get("feeds", [])
+            if feed.get("category")
+        }
+        desk_categories = {
+            category
+            for desk in _resolve_domain_configs(config).values()
+            for category in desk.get("categories", set())
+        }
+        consumed = desk_categories | CONSUMED_RSS_CATEGORIES
+
+        assert rss_categories <= consumed, (
+            "Configured RSS categories without an active consumer: "
+            f"{sorted(rss_categories - consumed)}"
+        )

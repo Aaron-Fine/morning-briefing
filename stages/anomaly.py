@@ -16,6 +16,8 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse
 
+from stages.analyze_domain import _resolve_domain_configs
+
 log = logging.getLogger(__name__)
 
 _ROOT = Path(__file__).parent.parent
@@ -55,9 +57,23 @@ def _check_category_skew(at_a_glance: list) -> list:
     return anomalies
 
 
-def _check_source_absence(raw_sources: dict, domain_analysis: dict) -> list:
-    """Warn if a category with 3+ raw items produced 0 domain analysis items."""
+def _active_analysis_categories(config: dict) -> set[str]:
+    domain_configs = _resolve_domain_configs(config)
+    return {
+        category
+        for domain_config in domain_configs.values()
+        for category in domain_config.get("categories", set())
+    }
+
+
+def _check_source_absence(
+    raw_sources: dict,
+    domain_analysis: dict,
+    config: dict | None = None,
+) -> list:
+    """Warn if an analysis-routed category with 3+ raw items produced 0 items."""
     anomalies = []
+    analysis_categories = _active_analysis_categories(config or {})
 
     # Count raw items per category
     raw_by_category: dict[str, int] = {}
@@ -88,6 +104,8 @@ def _check_source_absence(raw_sources: dict, domain_analysis: dict) -> list:
 
     missing_categories = []
     for cat, count in raw_by_category.items():
+        if cat not in analysis_categories:
+            continue
         if count < 3:
             continue
         cat_domains = raw_domains_by_category.get(cat, set())
@@ -342,7 +360,10 @@ def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
 
     checks = [
         ("category_skew", lambda: _check_category_skew(at_a_glance)),
-        ("source_absence", lambda: _check_source_absence(raw_sources, domain_analysis)),
+        (
+            "source_absence",
+            lambda: _check_source_absence(raw_sources, domain_analysis, config),
+        ),
         ("unusual_deep_dives", lambda: _check_unusual_deep_dives(deep_dives, domain_analysis)),
         ("digest_length", lambda: _check_digest_length(total_items)),
         ("repeated_phrases", lambda: _check_repeated_phrases(cross_domain_output, seam_data)),

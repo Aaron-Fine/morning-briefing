@@ -3,6 +3,7 @@
 import json
 import logging
 import signal
+from calendar import timegm
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
@@ -244,12 +245,12 @@ def _feed_diagnostic(
 def _fetch_feed_batch(feeds: list[dict], fetch_state: dict) -> list[dict]:
     """Fetch one batch of feed bytes in parallel, preserving input order."""
     active_feeds: list[dict] = []
-    results_by_name: dict[str, dict] = {}
+    results_by_key: dict[str, dict] = {}
 
     for feed_conf in feeds:
         skipped = _skip_due_to_cooldown(feed_conf, fetch_state)
         if skipped is not None:
-            results_by_name[feed_conf["name"]] = skipped
+            results_by_key[_state_key(feed_conf)] = skipped
         else:
             active_feeds.append(feed_conf)
 
@@ -258,9 +259,9 @@ def _fetch_feed_batch(feeds: list[dict], fetch_state: dict) -> list[dict]:
         fetched = list(pool.map(_fetch_feed_content, active_feeds))
 
     for feed_conf, result in zip(active_feeds, fetched):
-        results_by_name[feed_conf["name"]] = result
+        results_by_key[_state_key(feed_conf)] = result
 
-    return [results_by_name[feed_conf["name"]] for feed_conf in feeds]
+    return [results_by_key[_state_key(feed_conf)] for feed_conf in feeds]
 
 
 def _fetch_feed_content(feed_conf: dict) -> dict:
@@ -331,11 +332,14 @@ def _save_fetch_state(fetch_state: dict) -> None:
 
 
 def _state_key(feed_conf: dict) -> str:
-    return feed_conf["name"]
+    return f"{feed_conf.get('name', '')}|{feed_conf.get('url', '')}"
 
 
 def _skip_due_to_cooldown(feed_conf: dict, fetch_state: dict) -> dict | None:
-    state = fetch_state.get(_state_key(feed_conf), {})
+    state = fetch_state.get(_state_key(feed_conf))
+    if state is None:
+        # Backward-compatible read for state files created before URL-stable keys.
+        state = fetch_state.get(feed_conf.get("name", ""), {})
     cooldown_until = state.get("cooldown_until", 0)
     now_ts = datetime.now(timezone.utc).timestamp()
     if cooldown_until <= now_ts:
@@ -415,7 +419,7 @@ def _items_from_parsed_feed(
     tag = feed_conf.get("tag", "")
     category = feed_conf.get("category", "")
 
-    for entry in entries[:cap]:
+    for entry in entries:
         published = _parse_feed_date(entry)
         if published and published < cutoff:
             continue
@@ -435,6 +439,8 @@ def _items_from_parsed_feed(
         if category:
             item["category"] = category
         items.append(item)
+        if len(items) >= cap:
+            break
 
     return items
 
@@ -470,6 +476,7 @@ def _items_from_html_index(feed_conf: dict, content: bytes) -> list[dict]:
     tag = feed_conf.get("tag", "")
     category = feed_conf.get("category", "")
     cap = feed_conf.get("cap", 15)
+    fetched_at = datetime.now(timezone.utc).isoformat()
     items = []
     seen_urls: set[str] = set()
 
@@ -486,6 +493,8 @@ def _items_from_html_index(feed_conf: dict, content: bytes) -> list[dict]:
             "title": title.strip(),
             "url": absolute_url,
             "published": "",
+            "fetched_at": fetched_at,
+            "freshness": "retrieved_at",
             "summary": "",
         }
         if tag:
@@ -593,8 +602,7 @@ def _parse_feed_date(entry) -> Optional[datetime]:
     for field in ("published_parsed", "updated_parsed"):
         val = entry.get(field)
         if val:
-            from time import mktime
-            return datetime.fromtimestamp(mktime(val), tz=timezone.utc)
+            return datetime.fromtimestamp(timegm(val), tz=timezone.utc)
 
     for field in ("published", "updated"):
         val = entry.get(field)
