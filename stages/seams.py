@@ -40,6 +40,22 @@ _VALID_SEAM_TYPES = {
     "credible_dissent",
 }
 _VALID_CONFIDENCE = {"high", "medium", "low"}
+_MAX_CANDIDATES = 5
+_MAX_CROSS_DOMAIN_CANDIDATES = 2
+_MAX_EVIDENCE_PER_CANDIDATE = 2
+_MAX_CANDIDATE_TEXT_CHARS = 220
+_MAX_EVIDENCE_TEXT_CHARS = 140
+_MAX_RAW_ITEMS_PER_CATEGORY = 8
+_MAX_RAW_SUMMARY_CHARS = 320
+_MAX_DOMAIN_FIELD_CHARS = 650
+_MAX_TRANSCRIPT_CHARS = 350
+
+
+def _clip_text(value: object, max_chars: int) -> str:
+    text = str(value or "").strip()
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 3].rstrip() + "..."
 
 
 def _build_domain_summary(domain_analysis: dict) -> str:
@@ -60,11 +76,14 @@ def _build_domain_summary(domain_analysis: dict) -> str:
                 f"\nItem ID: {item.get('item_id', '')}\n"
                 f"Headline: {item.get('headline', '')}{dive_flag}\n"
                 f"Tag: {item.get('tag', '')} | Depth: {item.get('source_depth', '')}\n"
-                f"Facts: {item.get('facts', '')}\n"
-                f"Analysis: {item.get('analysis', '')}"
+                f"Facts: {_clip_text(item.get('facts', ''), _MAX_DOMAIN_FIELD_CHARS)}\n"
+                f"Analysis: {_clip_text(item.get('analysis', ''), _MAX_DOMAIN_FIELD_CHARS)}"
             )
             if item.get("deep_dive_rationale"):
-                parts.append(f"Dive rationale: {item['deep_dive_rationale']}")
+                parts.append(
+                    "Dive rationale: "
+                    f"{_clip_text(item['deep_dive_rationale'], _MAX_DOMAIN_FIELD_CHARS)}"
+                )
             hooks = item.get("connection_hooks", [])
             if hooks:
                 hook_strs = [
@@ -99,13 +118,13 @@ def _build_raw_source_summary(raw_sources: dict) -> str:
     parts = []
     for cat, items in sorted(by_cat.items()):
         parts.append(f"\n--- {cat.upper()} ({len(items)} items) ---")
-        for item in items[:12]:  # cap per category to manage prompt length
+        for item in items[:_MAX_RAW_ITEMS_PER_CATEGORY]:
             reliability = item.get("reliability", "")
             rel_note = f" [{reliability}]" if reliability else ""
             parts.append(
                 f"  {item.get('source', '?')}{rel_note}: "
                 f"{item.get('title', '?')} — "
-                f"{sanitize_source_content(item.get('summary', ''), max_chars=500)}"
+                f"{sanitize_source_content(item.get('summary', ''), max_chars=_MAX_RAW_SUMMARY_CHARS)}"
             )
             if item.get("url"):
                 parts.append(f"    URL: {item['url']}")
@@ -119,9 +138,7 @@ def _build_transcript_summary(compressed_transcripts: list) -> str:
     parts = []
     for t in compressed_transcripts:
         text = t.get("compressed_transcript") or t.get("transcript", "")
-        # Truncate for seam detection — it doesn't need the full transcript
-        if len(text) > 500:
-            text = text[:500] + "..."
+        text = _clip_text(text, _MAX_TRANSCRIPT_CHARS)
         parts.append(f"{t.get('channel', '?')}: {t.get('title', '?')}\n  {text}")
     return "\n".join(parts)
 
@@ -190,6 +207,8 @@ def _normalize_seam_candidates(result: dict | None, domain_analysis: dict) -> di
     ids = _valid_item_ids(domain_analysis)
     candidates = []
     for raw_item in result.get("candidates", []) or []:
+        if len(candidates) >= _MAX_CANDIDATES:
+            break
         if not isinstance(raw_item, dict):
             continue
         item_id = str(raw_item.get("item_id", "")).strip()
@@ -203,29 +222,42 @@ def _normalize_seam_candidates(result: dict | None, domain_analysis: dict) -> di
             {
                 "item_id": item_id,
                 "seam_type": seam_type,
-                "candidate_one_line": str(
-                    raw_item.get("candidate_one_line", "")
-                ).strip(),
-                "why_it_might_matter": str(
-                    raw_item.get("why_it_might_matter", "")
-                ).strip(),
+                "candidate_one_line": _clip_text(
+                    raw_item.get("candidate_one_line", ""),
+                    _MAX_CANDIDATE_TEXT_CHARS,
+                ),
+                "why_it_might_matter": _clip_text(
+                    raw_item.get("why_it_might_matter", ""),
+                    _MAX_CANDIDATE_TEXT_CHARS,
+                ),
                 "possible_evidence": [
                     {
-                        "source": str(entry.get("source", "")).strip(),
-                        "excerpt": str(entry.get("excerpt", "")).strip(),
-                        "framing": str(entry.get("framing", "")).strip(),
+                        "source": _clip_text(
+                            entry.get("source", ""), _MAX_EVIDENCE_TEXT_CHARS
+                        ),
+                        "excerpt": _clip_text(
+                            entry.get("excerpt", ""), _MAX_EVIDENCE_TEXT_CHARS
+                        ),
+                        "framing": _clip_text(
+                            entry.get("framing", ""), _MAX_EVIDENCE_TEXT_CHARS
+                        ),
                     }
-                    for entry in (raw_item.get("possible_evidence", []) or [])
+                    for entry in (raw_item.get("possible_evidence", []) or [])[
+                        :_MAX_EVIDENCE_PER_CANDIDATE
+                    ]
                     if isinstance(entry, dict)
                 ],
-                "drop_if_weak_reason": str(
-                    raw_item.get("drop_if_weak_reason", "")
-                ).strip(),
+                "drop_if_weak_reason": _clip_text(
+                    raw_item.get("drop_if_weak_reason", ""),
+                    _MAX_CANDIDATE_TEXT_CHARS,
+                ),
             }
         )
 
     cross_domain_candidates = []
     for raw_item in result.get("cross_domain_candidates", []) or []:
+        if len(cross_domain_candidates) >= _MAX_CROSS_DOMAIN_CANDIDATES:
+            break
         if not isinstance(raw_item, dict):
             continue
         linked_ids = [
@@ -239,13 +271,15 @@ def _normalize_seam_candidates(result: dict | None, domain_analysis: dict) -> di
             continue
         cross_domain_candidates.append(
             {
-                "candidate_one_line": str(
-                    raw_item.get("candidate_one_line", "")
-                ).strip(),
+                "candidate_one_line": _clip_text(
+                    raw_item.get("candidate_one_line", ""),
+                    _MAX_CANDIDATE_TEXT_CHARS,
+                ),
                 "linked_item_ids": linked_ids,
-                "why_it_might_matter": str(
-                    raw_item.get("why_it_might_matter", "")
-                ).strip(),
+                "why_it_might_matter": _clip_text(
+                    raw_item.get("why_it_might_matter", ""),
+                    _MAX_CANDIDATE_TEXT_CHARS,
+                ),
             }
         )
 
@@ -434,7 +468,26 @@ def _call_turn_json(
     turn_name: str,
     fallback_shape: dict,
 ) -> dict:
-    """Call a seams turn, retrying once without streaming and then repairing JSON."""
+    """Call a seams turn, preferring provider JSON mode before raw repair paths."""
+    try:
+        result = call_llm(
+            prompt,
+            user_content,
+            model_config,
+            max_retries=1,
+            json_mode=True,
+            stream=False,
+        )
+        if isinstance(result, dict):
+            return result
+        if isinstance(result, str):
+            return _parse_turn_json(result)
+    except Exception as exc:
+        log.warning(
+            f"seams: {turn_name} turn failed with provider JSON mode, "
+            f"falling back to raw parse: {exc}"
+        )
+
     raw_attempts: list[str] = []
     for stream in (True, False):
         try:

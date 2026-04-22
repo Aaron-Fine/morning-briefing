@@ -13,6 +13,7 @@ from stages.seams import (
     _build_domain_summary,
     _build_raw_source_summary,
     _build_transcript_summary,
+    _normalize_seam_candidates,
     run,
 )
 from utils.urls import collect_known_urls as _collect_known_urls
@@ -39,6 +40,28 @@ class TestBuildDomainSummary:
         assert "Test headline" in result
         assert "Test facts" in result
         assert "Test analysis" in result
+
+    def test_truncates_long_fields_for_prompt_budget(self):
+        long_text = "x" * 900
+        domain_analysis = {
+            "geopolitics": {
+                "items": [
+                    {
+                        "headline": "Long story",
+                        "tag": "war",
+                        "source_depth": "single-source",
+                        "facts": long_text,
+                        "analysis": long_text,
+                        "links": [],
+                    }
+                ]
+            }
+        }
+
+        result = _build_domain_summary(domain_analysis)
+
+        assert long_text not in result
+        assert "xxx..." in result
 
     def test_deep_dive_candidate_flag(self):
         domain_analysis = {
@@ -225,10 +248,10 @@ class TestBuildRawSourceSummary:
             ]
         }
         result = _build_raw_source_summary(raw_sources)
-        # Should cap at 12 per category - count actual source entries in output
+        # Should cap per category - count actual source entries in output
         # Each entry appears as "Source{i}: T{i}"
         entry_count = result.count(": T")  # Each entry has ": T" from "Source{i}: T{i}"
-        assert entry_count <= 12, f"Expected <=12 entries, got {entry_count}"
+        assert entry_count <= 8, f"Expected <=8 entries, got {entry_count}"
 
 
 class TestBuildTranscriptSummary:
@@ -295,6 +318,50 @@ class TestCollectKnownUrls:
         }
         result = _collect_known_urls(raw_sources, domain_analysis)
         assert "https://domain.com/1" in result
+
+
+class TestNormalizeSeamCandidates:
+    def test_caps_candidate_count_and_text_size(self):
+        long_text = "x" * 400
+        result = {
+            "candidates": [
+                {
+                    "item_id": f"item-{i}",
+                    "seam_type": "framing_divergence",
+                    "candidate_one_line": long_text,
+                    "why_it_might_matter": long_text,
+                    "possible_evidence": [
+                        {"source": "A", "excerpt": long_text, "framing": long_text},
+                        {"source": "B", "excerpt": long_text, "framing": long_text},
+                        {"source": "C", "excerpt": long_text, "framing": long_text},
+                    ],
+                    "drop_if_weak_reason": long_text,
+                }
+                for i in range(8)
+            ],
+            "cross_domain_candidates": [
+                {
+                    "candidate_one_line": long_text,
+                    "linked_item_ids": ["item-0", "item-1"],
+                    "why_it_might_matter": long_text,
+                }
+                for _ in range(4)
+            ],
+        }
+        domain_analysis = {
+            "geopolitics": {
+                "items": [{"item_id": f"item-{i}"} for i in range(8)]
+            }
+        }
+
+        normalized = _normalize_seam_candidates(result, domain_analysis)
+
+        assert len(normalized["candidates"]) == 5
+        assert len(normalized["cross_domain_candidates"]) == 2
+        first = normalized["candidates"][0]
+        assert len(first["possible_evidence"]) == 2
+        assert len(first["candidate_one_line"]) <= 220
+        assert len(first["possible_evidence"][0]["excerpt"]) <= 140
 
 
 class TestSeamsRun:

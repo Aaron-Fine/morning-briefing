@@ -1,6 +1,6 @@
 # Morning Digest — TODO
 
-Last updated: 2026-04-21
+Last updated: 2026-04-22
 
 > **Design-intent note.** When triaging items marked "stale" or "unused,"
 > first ask whether the feature was *intentional but silently broken* (e.g.
@@ -49,6 +49,13 @@ Last updated: 2026-04-21
 ---
 
 ## Changelog
+
+### 2026-04-22 — Seams LLM output stabilized
+
+- **Switched seams to Fireworks Kimi K2.5.** The seams stage now uses `accounts/fireworks/models/kimi-k2p5` with per-turn token caps below the Fireworks forced-streaming threshold.
+- **Prefer provider JSON mode before raw repair.** Seams candidate and annotation turns first request provider-enforced JSON, then fall back to the existing raw streaming/non-streaming parse and repair path.
+- **Bounded seams prompt and output size.** Domain fields, raw RSS summaries, transcripts, candidate counts, evidence counts, and candidate/evidence text are capped before annotation so malformed/truncated JSON is less likely.
+- **Tests:** Dockerized full suite passed: `911 passed`.
 
 ### 2026-04-21 — RSS routing and collector fixes
 

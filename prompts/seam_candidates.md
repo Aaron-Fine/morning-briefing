@@ -40,7 +40,10 @@ Candidate discipline:
 
 - Scan broadly, but stay source-grounded.
 - Include candidates that look promising even if the second pass may drop them.
-- Do not include more than 12 per-item candidates or 6 cross-domain candidates.
+- Do not include more than 5 per-item candidates or 2 cross-domain candidates.
+- Keep every string compact: candidate lines under 160 characters, why/drop fields under 220 characters, evidence excerpts/framing under 140 characters.
+- Include no more than 2 evidence entries per candidate.
+- Prefer leaving a marginal candidate out over producing long JSON.
 - Prefer candidates where the contested frame determines who bears cost: whose risk rises, whose agency disappears, who pays, or who is blamed.
 - Draft `candidate_one_line` with named perspective phrasing: "The non-Western read:", "A skeptical economics read:", "The defense-industrial read:", "A global-south read:"
 - Avoid hedges such as "some analysts argue", "critics say", "observers believe", or "there are concerns".

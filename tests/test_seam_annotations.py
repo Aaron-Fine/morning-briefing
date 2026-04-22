@@ -64,6 +64,7 @@ def test_seams_retries_annotation_call_without_stream(mock_llm):
     mock_llm.side_effect = [
         {"schema_version": 1, "candidates": [], "cross_domain_candidates": []},
         Exception("bad json"),
+        Exception("bad raw stream"),
         {"per_item": [], "cross_domain": []},
     ]
 
@@ -76,8 +77,10 @@ def test_seams_retries_annotation_call_without_stream(mock_llm):
         },
     )
 
-    assert mock_llm.call_args_list[1].kwargs["stream"] is True
-    assert mock_llm.call_args_list[2].kwargs["stream"] is False
+    assert mock_llm.call_args_list[1].kwargs["json_mode"] is True
+    assert mock_llm.call_args_list[1].kwargs["stream"] is False
+    assert mock_llm.call_args_list[2].kwargs["stream"] is True
+    assert mock_llm.call_args_list[3].kwargs["stream"] is False
 
 
 @patch("stages.seams.call_llm")

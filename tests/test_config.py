@@ -14,6 +14,20 @@ def test_load_config_merges_split_files():
     assert config["digest"]["at_a_glance"]["max_items"] == 7
 
 
+def test_seams_turns_stay_below_fireworks_forced_stream_threshold():
+    config = load_config(Path(__file__).parent.parent)
+    seams_stage = next(
+        stage
+        for stage in config["pipeline"]["stages"]
+        if stage.get("name") == "seams"
+    )
+
+    assert seams_stage["model"]["model"] == "accounts/fireworks/models/kimi-k2p5"
+    assert seams_stage["model"]["max_tokens"] <= 4096
+    assert seams_stage["turns"]["candidates"]["max_tokens"] <= 4096
+    assert seams_stage["turns"]["annotations"]["max_tokens"] <= 4096
+
+
 def test_legacy_config_yaml_overrides_split_config(tmp_path):
     config_dir = tmp_path / "config"
     config_dir.mkdir()

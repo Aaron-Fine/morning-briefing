@@ -59,15 +59,15 @@ pipeline:
       max_retries: 0
     model:
       provider: fireworks
-      model: accounts/fireworks/models/minimax-m2p7
-      max_tokens: 8192
+      model: accounts/fireworks/models/kimi-k2p5
+      max_tokens: 4000
       temperature: 0.3
     turns:
       candidates:
-        max_tokens: 6000
+        max_tokens: 3000
         temperature: 0.4
       annotations:
-        max_tokens: 8192
+        max_tokens: 4000
         temperature: 0.3
   - name: cross_domain
     retry:
