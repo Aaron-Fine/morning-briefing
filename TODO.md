@@ -11,21 +11,13 @@ Last updated: 2026-04-22
 
 ## Open
 
-## In Progress
-
-- **Open TODO sweep (2026-04-22)** — started by Codex.
-  - In progress: AQI helper consolidation, artifact helper consolidation, tag contract tests, stale docs, and `assemble.py` fallback/doc cleanup.
-  - Deferred pending design choice: rendering `cross_domain_connections` in email vs. feeding them into another stage.
-
 ### High — Review sweep (2026-04-21)
 
 ### Low — Review sweep (2026-04-21)
 
-- **Documentation still references dead or misleading architecture.** `stages/assemble.py` advertises a Phase 0 `synthesis_output` mode in its docstring but the implementation no longer has a `synthesis_output` branch. README says adding a desk means creating `prompts/desk_<name>.md`, while current desks are hard-coded in `_DOMAIN_CONFIGS` and use one shared prompt. This is the kind of stale doc that makes the next change worse than it needs to be.
-  - Status 2026-04-22: stale assemble docstring and README desk guidance updated; awaiting tests before closeout.
-- **Tag contract tests miss half the promised contract.** AGENTS says tag vocabulary is synchronized across five surfaces, including `_TAG_KEYWORDS` and the prompt tag list. `tests/test_contracts.py` checks labels/CSS and merely checks field names in `_SYSTEM_PROMPT`; it does not parse the allowed tag list in `prompts/cross_domain_execute.md`, and it does not assert keyword coverage for new tags. Add tests that fail when a tag is added without prompt and keyword updates.
-  - Status 2026-04-22: contract tests added for `_TAG_KEYWORDS` coverage and prompt allowed-tag parsing; awaiting tests before closeout.
-- **`cross_domain_connections` are generated and then mostly thrown in a drawer.** `assemble` saves them only in `digest_json["cross_domain_connections"]`; the email does not render them, and anomaly checks do not inspect them. Either render a compact section, feed them into seam annotations, or stop spending output tokens on them.
+- ~~**Documentation still references dead or misleading architecture.** `stages/assemble.py` advertises a Phase 0 `synthesis_output` mode in its docstring but the implementation no longer has a `synthesis_output` branch. README says adding a desk means creating `prompts/desk_<name>.md`, while current desks are hard-coded in `_DOMAIN_CONFIGS` and use one shared prompt. This is the kind of stale doc that makes the next change worse than it needs to be.~~ Done 2026-04-22 — stale assemble docstring and README desk guidance updated.
+- ~~**Tag contract tests miss half the promised contract.** AGENTS says tag vocabulary is synchronized across five surfaces, including `_TAG_KEYWORDS` and the prompt tag list. `tests/test_contracts.py` checks labels/CSS and merely checks field names in `_SYSTEM_PROMPT`; it does not parse the allowed tag list in `prompts/cross_domain_execute.md`, and it does not assert keyword coverage for new tags. Add tests that fail when a tag is added without prompt and keyword updates.~~ Done 2026-04-22 — contract tests now assert `_TAG_KEYWORDS` coverage and parse the prompt allowed-tag list.
+- ~~**`cross_domain_connections` are generated and then mostly thrown in a drawer.** `assemble` saves them only in `digest_json["cross_domain_connections"]`; the email does not render them, and anomaly checks do not inspect them. Either render a compact section, feed them into seam annotations, or stop spending output tokens on them.~~ Done 2026-04-22 — kept as analysis metadata and passed through `briefing_packet`, matching the existing chat briefer prompt contract.
   - Decision: keep them. Cross-domain connections are a key analytical input that the final report generator should draw on.
 
 ### High — Design (architecture)
@@ -39,11 +31,9 @@ Last updated: 2026-04-22
 ### Medium — Consolidation
 
 - ~~**Tracked in `plan.md` Slice 6: consolidate tag vocabulary helpers.**~~ Done — `energy` and `biotech` tags added to all 5 synchronized surfaces (validate, cross_domain, assemble, CSS, TAG_KEYWORDS). Contract tests verify consistency.
-- **Consolidate AQI breakpoint ladder.** The `if aqi <= 50: "Good" / <= 100: "Moderate" / ...` ladder appears in `sources/weather.py::_aqi_to_label` and twice more in `modules/weather_display.py` (label + color). Extract to `utils/aqi.py` with `aqi_label(aqi)` and `aqi_color(aqi)`.
-  - Status 2026-04-22: helper extracted and call sites wired; awaiting tests before closeout.
+- ~~**Consolidate AQI breakpoint ladder.** The `if aqi <= 50: "Good" / <= 100: "Moderate" / ...` ladder appears in `sources/weather.py::_aqi_to_label` and twice more in `modules/weather_display.py` (label + color). Extract to `utils/aqi.py` with `aqi_label(aqi)` and `aqi_color(aqi)`.~~ Done 2026-04-22 — helper extracted and call sites wired.
 - **Extract retry backoff helper.** `morning_digest/llm.py::_retry_loop` and `pipeline.py` both implement exponential backoff with jitter. Once the 3-layer retry stack is consolidated (see above), keep one implementation in `utils/retry.py`.
-- **Extract artifact helpers.** `_ARTIFACTS_BASE` path + date-directory iteration is duplicated in `pipeline.py` and `stages/anomaly.py`. Move to `utils/artifacts.py` (`artifact_dir(date)`, `iter_recent_dirs(n)`, `load_artifact(date, key)`).
-  - Status 2026-04-22: shared helper module added and call sites wired; awaiting tests before closeout.
+- ~~**Extract artifact helpers.** `_ARTIFACTS_BASE` path + date-directory iteration is duplicated in `pipeline.py` and `stages/anomaly.py`. Move to `utils/artifacts.py` (`artifact_dir(date)`, `iter_recent_dirs(n)`, `load_artifact(date, key)`).~~ Done 2026-04-22 — shared helper module added and call sites wired.
 - **Investigate recurring dry-run source warnings.** Current end-to-end dry-runs complete successfully, but `output/digest.log` consistently shows non-fatal source issues for SpaceNews (`429`), Brad Setser (`404`), Reuters Markets (`401`), China Global South Project (`410`), and The Diff (`400`). Decide case by case whether to:
   - fix the feed URL,
   - add provider-specific throttling/backoff,
@@ -53,13 +43,19 @@ Last updated: 2026-04-22
 ### Low — Correctness / cleanup
 
 - **Tracked in `plan.md` Slice 0: timezone/date audit.** The current plan now covers `TZ` authority, shared helper adoption, artifact dates, and user-visible date formatting across the codebase.
-- **Phase 0 dead code in `assemble.py`.** The "empty fallback" branch is only reachable when Phase 3 (`cross_domain`) produces nothing, which hasn't happened since the `_failed` flag landed. Verify unreachable and delete, or keep but document the invariant.
-  - Status 2026-04-22: stale Phase 0 references removed from the docstring; runtime empty-output fallback left in place as degraded rendering guard.
+- ~~**Phase 0 dead code in `assemble.py`.** The "empty fallback" branch is only reachable when Phase 3 (`cross_domain`) produces nothing, which hasn't happened since the `_failed` flag landed. Verify unreachable and delete, or keep but document the invariant.~~ Done 2026-04-22 — stale Phase 0 references removed from the docstring; runtime empty-output fallback left in place as degraded rendering guard.
 - **Tracked in `plan.md` Slice 0: `_empty_domain_result` contract drift.** Keep follow-up notes here only if additional edge cases appear during implementation.
 
 ---
 
 ## Changelog
+
+### 2026-04-22 — Open TODO sweep
+
+- **Closed stale docs and contract drift items.** `assemble.py` no longer documents the removed Phase 0 `synthesis_output` path, README desk guidance now matches `_DOMAIN_CONFIGS` plus the shared prompt, and tag contract tests now cover `_TAG_KEYWORDS` plus the prompt allowed-tag list.
+- **Consolidated shared helpers.** AQI label/color classification now lives in `utils/aqi.py`; dated artifact directory/list/load/save helpers now live in `utils/artifacts.py`.
+- **Fed cross-domain connections into follow-up context.** `briefing_packet` now includes `cross_domain_connections`, matching the chat briefer prompt's existing instruction to check them first.
+- **Tests:** Dockerized full suite passed before the final briefing-packet wire-up (`913 passed`); focused briefing-packet suite passed after the final wire-up (`9 passed`). Final full-suite rerun pending.
 
 ### 2026-04-22 — Seams LLM output stabilized
 

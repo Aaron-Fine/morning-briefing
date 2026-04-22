@@ -194,6 +194,9 @@ def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
         "transcript_summaries": transcript_summaries,
         "domain_analyses": domain_analysis,
         "seam_data": seam_data,
+        "cross_domain_connections": cross_domain_output.get(
+            "cross_domain_connections", []
+        ),
         "connection_hooks": connection_hooks,
         "key_assumptions": seam_data.get("key_assumptions", []),
         "metadata": metadata,

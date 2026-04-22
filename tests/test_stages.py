@@ -18,6 +18,7 @@ from stages.briefing_packet import (
     _build_connection_hooks,
     _build_metadata,
     _compress_to_budget,
+    run as briefing_packet_run,
 )
 from stages.anomaly import (
     _check_category_skew,
@@ -251,6 +252,38 @@ class TestBriefingPacketHelpers:
         packet = {"source_index": [], "transcript_summaries": [], "domain_analyses": {}}
         result = _compress_to_budget(packet)
         assert result is packet  # returned as-is
+
+    def test_run_includes_cross_domain_connections(self, tmp_path):
+        context = {
+            "cross_domain_output": {
+                "at_a_glance": [{"headline": "One"}],
+                "deep_dives": [],
+                "cross_domain_connections": [
+                    {
+                        "description": "AI chips connect trade and defense.",
+                        "domains": ["ai_tech", "defense_space"],
+                        "entities": ["Nvidia"],
+                        "theme": "export controls",
+                    }
+                ],
+            },
+            "domain_analysis": {},
+            "raw_sources": {},
+            "seam_data": {},
+        }
+
+        with patch("stages.briefing_packet._ROOT", tmp_path):
+            result = briefing_packet_run(context, {})
+
+        packet = result["briefing_packet"]
+        assert packet["cross_domain_connections"] == [
+            {
+                "description": "AI chips connect trade and defense.",
+                "domains": ["ai_tech", "defense_space"],
+                "entities": ["Nvidia"],
+                "theme": "export controls",
+            }
+        ]
 
 
 class TestAnomalyCategorySkew:
