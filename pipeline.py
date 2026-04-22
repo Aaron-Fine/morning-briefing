@@ -249,7 +249,11 @@ _STAGE_METADATA = {
     },
     "analyze_domain": {
         "artifact_key": "domain_analysis",
-        "context_keys": ["domain_analysis", "domain_analysis_failures"],
+        "context_keys": [
+            "domain_analysis",
+            "domain_analysis_failures",
+            "domain_analysis_contract_issues",
+        ],
         "non_critical": False,
         "empty_output": None,
         "model_defaults": {},

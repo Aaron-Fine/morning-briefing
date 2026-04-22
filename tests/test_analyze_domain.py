@@ -351,7 +351,82 @@ class TestRunDomainPass:
             [],
             self._make_model_config(),
         )
-        assert result == {"items": []}
+        assert result["items"] == []
+        assert result["_contract_issues"] == [
+            {
+                "path": "domain_analysis.ai_tech",
+                "message": "domain result is not an object",
+            }
+        ]
+
+    @patch("stages.analyze_domain.call_llm")
+    def test_non_list_items_returns_empty_items_with_contract_issue(self, mock_llm):
+        mock_llm.return_value = {"items": {"headline": "wrong container"}}
+        cfg = _DOMAIN_CONFIGS["ai_tech"]
+        result = _run_domain_pass(
+            "ai_tech",
+            cfg,
+            self._make_rss_items(),
+            [],
+            [],
+            self._make_model_config(),
+        )
+        assert result["items"] == []
+        assert result["_contract_issues"] == [
+            {
+                "path": "domain_analysis.ai_tech.items",
+                "message": "items is not a list",
+            }
+        ]
+
+    @patch("stages.analyze_domain.call_llm")
+    def test_malformed_nested_structures_are_normalized(self, mock_llm):
+        mock_llm.return_value = {
+            "items": [
+                {
+                    "tag": "ai",
+                    "headline": "Test",
+                    "facts": "F",
+                    "analysis": "A",
+                    "source_depth": "single-source",
+                    "connection_hooks": {"entity": "OpenAI"},
+                    "links": "https://example.com/ai-tech",
+                    "deep_dive_candidate": "yes",
+                    "custom_field": "preserved",
+                },
+                "not an item",
+            ]
+        }
+        cfg = _DOMAIN_CONFIGS["ai_tech"]
+        result = _run_domain_pass(
+            "ai_tech",
+            cfg,
+            self._make_rss_items(),
+            [],
+            [],
+            self._make_model_config(),
+        )
+
+        assert len(result["items"]) == 1
+        item = result["items"][0]
+        assert item["connection_hooks"] == []
+        assert item["links"] == []
+        assert item["deep_dive_candidate"] is True
+        assert item["custom_field"] == "preserved"
+        assert result["_contract_issues"] == [
+            {
+                "path": "domain_analysis.ai_tech.items[0].links",
+                "message": "links is not a list",
+            },
+            {
+                "path": "domain_analysis.ai_tech.items[0].connection_hooks",
+                "message": "connection_hooks is not a list",
+            },
+            {
+                "path": "domain_analysis.ai_tech.items[1]",
+                "message": "domain item is not an object",
+            },
+        ]
 
     @patch("stages.analyze_domain.call_llm")
     def test_url_validation_strips_unknown_domains(self, mock_llm):
@@ -469,3 +544,32 @@ class TestAnalyzeDomainFailures:
 
         mock_run_domain_pass.assert_not_called()
         assert result["domain_analysis_failures"] == ["ai_tech"]
+
+    @patch("stages.analyze_domain._run_all_domains")
+    def test_contract_issues_are_returned_as_sidecar(self, mock_run_all_domains):
+        mock_run_all_domains.return_value = {
+            "ai_tech": {
+                "items": [],
+                "_contract_issues": [
+                    {
+                        "path": "domain_analysis.ai_tech.items",
+                        "message": "items is not a list",
+                    }
+                ],
+            }
+        }
+
+        result = run(
+            {"raw_sources": {"rss": [], "markets": []}, "compressed_transcripts": []},
+            {"llm": {}},
+            model_config={"provider": "fireworks"},
+        )
+
+        assert result["domain_analysis"] == {"ai_tech": {"items": []}}
+        assert result["domain_analysis_contract_issues"] == [
+            {
+                "domain": "ai_tech",
+                "path": "domain_analysis.ai_tech.items",
+                "message": "items is not a list",
+            }
+        ]

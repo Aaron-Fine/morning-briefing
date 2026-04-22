@@ -32,6 +32,8 @@ keeping the same stage-facing helper functions.
 
 ### Phase 1 — Domain Analysis Boundary
 
+Status: implemented 2026-04-22.
+
 - Add contract models/normalizers for:
   - `SourceLink`
   - `ConnectionHook`
@@ -82,8 +84,9 @@ keeping the same stage-facing helper functions.
 
 ## Acceptance Criteria For Phase 1
 
-- `analyze_domain` emits the same artifact shape for valid output.
-- Malformed optional nested structures normalize safely.
-- Invalid top-level shape returns a safe empty result and logs a contract issue.
-- Existing downstream tests continue to pass.
-- A script can validate saved `domain_analysis.json` artifacts directly.
+- Done — `analyze_domain` emits the same artifact shape for valid output.
+- Done — malformed optional nested structures normalize safely.
+- Done — invalid top-level shape returns a safe empty result and logs a contract issue.
+- Done — existing focused downstream tests continue to pass.
+- Done — `scripts/validate_artifacts.py` can validate saved `domain_analysis.json`
+  artifacts directly.

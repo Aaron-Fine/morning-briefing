@@ -39,6 +39,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from urllib.parse import urlparse
 
+from morning_digest.contracts import normalize_domain_result
 from morning_digest.llm import call_llm
 from morning_digest.sanitize import sanitize_source_content
 from utils.prompts import load_prompt
@@ -566,15 +567,16 @@ def _run_domain_pass(
         log.error(f"  analyze_domain[{domain_key}]: LLM call failed: {e}")
         return _empty_domain_result(domain_key, failed=True)
 
-    # Normalize result
-    if isinstance(result, list):
-        result = {"items": result}
-    if not isinstance(result, dict):
-        result = {"items": []}
-    if "items" not in result:
-        result["items"] = []
-    if domain_key == "econ" and "market_context" not in result:
-        result["market_context"] = ""
+    result, contract_issues = normalize_domain_result(result, domain_key)
+    if contract_issues:
+        for issue in contract_issues:
+            log.warning(
+                "analyze_domain[%s]: contract issue at %s — %s",
+                domain_key,
+                issue["path"],
+                issue["message"],
+            )
+        result["_contract_issues"] = contract_issues
 
     # URL validation: allow links matching known source domains (not exact URL).
     # This handles cases where the LLM strips UTM params or normalizes URLs.
@@ -642,12 +644,15 @@ def run(
         domain_configs, rss_items, compressed_transcripts, markets, model_config
     )
 
-    # Clean _failed sentinel before returning
+    # Clean internal sentinels before returning
     still_failed = []
+    contract_issues = []
     total_items = 0
     for key, val in domain_analysis.items():
         if val.pop("_failed", False):
             still_failed.append(key)
+        for issue in val.pop("_contract_issues", []):
+            contract_issues.append({"domain": key, **issue})
         total_items += len(val.get("items", []))
 
     log.info(
@@ -662,6 +667,7 @@ def run(
     return {
         "domain_analysis": domain_analysis,
         "domain_analysis_failures": still_failed,
+        "domain_analysis_contract_issues": contract_issues,
     }
 
 
