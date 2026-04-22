@@ -450,17 +450,16 @@ class TestRunDomainPass:
         assert mock_llm.call_args[1]["stream"] is True
 
 
-class TestAnalyzeDomainRetries:
+class TestAnalyzeDomainFailures:
     @patch("stages.analyze_domain._run_all_domains")
     @patch("stages.analyze_domain._run_domain_pass")
-    def test_failed_domains_retry_without_sleep(
+    def test_failed_domains_are_reported_without_domain_retry(
         self, mock_run_domain_pass, mock_run_all_domains
     ):
         mock_run_all_domains.return_value = {
             "ai_tech": {"items": [], "_failed": True},
             "econ": {"items": [], "market_context": ""},
         }
-        mock_run_domain_pass.return_value = {"items": []}
 
         result = run(
             {"raw_sources": {"rss": [], "markets": []}, "compressed_transcripts": []},
@@ -468,5 +467,5 @@ class TestAnalyzeDomainRetries:
             model_config={"provider": "fireworks"},
         )
 
-        mock_run_domain_pass.assert_called_once()
-        assert result["domain_analysis_failures"] == []
+        mock_run_domain_pass.assert_not_called()
+        assert result["domain_analysis_failures"] == ["ai_tech"]

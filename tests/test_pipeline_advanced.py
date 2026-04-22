@@ -25,6 +25,7 @@ from pipeline import (
     _empty_stage_output,
     _NON_CRITICAL_STAGES,
     _get_stage_model_config,
+    _get_stage_retry_config,
 )
 
 
@@ -100,6 +101,23 @@ class TestRunWithRetry:
         assert wait_times[0] == 10
         assert wait_times[1] == 20
 
+    def test_custom_backoff_base(self):
+        wait_times = []
+
+        def fn():
+            raise RuntimeError("error")
+
+        with patch("pipeline.time.sleep", side_effect=lambda s: wait_times.append(s)):
+            with pytest.raises(RuntimeError):
+                _run_with_retry(
+                    fn,
+                    "test_stage",
+                    max_retries=2,
+                    backoff_base_seconds=3,
+                )
+
+        assert wait_times == [6, 12]
+
     def test_different_exception_types_retried(self):
         """All exception types are retried (not just specific ones)."""
         call_count = [0]
@@ -159,6 +177,36 @@ class TestGetStageModelConfig:
             "temperature": 0.4,
             "provider": "anthropic",
             "model": "x",
+        }
+
+
+class TestGetStageRetryConfig:
+    def test_defaults_match_legacy_behavior(self):
+        assert _get_stage_retry_config({}) == {
+            "max_retries": 2,
+            "backoff_base_seconds": 5,
+        }
+
+    def test_pipeline_defaults_apply(self):
+        config = {"pipeline": {"retry": {"max_retries": 1, "backoff_base_seconds": 4}}}
+        assert _get_stage_retry_config({}, config) == {
+            "max_retries": 1,
+            "backoff_base_seconds": 4,
+        }
+
+    def test_stage_override_wins(self):
+        stage_cfg = {"retry": {"max_retries": 0}}
+        config = {"pipeline": {"retry": {"max_retries": 1, "backoff_base_seconds": 4}}}
+        assert _get_stage_retry_config(stage_cfg, config) == {
+            "max_retries": 0,
+            "backoff_base_seconds": 4,
+        }
+
+    def test_negative_values_clamped(self):
+        stage_cfg = {"retry": {"max_retries": -2, "backoff_base_seconds": -5}}
+        assert _get_stage_retry_config(stage_cfg) == {
+            "max_retries": 0,
+            "backoff_base_seconds": 0,
         }
 
 

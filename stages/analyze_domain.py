@@ -642,24 +642,6 @@ def run(
         domain_configs, rss_items, compressed_transcripts, markets, model_config
     )
 
-    failed_keys = [k for k, v in domain_analysis.items() if v.get("_failed")]
-    if failed_keys:
-        log.warning(
-            f"analyze_domain: {len(failed_keys)} domain(s) failed ({', '.join(failed_keys)}), "
-            "retrying immediately without blocking the pipeline..."
-        )
-        for domain_key in failed_keys:
-            log.info(f"  Retrying domain: {domain_key} ({domain_configs[domain_key]['label']})")
-            result = _run_domain_pass(
-                domain_key,
-                domain_configs[domain_key],
-                rss_items,
-                compressed_transcripts,
-                markets if domain_key == "econ" else [],
-                model_config,
-            )
-            domain_analysis[domain_key] = result
-
     # Clean _failed sentinel before returning
     still_failed = []
     total_items = 0

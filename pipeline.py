@@ -474,13 +474,18 @@ def _run_stage_after_hook(stage_name: str, context: dict, outputs: dict, **kwarg
 # ---------------------------------------------------------------------------
 
 
-def _run_with_retry(fn, stage_name: str, max_retries: int = 2):
+def _run_with_retry(
+    fn,
+    stage_name: str,
+    max_retries: int = 2,
+    backoff_base_seconds: int = 5,
+):
     for attempt in range(max_retries + 1):
         try:
             return fn()
         except Exception as e:
             if attempt < max_retries:
-                wait = 2 ** (attempt + 1) * 5  # 10s, 20s
+                wait = 2 ** (attempt + 1) * backoff_base_seconds
                 log.warning(
                     f"Stage '{stage_name}' failed (attempt {attempt + 1}/{max_retries + 1}): {e}. "
                     f"Retrying in {wait}s..."
@@ -488,6 +493,20 @@ def _run_with_retry(fn, stage_name: str, max_retries: int = 2):
                 time.sleep(wait)
             else:
                 raise
+
+
+def _get_stage_retry_config(stage_cfg: dict, config: dict | None = None) -> dict:
+    """Resolve retry settings from pipeline defaults and stage overrides."""
+    retry_cfg = {"max_retries": 2, "backoff_base_seconds": 5}
+    if config:
+        retry_cfg.update(config.get("pipeline", {}).get("retry", {}) or {})
+    retry_cfg.update(stage_cfg.get("retry", {}) or {})
+    retry_cfg["max_retries"] = max(0, int(retry_cfg.get("max_retries", 0)))
+    retry_cfg["backoff_base_seconds"] = max(
+        0,
+        int(retry_cfg.get("backoff_base_seconds", 0)),
+    )
+    return retry_cfg
 
 
 # ---------------------------------------------------------------------------
@@ -602,6 +621,7 @@ def run_pipeline(
         stage_name = stage_cfg["name"]
         stage_meta = _get_stage_meta(stage_name)
         model_config = _get_stage_model_config(stage_cfg, stage_name=stage_name, config=config)
+        retry_config = _get_stage_retry_config(stage_cfg, config)
 
         # --sources-only: stop after collect
         if sources_only and stage_name != "collect":
@@ -646,7 +666,8 @@ def run_pipeline(
                     context, config, model_config, stage_cfg=stage_cfg, dry_run=dry_run
                 ),
                 stage_name,
-                max_retries=2,
+                max_retries=retry_config["max_retries"],
+                backoff_base_seconds=retry_config["backoff_base_seconds"],
             )
 
         except Exception as e:

@@ -24,11 +24,16 @@ llm:
 # Stages with no model config are deterministic (no LLM call).
 # Each model config can override the global llm settings independently.
 pipeline:
+  retry:
+    max_retries: 1
+    backoff_base_seconds: 5
   stages:
     - name: collect
       # No model needed — pure data collection
+      retry: { max_retries: 1, backoff_base_seconds: 5 }
 
     - name: enrich_articles
+      retry: { max_retries: 0 }
       model:
         provider: fireworks
         model: "accounts/fireworks/models/minimax-m2p7"
@@ -36,6 +41,7 @@ pipeline:
         temperature: 0.2
 
     - name: compress
+      retry: { max_retries: 0 }
       model:
         provider: fireworks
         model: "accounts/fireworks/models/minimax-m2p7"
@@ -44,6 +50,7 @@ pipeline:
 
     # --- Phase 1: Domain analysis replaces monolithic synthesize ---
     - name: analyze_domain
+      retry: { max_retries: 0 }
       model:
         provider: fireworks
         model: "accounts/fireworks/models/minimax-m2p7"
@@ -57,6 +64,7 @@ pipeline:
       # No model needed — deterministic
 
     - name: prepare_spiritual_weekly
+      retry: { max_retries: 0 }
       model:
         provider: fireworks
         model: "accounts/fireworks/models/minimax-m2p7"
@@ -64,6 +72,7 @@ pipeline:
         temperature: 0.3
 
     - name: prepare_spiritual
+      retry: { max_retries: 0 }
       model:
         provider: fireworks
         model: "accounts/fireworks/models/minimax-m2p7"
@@ -74,6 +83,7 @@ pipeline:
       # No model needed — deterministic filter
 
     - name: seams
+      retry: { max_retries: 0 }
       model:
         provider: fireworks
         model: "accounts/fireworks/models/minimax-m2p7"
@@ -89,6 +99,7 @@ pipeline:
 
     # --- Phase 3: Cross-domain synthesis ("editor-in-chief" pass) ---
     - name: cross_domain
+      retry: { max_retries: 0 }
       model:
         provider: fireworks
         model: "accounts/fireworks/models/minimax-m2p7"
@@ -103,6 +114,7 @@ pipeline:
           temperature: 0.3
 
     - name: coverage_gaps
+      retry: { max_retries: 0 }
       model:
         provider: fireworks
         model: "accounts/fireworks/models/minimax-m2p7"

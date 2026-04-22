@@ -22,7 +22,6 @@ Last updated: 2026-04-21
 
 ### High — Design (architecture)
 
-- **Retry policy is global.** `max_retries=2` + fixed backoff in `_run_with_retry` (`pipeline.py:165`). LLM stages and scraper stages want different budgets. Put retry config per stage in `config.yaml`.
 - **`config.yaml` is doing four jobs** (pipeline manifest, LLM routing, source catalog, delivery prefs). 246 lines. Split into `config/pipeline.yaml`, `config/sources.yaml`, `config/delivery.yaml` and merge at load.
 - **Stage I/O is untyped dicts.** `context.get("domain_analysis", {})` everywhere. Pydantic models for `DomainAnalysis`, `CrossDomainOutput`, `SeamData` would catch schema drift — that seam is the most likely silent-regression spot.
 - **`email_template.py` is 400+ lines of CSS-in-a-Python-string.** Extract to `templates/digest.css` and load at import so it can be linted and diffed cleanly.
@@ -32,7 +31,6 @@ Last updated: 2026-04-21
 ### High — Performance
 
 - ~~**Tracked in `plan.md` Slice 10: parallelize `analyze_domain`.**~~ Done — 7 desk passes run via ThreadPoolExecutor (max 4 workers) with per-desk failure isolation.
-- **Remove uncoordinated 3-layer retry stack.** Retries exist at the pipeline level (30-min retry in `entrypoint.py`), the LLM helper (`llm._retry_loop`, ~3 attempts with backoff), and per-domain (`analyze_domain` retries the whole domain after 5 min). Worst case: a single flaky call produces `3 × 2 × N` attempts before giving up. Consolidate: LLM helper retries transient 5xx only, domain/pipeline treat a failed LLM call as "done, failed", no nested retry.
 
 ### Medium — Consolidation
 
@@ -111,6 +109,12 @@ Last updated: 2026-04-21
 - **Moved repeated weather chart cell styles into template CSS classes.** Day labels, temperature cells, gradient-bar cells, right condition cells, legend elements, and chart wrappers now use `.wx-*` classes from `email_template.py`.
 - **Kept dynamic values inline.** Per-row widths, band colors, AQI colors, and precipitation widths remain inline because they vary by day.
 - **Tests:** Weather display tests assert the repeated row cells render with classes instead of static inline style bundles.
+
+### 2026-04-21 — Retry policy consolidated
+
+- **Added stage-level pipeline retry config.** `pipeline.retry` provides defaults and individual stages can override with `retry.max_retries` / `retry.backoff_base_seconds`.
+- **Stopped nested LLM-stage retries at the pipeline/domain layers.** LLM-backed stages are configured with `max_retries: 0`, leaving transient API retry handling in `morning_digest.llm`; `analyze_domain` now reports failed desks instead of retrying each failed desk again.
+- **Tests:** Pipeline retry config and analyze-domain failure reporting tests cover the new behavior.
 
 ### 2026-04-17 — Weather: AQI overlay restored
 
