@@ -24,7 +24,7 @@ Last updated: 2026-04-22
 
 - **Stage I/O is untyped dicts.** `context.get("domain_analysis", {})` everywhere. Pydantic models for `DomainAnalysis`, `CrossDomainOutput`, `SeamData` would catch schema drift — that seam is the most likely silent-regression spot.
   - Plan 2026-04-22: see `docs/superpowers/plans/2026-04-22-stage-contract-hardening.md`. First implementation slice targets `DomainAnalysis` at the `analyze_domain` boundary.
-  - Status 2026-04-22: Phase 1 implemented with dependency-free contract normalizers, `domain_analysis_contract_issues`, and `scripts/validate_artifacts.py`. Remaining scope: seams, cross-domain, assemble boundary contracts.
+  - Status 2026-04-22: Phase 1 implemented with dependency-free contract normalizers, `domain_analysis_contract_issues`, and `scripts/validate_artifacts.py`; Dockerized full suite passed (`917 passed`). Remaining scope: seams, cross-domain, assemble boundary contracts.
 
 ### High — Performance
 

@@ -87,6 +87,9 @@ Status: implemented 2026-04-22.
 - Done — `analyze_domain` emits the same artifact shape for valid output.
 - Done — malformed optional nested structures normalize safely.
 - Done — invalid top-level shape returns a safe empty result and logs a contract issue.
-- Done — existing focused downstream tests continue to pass.
+- Done — existing downstream tests continue to pass.
 - Done — `scripts/validate_artifacts.py` can validate saved `domain_analysis.json`
   artifacts directly.
+
+Verification: Dockerized full suite passed after Phase 1 implementation
+(`917 passed`).
