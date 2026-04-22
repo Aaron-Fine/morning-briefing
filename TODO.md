@@ -20,10 +20,6 @@ Last updated: 2026-04-21
 - **`cross_domain_connections` are generated and then mostly thrown in a drawer.** `assemble` saves them only in `digest_json["cross_domain_connections"]`; the email does not render them, and anomaly checks do not inspect them. Either render a compact section, feed them into seam annotations, or stop spending output tokens on them.
   - Decision: keep them. Cross-domain connections are a key analytical input that the final report generator should draw on.
 
-### High — Design (HTML / email)
-
-- **Weather bar inline-style soup.** Chart is emitted as one long line of inline `style=""` attributes per day row — hard to scan, hard to tune, inflates the email payload. Promote the repeating styles (day-name cell, temp cell, gradient-bar cell, right column) to classes in `templates/email_template.py`'s `<style>` block; keep only per-row dynamic values (widths, colors, text) inline.
-
 ### High — Design (architecture)
 
 - **Retry policy is global.** `max_retries=2` + fixed backoff in `_run_with_retry` (`pipeline.py:165`). LLM stages and scraper stages want different budgets. Put retry config per stage in `config.yaml`.
@@ -109,6 +105,12 @@ Last updated: 2026-04-21
 - **Restored normal and record bands on forecast bars.** `normal_band` and `record_band` now render Gmail-safe spacer-table overlays using each day's `normal_hi`/`normal_lo` and `record_hi`/`record_lo`.
 - **Made the weather legend reflect active overlays.** The legend now includes normal and record range entries when those overlays are enabled.
 - **Tests:** Weather display and integration tests now assert overlay rendering and flag-gated suppression.
+
+### 2026-04-21 — Weather chart classes extracted
+
+- **Moved repeated weather chart cell styles into template CSS classes.** Day labels, temperature cells, gradient-bar cells, right condition cells, legend elements, and chart wrappers now use `.wx-*` classes from `email_template.py`.
+- **Kept dynamic values inline.** Per-row widths, band colors, AQI colors, and precipitation widths remain inline because they vary by day.
+- **Tests:** Weather display tests assert the repeated row cells render with classes instead of static inline style bundles.
 
 ### 2026-04-17 — Weather: AQI overlay restored
 

@@ -104,6 +104,25 @@ EMAIL_TEMPLATE = _env.from_string("""\
   .bar { padding: 12px 32px; background: var(--bg-bar); border-bottom: 1px solid var(--border); font-size: 14px; color: var(--text-secondary); }
   .bar-mono { font-family: 'Courier New', monospace; font-weight: 500; color: var(--text); }
   .bar-detail { font-size: 13px; color: var(--text-muted); }
+  .wx-header { font-family: monospace; font-size: 13px; color: var(--wx-label, #555); margin-bottom: 4px; }
+  .wx-date { color: var(--wx-label-dim, #888); font-size: 11px; text-align: right; }
+  .wx-legend { font-family: monospace; margin: 4px 0 2px 0; }
+  .wx-legend-title { font-size: 9px; color: #888; padding-right: 6px; white-space: nowrap; }
+  .wx-legend-item { padding-right: 10px; white-space: nowrap; }
+  .wx-legend-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; vertical-align: middle; margin-right: 3px; }
+  .wx-legend-label { font-size: 9px; color: #666; }
+  .wx-chart { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .wx-day-cell { width: 32px; font-size: 9px; font-weight: 600; color: #555555; padding: 5px 6px 0 0; vertical-align: top; }
+  .wx-temp-cell { width: 28px; font-size: 8px; padding-top: 6px; vertical-align: top; }
+  .wx-lo-temp { color: #4a6a90; text-align: right; padding-right: 5px; }
+  .wx-hi-temp { color: #c07830; padding-left: 5px; }
+  .wx-gradient-cell { padding: 5px 4px 0; vertical-align: top; }
+  .wx-temp-bar { width: 100%; border-collapse: collapse; height: 14px; background: #d8d5d0; border-radius: 6px; }
+  .wx-bar-row { height: 14px; }
+  .wx-bar-pad { height: 14px; padding: 0; font-size: 0; line-height: 0; }
+  .wx-bar-fill { height: 14px; padding: 0; font-size: 0; line-height: 0; background: linear-gradient(to right, rgba(90,122,160,0.35), rgba(208,144,80,0.40)); border-radius: 6px; }
+  .wx-condition-cell { width: 60px; font-size: 9px; color: #666666; text-align: right; padding: 6px 0 0 4px; vertical-align: top; }
+  .wx-precip-cell { padding: 1px 4px 5px; }
   .markets-table { width: 100%; border-collapse: collapse; font-family: 'Courier New', monospace; font-size: 13px; }
   .market-cell { padding: 0 18px 0 0; white-space: nowrap; vertical-align: baseline; }
   .market-cell:last-child { padding-right: 0; }

@@ -413,6 +413,16 @@ class TestBuildChartHtml:
         assert "<table" in html
         assert "FRI" in html
 
+    def test_repeated_chart_cells_use_css_classes(self):
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather)
+        assert 'class="wx-day-cell"' in html
+        assert 'class="wx-temp-cell wx-lo-temp"' in html
+        assert 'class="wx-gradient-cell"' in html
+        assert 'class="wx-condition-cell"' in html
+        assert "width:32px;font-size:9px" not in html
+        assert "width:60px;font-size:9px" not in html
+
 
 class TestRightColumn:
     """Right column shows condition + precip% together, not either/or."""

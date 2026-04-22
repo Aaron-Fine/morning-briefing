@@ -115,12 +115,10 @@ def _build_header_html(weather: dict) -> str:
         aqi_alert = f'<span style="color:{color};font-size:13px;font-weight:600;display:block;margin-top:3px;">{msg}</span>'
 
     return (
-        f'<div style="font-family:monospace;font-size:13px;'
-        f'color:var(--wx-label, #555);'
-        f'margin-bottom:4px;display:flex;justify-content:space-between;align-items:baseline;">'
-        f"<span>{header_text}</span>"
-        f'<span style="color:var(--wx-label-dim, #888);font-size:11px;">{date_str}</span>'
-        f"</div>"
+        f'<table class="wx-header" cellspacing="0" cellpadding="0" border="0" '
+        f'style="width:100%;border-collapse:collapse;">'
+        f'<tr><td>{header_text}</td><td class="wx-date">{date_str}</td></tr>'
+        f'</table>'
         f"{aqi_alert}"
     )
 
@@ -150,18 +148,15 @@ def _build_legend_html(
     if show_record:
         bands.append(("Record range", "#c0392b"))
     items = "".join(
-        f'<span style="margin-right:10px;white-space:nowrap;">'
-        f'<span style="display:inline-block;width:8px;height:8px;'
-        f'background:{color};border-radius:2px;vertical-align:middle;'
-        f'margin-right:3px;"></span>'
-        f'<span style="font-size:9px;color:#666;">{label}</span>'
-        f'</span>'
+        f'<td class="wx-legend-item">'
+        f'<span class="wx-legend-swatch" style="background:{color};"></span>'
+        f'<span class="wx-legend-label">{label}</span>'
+        f'</td>'
         for label, color in bands
     )
     return (
-        f'<div style="font-family:monospace;margin:4px 0 2px 0;">'
-        f'<span style="font-size:9px;color:#888;margin-right:6px;">BANDS</span>'
-        f'{items}</div>'
+        f'<table class="wx-legend" cellspacing="0" cellpadding="0" border="0">'
+        f'<tr><td class="wx-legend-title">BANDS</td>{items}</tr></table>'
     )
 
 
@@ -322,32 +317,22 @@ def _build_chart_html(
         # divs, which would break any absolute-positioned child.
         rows.append(
             f'<tr>'
-            f'<td style="width:32px;font-size:9px;font-weight:600;'
-            f'color:#555555;'
-            f'padding:5px 6px 0 0;vertical-align:top;">{day_name.upper()}</td>'
-            f'<td style="width:28px;font-size:8px;'
-            f'color:#4a6a90;text-align:right;'
-            f'padding:6px 5px 0 0;vertical-align:top;">{lo_str}</td>'
-            f'<td style="padding:5px 4px 0;vertical-align:top;">'
+            f'<td class="wx-day-cell">{day_name.upper()}</td>'
+            f'<td class="wx-temp-cell wx-lo-temp">{lo_str}</td>'
+            f'<td class="wx-gradient-cell">'
             f'<table cellspacing="0" cellpadding="0" border="0" '
-            f'style="width:100%;border-collapse:collapse;height:14px;'
-            f'background:#d8d5d0;border-radius:6px;">'
-            f'<tr style="height:14px;">'
-            f'<td style="width:{lo_pct:.1f}%;height:14px;padding:0;font-size:0;line-height:0;"></td>'
-            f'<td style="width:{bar_width:.1f}%;height:14px;padding:0;font-size:0;line-height:0;'
-            f'background:linear-gradient(to right,rgba(90,122,160,0.35),rgba(208,144,80,0.40));'
-            f'border-radius:6px;"></td>'
-            f'<td style="height:14px;padding:0;font-size:0;line-height:0;"></td>'
+            f'class="wx-temp-bar">'
+            f'<tr class="wx-bar-row">'
+            f'<td class="wx-bar-pad" style="width:{lo_pct:.1f}%;"></td>'
+            f'<td class="wx-bar-fill" style="width:{bar_width:.1f}%;"></td>'
+            f'<td class="wx-bar-pad"></td>'
             f'</tr>'
             f'{band_overlay_html}'
             f'{aqi_overlay_html}'
             f'</table>'
             f'</td>'
-            f'<td style="width:28px;font-size:8px;color:#c07830;'
-            f'padding:6px 0 0 5px;vertical-align:top;">{hi_str}</td>'
-            f'<td style="width:60px;font-size:9px;'
-            f'color:#666666;text-align:right;'
-            f'padding:6px 0 0 4px;vertical-align:top;">{right_col}</td>'
+            f'<td class="wx-temp-cell wx-hi-temp">{hi_str}</td>'
+            f'<td class="wx-condition-cell">{right_col}</td>'
             f'</tr>'
         )
 
@@ -355,14 +340,14 @@ def _build_chart_html(
         rows.append(
             f'<tr style="{border}">'
             f'<td></td><td></td>'
-            f'<td style="padding:1px 4px 5px;">{precip_bar_html}</td>'
+            f'<td class="wx-precip-cell">{precip_bar_html}</td>'
             f'<td colspan="2"></td>'
             f'</tr>'
         )
 
     return (
         '<table cellspacing="0" cellpadding="0" border="0" '
-        'style="width:100%;border-collapse:collapse;margin-top:8px;">'
+        'class="wx-chart">'
         + "".join(rows)
         + "</table>"
     )
