@@ -13,8 +13,6 @@ Last updated: 2026-04-21
 
 ### High — Review sweep (2026-04-21)
 
-- **Article enrichment can overwrite `raw_sources`, but downstream stage contracts do not make that obvious.** `enrich_articles.run()` returns a new `raw_sources` artifact as well as `enrich_articles`; pipeline metadata allows that by listing `raw_sources` in context keys, but the primary artifact key is `enrich_articles`. This is clever in the bad way: a skipped/rerun pipeline may load a transformed source artifact from an enrichment stage while the stage name says otherwise. Document the contract explicitly in `_STAGE_METADATA`, rename the artifact side effect, or split "normalize source text" into a source-stage mutation with tests around `--stage analyze_domain` reload behavior.
-  - Decision: prefer a separate enriched-source key/artifact unless that makes downstream use more confusing than the mutation. Data volume is not expected to be the constraint.
 - **Briefing packet metadata is pretending run metadata exists in context.** `_build_metadata` reads `context["run_meta"]` (`stages/briefing_packet.py:100-123`), but `pipeline.run_pipeline` keeps `run_meta` as a local variable and never merges it into `context` before `briefing_packet` runs (`pipeline.py:552-676`). So `stage_timings` and `stage_failures` in `latest_briefing_packet.json` are usually empty even when stages failed. Put `context["run_meta"] = run_meta` before stages that consume it, or load the saved artifact after finalization if the packet must be post-run.
 - **The pipeline can produce a "successful" dry run with no final editorial validation artifact.** If `cross_domain` has no items or its LLM call fails, it returns only `cross_domain_output` (`stages/cross_domain.py:453-455`, `stages/cross_domain.py:507-509`) and skips `cross_domain_plan` / `validation_diagnostics`, despite `_STAGE_METADATA["cross_domain"]["context_keys"]` expecting all three. Downstream code mostly survives because dicts are optional everywhere, but the contract is lying. Return empty plan + explicit validation diagnostics on every path, and assert that in tests.
 
@@ -91,6 +89,12 @@ Last updated: 2026-04-21
 - **Recorded URL strip reason codes.** Validation diagnostics now distinguish `unknown_domain` from `known_domain_unknown_path` and include the canonical comparison URL.
 - **Recognized retrieved/canonical URL aliases.** Known URL collection now includes `final_url`, `resolved_url`, and `canonical_url` source fields when present.
 - **Tests:** Focused Dockerized URL/cross-domain suite passed: `148 passed`.
+
+### 2026-04-21 — Article enrichment artifact split
+
+- **Stopped article enrichment from rewriting the `raw_sources` artifact.** `enrich_articles.run()` now writes enriched RSS summaries under `enriched_sources` while preserving the original collector artifact name for collector output.
+- **Made downstream promotion explicit.** Pipeline hooks promote `enriched_sources` back into in-memory `context["raw_sources"]` only after successful enrichment or cached enrichment reload, so later stages still consume normalized summaries.
+- **Covered rerun behavior.** Tests assert the separate artifact contract, runtime promotion, cached `--stage` promotion, and failure behavior that preserves the original `raw_sources`.
 
 ### 2026-04-17 — Weather: AQI overlay restored
 

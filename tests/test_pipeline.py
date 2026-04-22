@@ -17,6 +17,7 @@ from pipeline import (
     _empty_stage_output,
     _NON_CRITICAL_STAGES,
     _load_cached_stage_outputs,
+    _run_stage_after_hook,
     _prepare_cross_domain_context,
     _save_artifact,
     _load_artifact,
@@ -37,6 +38,12 @@ class TestStageMetadata:
         assert meta["context_keys"] == ["unknown_stage"]
         assert meta["non_critical"] is False
         assert meta["empty_output"] is None
+
+    def test_enrich_articles_uses_separate_source_artifact(self):
+        meta = _get_stage_meta("enrich_articles")
+        assert meta["artifact_key"] == "enrich_articles"
+        assert meta["context_keys"] == ["enriched_sources", "enrich_articles"]
+        assert "raw_sources" not in meta["context_keys"]
 
 
 class TestStageArtifactKey:
@@ -159,6 +166,40 @@ class TestArtifactPersistence:
 
         assert context["cross_domain_plan"] == {"schema_version": 1}
         assert context["cross_domain_output"] == {"at_a_glance": []}
+
+    def test_load_cached_enrich_articles_promotes_enriched_sources(self, tmp_path):
+        artifact_dir = tmp_path / "artifacts" / "2026-01-01"
+        artifact_dir.mkdir(parents=True)
+        original = {"rss": [{"url": "https://x/1", "summary": "raw"}]}
+        enriched = {"rss": [{"url": "https://x/1", "summary": "enriched"}]}
+        _save_artifact(artifact_dir, "enriched_sources", enriched)
+        _save_artifact(artifact_dir, "enrich_articles", {"records": [{"status": "ok"}]})
+
+        context = {"raw_sources": original}
+        _load_cached_stage_outputs("enrich_articles", context, artifact_dir)
+
+        assert context["enriched_sources"] == enriched
+        assert context["raw_sources"] == enriched
+        assert context["enrich_articles"] == {"records": [{"status": "ok"}]}
+
+    def test_enrich_articles_after_hook_promotes_runtime_sources(self):
+        context = {"raw_sources": {"rss": [{"summary": "raw"}]}}
+        outputs = {
+            "enriched_sources": {"rss": [{"summary": "enriched"}]},
+            "enrich_articles": {"records": []},
+        }
+
+        _run_stage_after_hook("enrich_articles", context, outputs)
+
+        assert context["raw_sources"] == {"rss": [{"summary": "enriched"}]}
+
+    def test_enrich_articles_after_hook_preserves_raw_sources_on_failure(self):
+        context = {"raw_sources": {"rss": [{"summary": "raw"}]}}
+        outputs = {"enrich_articles": {"records": []}}
+
+        _run_stage_after_hook("enrich_articles", context, outputs)
+
+        assert context["raw_sources"] == {"rss": [{"summary": "raw"}]}
 
     def test_load_cached_assemble_outputs_restores_html(self, tmp_path):
         artifact_dir = tmp_path / "artifacts" / "2026-01-01"

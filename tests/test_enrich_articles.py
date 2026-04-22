@@ -56,8 +56,21 @@ def test_rss_only_uses_native_text_without_fetch_or_llm(tmp_path):
     item = {"source": "A", "url": "https://x/1", "summary": "Native summary"}
     with patch("stages.enrich_articles.fetch_article_html") as fetch:
         out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path, feeds=feeds))
-    assert out["raw_sources"]["rss"][0]["summary"] == "Native summary"
+    assert "raw_sources" not in out
+    assert out["enriched_sources"]["rss"][0]["summary"] == "Native summary"
     fetch.assert_not_called()
+
+
+def test_disabled_enrichment_returns_separate_source_artifact(tmp_path):
+    item = {"source": "A", "url": "https://x/1", "summary": "Native summary"}
+    out = run(
+        {"raw_sources": {"rss": [item], "weather": {"current_temp_f": 60}}},
+        _config(tmp_path, enrich={"enabled": False}),
+    )
+    assert "raw_sources" not in out
+    assert out["enriched_sources"]["rss"][0]["summary"] == "Native summary"
+    assert out["enriched_sources"]["weather"] == {"current_temp_f": 60}
+    assert out["enrich_articles"] == {"records": []}
 
 
 def test_long_native_text_is_distilled_like_fetched_text(tmp_path):
@@ -75,7 +88,7 @@ def test_long_native_text_is_distilled_like_fetched_text(tmp_path):
     )
     with patch("stages.enrich_articles.call_llm", return_value=canonical):
         out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path, feeds=feeds), model)
-    assert out["raw_sources"]["rss"][0]["summary"] == canonical
+    assert out["enriched_sources"]["rss"][0]["summary"] == canonical
     assert out["enrich_articles"]["records"][0]["source_text_origin"] == "rss_body"
 
 
@@ -91,7 +104,7 @@ def test_auto_fetches_when_native_text_is_too_short(tmp_path):
             extract.return_value.text = "Fetched body. " * 30
             extract.return_value.raw_length = len(extract.return_value.text)
             out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path))
-    assert "Fetched body" in out["raw_sources"]["rss"][0]["summary"]
+    assert "Fetched body" in out["enriched_sources"]["rss"][0]["summary"]
     assert out["enrich_articles"]["records"][0]["source_text_origin"] == "fetched_html"
 
 
@@ -103,7 +116,7 @@ def test_fetch_failure_leaves_original_summary(tmp_path):
         fetch.return_value.html = ""
         fetch.return_value.error = "boom"
         out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path))
-    assert out["raw_sources"]["rss"][0]["summary"] == "short"
+    assert out["enriched_sources"]["rss"][0]["summary"] == "short"
     assert out["enrich_articles"]["records"][0]["status"] == "http_error"
 
 
@@ -111,7 +124,7 @@ def test_skip_strategy_leaves_summary_untouched(tmp_path):
     feeds = [{"name": "A", "url": "x", "enrich": {"strategy": "skip"}}]
     item = {"source": "A", "url": "https://x/1", "summary": "short"}
     out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path, feeds=feeds))
-    assert out["raw_sources"]["rss"][0]["summary"] == "short"
+    assert out["enriched_sources"]["rss"][0]["summary"] == "short"
     assert out["enrich_articles"]["records"][0]["status"] == "skipped"
 
 
@@ -132,8 +145,8 @@ def test_duplicate_gets_canonical_summary(tmp_path):
     )
     with patch("stages.enrich_articles.call_llm", return_value=canonical):
         out = run({"raw_sources": {"rss": items}}, _config(tmp_path), model)
-    assert out["raw_sources"]["rss"][0]["summary"] == canonical
-    assert out["raw_sources"]["rss"][1]["summary"] == canonical
+    assert out["enriched_sources"]["rss"][0]["summary"] == canonical
+    assert out["enriched_sources"]["rss"][1]["summary"] == canonical
 
 
 def test_sanitizes_final_summary(tmp_path):
@@ -144,7 +157,7 @@ def test_sanitizes_final_summary(tmp_path):
         "summary": "short",
     }
     out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path))
-    summary = out["raw_sources"]["rss"][0]["summary"]
+    summary = out["enriched_sources"]["rss"][0]["summary"]
     assert "ignore previous instructions" not in summary.lower()
     assert "Real factual text." in summary
 
@@ -177,7 +190,7 @@ def test_fetch_cap_limits_network_fetches_not_native_normalization(tmp_path):
     assert fetch.call_count == 1
     statuses = [r["status"] for r in out["enrich_articles"]["records"]]
     assert statuses.count("skipped_fetch_cap") == 2
-    assert out["raw_sources"]["rss"][-1]["summary"] == canonical
+    assert out["enriched_sources"]["rss"][-1]["summary"] == canonical
 
 
 def test_fetch_cap_prioritizes_empty_native_text(tmp_path):
@@ -223,7 +236,7 @@ def test_browser_fetch_strategy_uses_browser_markdown(tmp_path):
     )
     with patch("stages.enrich_articles.fetch_article_browser_markdown", return_value=result):
         out = run({"raw_sources": {"rss": [item]}}, cfg)
-    assert "Browser markdown body" in out["raw_sources"]["rss"][0]["summary"]
+    assert "Browser markdown body" in out["enriched_sources"]["rss"][0]["summary"]
     assert out["enrich_articles"]["records"][0]["source_text_origin"] == "browser_markdown"
 
 
@@ -293,7 +306,7 @@ def test_rejects_meta_llm_summary_for_long_source(tmp_path):
         return_value="The user wants me to summarize this article.",
     ):
         out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path, feeds=feeds), model)
-    summary = out["raw_sources"]["rss"][0]["summary"]
+    summary = out["enriched_sources"]["rss"][0]["summary"]
     record = out["enrich_articles"]["records"][0]
     assert "The user wants" not in summary
     assert "Full source sentence." in summary
@@ -314,7 +327,7 @@ def test_short_llm_summary_records_rejection_reason(tmp_path):
     with patch("stages.enrich_articles.call_llm", return_value="Too short"):
         out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path, feeds=feeds), model)
     record = out["enrich_articles"]["records"][0]
-    assert out["raw_sources"]["rss"][0]["summary"].startswith("Full source sentence.")
+    assert out["enriched_sources"]["rss"][0]["summary"].startswith("Full source sentence.")
     assert record["status"] == "normalizer_fallback"
     assert record["fallback_reason"] == "too_short"
     assert record["rejected_summary_preview"] == "Too short"

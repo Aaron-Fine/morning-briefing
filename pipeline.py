@@ -217,6 +217,35 @@ def _load_cached_assemble_outputs(context: dict, *, artifact_dir: Path, **_kwarg
         context["html"] = html_path.read_text(encoding="utf-8")
 
 
+def _promote_enriched_sources(
+    context: dict,
+    outputs: dict | None = None,
+    **_kwargs,
+) -> None:
+    """Use enriched RSS sources for downstream stages without rewriting raw_sources."""
+    enriched_sources = None
+    if outputs:
+        enriched_sources = outputs.get("enriched_sources")
+    if enriched_sources is None:
+        enriched_sources = context.get("enriched_sources")
+    if enriched_sources is not None:
+        context["raw_sources"] = enriched_sources
+
+
+def _load_cached_enrich_articles_outputs(
+    context: dict, *, artifact_dir: Path, **_kwargs
+) -> None:
+    """Reload enrichment artifacts and promote enriched sources for reruns."""
+    enriched_sources = _load_artifact(artifact_dir, "enriched_sources")
+    if enriched_sources is not None:
+        context["enriched_sources"] = enriched_sources
+        context["raw_sources"] = enriched_sources
+
+    enrich_articles = _load_artifact(artifact_dir, "enrich_articles")
+    if enrich_articles is not None:
+        context["enrich_articles"] = enrich_articles
+
+
 _STAGE_METADATA = {
     "collect": {
         "artifact_key": "raw_sources",
@@ -228,11 +257,13 @@ _STAGE_METADATA = {
     },
     "enrich_articles": {
         "artifact_key": "enrich_articles",
-        "context_keys": ["raw_sources", "enrich_articles"],
+        "context_keys": ["enriched_sources", "enrich_articles"],
         "non_critical": True,
         "empty_output": {"enrich_articles": {"records": []}},
         "model_defaults": {},
         "turn_model_overrides": None,
+        "after_run": _promote_enriched_sources,
+        "load_cached": _load_cached_enrich_articles_outputs,
     },
     "compress": {
         "artifact_key": "compressed_transcripts",

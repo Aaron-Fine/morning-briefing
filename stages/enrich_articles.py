@@ -1,4 +1,4 @@
-"""Stage: enrich_articles — normalize RSS items to canonical summaries."""
+"""Stage: enrich_articles — write enriched RSS items to a separate source artifact."""
 
 from __future__ import annotations
 
@@ -93,12 +93,15 @@ def run(
     context: dict, config: dict, model_config: dict | None = None, **kwargs
 ) -> dict:
     """Normalize RSS item summaries from best available source text."""
-    raw_sources = deepcopy(context.get("raw_sources", {}))
-    items = raw_sources.get("rss", []) or []
+    enriched_sources = deepcopy(context.get("raw_sources", {}))
+    items = enriched_sources.get("rss", []) or []
     enrich_cfg = config.get("enrich_articles", {}) or {}
 
     if not enrich_cfg.get("enabled", True) or not items:
-        return {"raw_sources": raw_sources, "enrich_articles": {"records": []}}
+        return {
+            "enriched_sources": enriched_sources,
+            "enrich_articles": {"records": []},
+        }
 
     cache = ArticleCache(
         Path(config.get("_test_cache_dir") or _DEFAULT_CACHE_DIR),
@@ -207,8 +210,11 @@ def run(
         if canonical is not None and canonical is not item:
             item["summary"] = canonical.get("summary", item.get("summary", ""))
 
-    raw_sources["rss"] = items
-    return {"raw_sources": raw_sources, "enrich_articles": {"records": status_records}}
+    enriched_sources["rss"] = items
+    return {
+        "enriched_sources": enriched_sources,
+        "enrich_articles": {"records": status_records},
+    }
 
 
 def _dedup_by_url(items: list[dict]) -> tuple[dict[str, dict], list[str]]:
