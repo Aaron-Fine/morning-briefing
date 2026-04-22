@@ -20,7 +20,6 @@ from stages.cross_domain import _VALID_TAGS, _TAG_LABELS, _SYSTEM_PROMPT
 from stages.assemble import _TAG_LABELS as ASSEMBLE_TAG_LABELS
 from stages.prepare_calendar import _parse_date
 from stages.prepare_local import CONSUMED_RSS_CATEGORIES
-from templates.email_template import EMAIL_TEMPLATE
 
 
 def _configured_stage_names() -> list[str]:
@@ -62,7 +61,7 @@ class TestTagVocabularyConsistency:
         )
 
     def test_css_tag_variables_match_valid_tags(self):
-        template_path = Path(__file__).parent.parent / "templates" / "email_template.py"
+        template_path = Path(__file__).parent.parent / "templates" / "digest.css"
         css = template_path.read_text()
         css_tags = set(re.findall(r"--tag-(\w+)-text:", css))
         assert css_tags == VALID_TAGS, (

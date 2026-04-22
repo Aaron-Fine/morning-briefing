@@ -5,7 +5,12 @@ Uses Jinja2 for rendering. The template is designed for Gmail/Proton Mail compat
 - System fonts with web-safe fallbacks
 """
 
+from pathlib import Path
+
 from jinja2 import Environment, BaseLoader
+
+_TEMPLATE_DIR = Path(__file__).parent
+_DIGEST_CSS = (_TEMPLATE_DIR / "digest.css").read_text(encoding="utf-8")
 
 # Security Layer 4: autoescape=True ensures all {{ }} interpolations are HTML-escaped
 # by default. Fields that intentionally contain HTML (e.g. deep dive body) must be
@@ -20,213 +25,7 @@ EMAIL_TEMPLATE = _env.from_string("""\
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-  /* ── Light palette (default) ─────────────────────────────── */
-  :root {
-    --bg-page:    #e8e6e2;
-    --bg-wrap:    #faf9f7;
-    --bg-tinted:  #f7f5f0;
-    --bg-bar:     #f2f0ec;
-    --bg-card:    #ffffff;
-    --bg-wim:     #f5ebe6;
-    --bg-chrome:  #1a1a1a;
-
-    --border:     #e5e2dd;
-
-    --text:           #1a1a1a;
-    --text-body:      #444444;
-    --text-secondary: #555555;
-    --text-muted:     #666666;
-    --text-faint:     #888888;
-
-    --text-chrome:      #ffffff;
-    --text-chrome-dim:  #999999;
-    --text-chrome-muted:#aaaaaa;
-    --text-chrome-link: #cccccc;
-
-    --accent:      #c05028;
-    --accent-seam: #7b241c;
-
-    --link:        #1b4f72;
-    --link-subtle: #666666;
-    --link-border: #aaaaaa;
-
-    --up:   #1e8449;
-    --down: #c0392b;
-
-    --tag-war-text: #78281f;  --tag-war-bg: #f9ebea;
-    --tag-ai-text:  #6c3483;  --tag-ai-bg:  #ebdef0;
-    --tag-domestic-text: #7d6608; --tag-domestic-bg: #fef9e7;
-    --tag-defense-text:  #1b4f72; --tag-defense-bg:  #d4e6f1;
-    --tag-space-text:    #1a5276; --tag-space-bg:    #d6eaf8;
-    --tag-tech-text:     #4a235a; --tag-tech-bg:     #f4ecf7;
-    --tag-local-text:    #1e8449; --tag-local-bg:    #d5f5e3;
-    --tag-science-text:  #7e5109; --tag-science-bg:  #fef5e7;
-    --tag-econ-text:     #1a5276; --tag-econ-bg:     #d4efdf;
-    --tag-cyber-text:    #633974; --tag-cyber-bg:    #f5eef8;
-    --tag-energy-text:   #784212; --tag-energy-bg:   #fdebd0;
-    --tag-biotech-text:  #0e6251; --tag-biotech-bg:  #d1f2eb;
-
-    /* Weather display */
-    --wx-bg:         #f7f5f0;
-    --wx-hi:         #c07830;
-    --wx-lo:         #4a6a90;
-    --wx-normal:     rgba(80,140,80,0.45);
-    --wx-record:     rgba(192,57,43,0.35);
-    --wx-precip:     #5b9bd5;
-    --wx-snow:       #a0d4f0;
-    --wx-thunder:    #8f3f97;
-    --wx-frz:        #e06040;
-    --wx-grid:       #d8d5d0;
-    --wx-label:      #555555;
-    --wx-label-dim:  #888888;
-  }
-
-  /* ── Layout ──────────────────────────────────────────────── */
-  body { margin: 0; padding: 0; background: var(--bg-page); font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: var(--text); line-height: 1.6; }
-  h1, h2, h3 { margin: 0; padding: 0; font-size: inherit; font-weight: inherit; line-height: inherit; }
-  .wrapper { max-width: 680px; margin: 0 auto; background: var(--bg-wrap); }
-  .mono-label { font-family: 'Courier New', monospace; font-weight: 600; text-transform: uppercase; }
-
-  /* ── Header ──────────────────────────────────────────────── */
-  .header { background: var(--bg-chrome); color: var(--text-chrome); padding: 28px 32px 24px; }
-  .header-date { font-family: 'Courier New', monospace; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-chrome-dim); margin-bottom: 6px; }
-  .header-title { font-family: Georgia, 'Times New Roman', serif; font-size: 28px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.2; }
-  .header-sub { font-size: 13px; color: var(--text-chrome-muted); margin-top: 4px; }
-
-  /* ── Spiritual ───────────────────────────────────────────── */
-  .spiritual { padding: 20px 32px; background: var(--bg-tinted); border-bottom: 1px solid var(--border); }
-  .spiritual-ref { font-size: 10px; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 8px; }
-  .spiritual-text { font-family: Georgia, serif; font-size: 16px; line-height: 1.65; font-style: italic; color: var(--text); }
-  .spiritual-cite { font-size: 14px; color: var(--text-secondary); margin-top: 6px; font-style: normal; }
-  .spiritual-ctx { font-size: 14px; color: var(--text-muted); margin-top: 8px; }
-
-  /* ── Info bars (weather, markets) ───────────────────────── */
-  .bar { padding: 12px 32px; background: var(--bg-bar); border-bottom: 1px solid var(--border); font-size: 14px; color: var(--text-secondary); }
-  .bar-mono { font-family: 'Courier New', monospace; font-weight: 500; color: var(--text); }
-  .bar-detail { font-size: 13px; color: var(--text-muted); }
-  .wx-header { font-family: monospace; font-size: 13px; color: var(--wx-label, #555); margin-bottom: 4px; }
-  .wx-date { color: var(--wx-label-dim, #888); font-size: 11px; text-align: right; }
-  .wx-legend { font-family: monospace; margin: 4px 0 2px 0; }
-  .wx-legend-title { font-size: 9px; color: #888; padding-right: 6px; white-space: nowrap; }
-  .wx-legend-item { padding-right: 10px; white-space: nowrap; }
-  .wx-legend-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; vertical-align: middle; margin-right: 3px; }
-  .wx-legend-label { font-size: 9px; color: #666; }
-  .wx-chart { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  .wx-day-cell { width: 32px; font-size: 9px; font-weight: 600; color: #555555; padding: 5px 6px 0 0; vertical-align: top; }
-  .wx-temp-cell { width: 28px; font-size: 8px; padding-top: 6px; vertical-align: top; }
-  .wx-lo-temp { color: #4a6a90; text-align: right; padding-right: 5px; }
-  .wx-hi-temp { color: #c07830; padding-left: 5px; }
-  .wx-gradient-cell { padding: 5px 4px 0; vertical-align: top; }
-  .wx-temp-bar { width: 100%; border-collapse: collapse; height: 14px; background: #d8d5d0; border-radius: 6px; }
-  .wx-bar-row { height: 14px; }
-  .wx-bar-pad { height: 14px; padding: 0; font-size: 0; line-height: 0; }
-  .wx-bar-fill { height: 14px; padding: 0; font-size: 0; line-height: 0; background: linear-gradient(to right, rgba(90,122,160,0.35), rgba(208,144,80,0.40)); border-radius: 6px; }
-  .wx-condition-cell { width: 60px; font-size: 9px; color: #666666; text-align: right; padding: 6px 0 0 4px; vertical-align: top; }
-  .wx-precip-cell { padding: 1px 4px 5px; }
-  .markets-table { width: 100%; border-collapse: collapse; font-family: 'Courier New', monospace; font-size: 13px; }
-  .market-cell { padding: 0 18px 0 0; white-space: nowrap; vertical-align: baseline; }
-  .market-cell:last-child { padding-right: 0; }
-  .mkt-context { font-size: 13px; color: var(--text-secondary); margin-top: 8px; line-height: 1.5; font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-  .mkt-label { color: var(--text-muted); }
-  .mkt-val { color: var(--text); font-weight: 500; }
-  .up { color: var(--up); }
-  .down { color: var(--down); }
-
-  /* ── Sections ────────────────────────────────────────────── */
-  .section { padding: 24px 32px; border-bottom: 1px solid var(--border); }
-  .sec-label { font-size: 11px; letter-spacing: 2px; color: var(--accent); margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-
-  /* ── At a Glance ─────────────────────────────────────────── */
-  .scan-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
-  .scan-item:last-child { border-bottom: none; }
-  .scan-header-table { width: 100%; border-collapse: collapse; margin-bottom: 3px; }
-  .scan-tag-cell { width: 1%; padding: 2px 8px 0 0; vertical-align: top; white-space: nowrap; }
-  .scan-headline-cell { padding: 0; vertical-align: top; }
-  .tag { font-size: 11px; letter-spacing: 1px; padding: 2px 7px; border-radius: 3px; display: inline-block; margin-top: 2px; }
-  .tag-war      { color: var(--tag-war-text);      background: var(--tag-war-bg); }
-  .tag-ai       { color: var(--tag-ai-text);       background: var(--tag-ai-bg); }
-  .tag-domestic { color: var(--tag-domestic-text); background: var(--tag-domestic-bg); }
-  .tag-defense  { color: var(--tag-defense-text);  background: var(--tag-defense-bg); }
-  .tag-space    { color: var(--tag-space-text);    background: var(--tag-space-bg); }
-  .tag-tech     { color: var(--tag-tech-text);     background: var(--tag-tech-bg); }
-  .tag-local    { color: var(--tag-local-text);    background: var(--tag-local-bg); }
-  .tag-science  { color: var(--tag-science-text);  background: var(--tag-science-bg); }
-  .tag-econ     { color: var(--tag-econ-text);     background: var(--tag-econ-bg); }
-  .tag-cyber    { color: var(--tag-cyber-text);    background: var(--tag-cyber-bg); }
-  .tag-energy   { color: var(--tag-energy-text);   background: var(--tag-energy-bg); }
-  .tag-biotech  { color: var(--tag-biotech-text);  background: var(--tag-biotech-bg); }
-  .scan-hl { font-size: 15px; font-weight: 600; line-height: 1.4; }
-  .scan-ctx { font-size: 14px; color: var(--text-secondary); line-height: 1.45; }
-  .scan-ctx-block { margin-bottom: 6px; padding-left: 8px; border-left: 2px solid transparent; }
-  .scan-ctx-block:last-child { margin-bottom: 0; }
-  .scan-ctx-block-analysis { border-left-color: var(--border); }
-  .scan-ctx-block-thread   { border-left-color: var(--accent-seam); }
-  .scan-voice { font-size: 9px; letter-spacing: 1px; display: inline-block; min-width: 6.5ch; padding-right: 4px; vertical-align: baseline; }
-  .scan-voice-src      { color: var(--text-faint); }
-  .scan-voice-analysis { color: var(--text-muted); }
-  .scan-voice-thread   { color: var(--accent-seam); }
-  .scan-seam { margin-top: 7px; padding-left: 8px; border-left: 2px solid var(--wx-grid, #d8d5d0); color: var(--wx-label, #555555); font-size: 13px; line-height: 1.45; font-style: italic; }
-  .aqi-warn { font-size: 13px; font-weight: 600; display: block; margin-top: 3px; }
-  .scan-link { font-size: 13px; color: var(--link-subtle); margin-top: 4px; }
-  .scan-link a { color: var(--link-subtle); text-decoration: none; border-bottom: 1px dotted var(--link-border); }
-
-  /* ── Local / Calendar ───────────────────────────────────── */
-  .local-item { padding: 6px 0; font-size: 14px; color: var(--text-secondary); line-height: 1.5; }
-  .local-item strong { color: var(--text); font-weight: 500; }
-  .local-item a { color: var(--link); text-decoration: none; font-weight: 500; border-bottom: 1px dotted var(--link-border); }
-  .cal-item { padding: 6px 0; font-size: 14px; color: var(--text-secondary); display: flex; align-items: baseline; gap: 10px; }
-  .cal-date { font-size: 10px; letter-spacing: 0.5px; color: var(--text-chrome); background: var(--bg-chrome); padding: 2px 7px; border-radius: 3px; flex-shrink: 0; }
-
-  /* ── Deep Dive cards ─────────────────────────────────────── */
-  .card { background: var(--bg-card); border: 1px solid var(--border); border-top: 3px solid var(--accent); border-radius: 0 0 6px 6px; padding: 20px 24px; margin-bottom: 16px; }
-  .card:last-child { margin-bottom: 0; }
-  .card-hl { font-family: Georgia, serif; font-size: 19px; font-weight: 700; line-height: 1.3; margin-bottom: 10px; letter-spacing: -0.3px; }
-  .card-body { font-size: 15px; color: var(--text-body); line-height: 1.65; }
-  .card-body p { margin: 0 0 10px 0; }
-  .card-body p:last-child { margin-bottom: 0; }
-  .wim { background: var(--bg-wim); border-left: 3px solid var(--accent); padding: 10px 14px; margin-top: 12px; border-radius: 0 4px 4px 0; }
-  .wim-label { font-size: 10px; letter-spacing: 1.5px; color: var(--accent); margin-bottom: 4px; }
-  .wim p { font-size: 14px; color: var(--text); line-height: 1.55; margin: 0; }
-  .fr { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
-  .fr-label { font-size: 10px; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 6px; }
-  .fr-item { padding: 5px 0; border-top: 1px dotted var(--border); }
-  .fr-item:first-of-type { border-top: none; }
-  .fr a { display: block; font-size: 14px; color: var(--link); text-decoration: none; line-height: 1.5; }
-  .fr .src { color: var(--text-muted); font-size: 13px; }
-
-  /* ── Perspective Seams ───────────────────────────────────── */
-  .seam-sub { font-size: 10px; letter-spacing: 1.5px; color: var(--accent-seam); margin-bottom: 10px; }
-  .seam-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
-  .seam-item:last-child { border-bottom: none; }
-  .seam-topic { font-size: 15px; font-weight: 600; line-height: 1.4; margin-bottom: 3px; }
-  .seam-desc { font-size: 14px; color: var(--text-secondary); line-height: 1.45; }
-  .seam-sources { font-size: 13px; color: var(--text-faint); margin-top: 4px; font-style: italic; }
-
-  /* ── Weekend reads ───────────────────────────────────────── */
-  .weekend-item { padding: 8px 0; border-bottom: 1px solid var(--border); }
-  .weekend-item:last-child { border-bottom: none; }
-  .wk-title { font-size: 15px; font-weight: 500; }
-  .wk-title a { color: var(--link); text-decoration: none; }
-  .wk-meta { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
-  .wk-desc { font-size: 14px; color: var(--text-secondary); margin-top: 3px; line-height: 1.45; }
-
-  /* ── Service notice ──────────────────────────────────────── */
-  .svc-notice { padding: 16px 20px; background: #fef9e7; border: 1px solid #f0e0a0; border-radius: 4px; font-size: 14px; color: #7d6608; line-height: 1.5; }
-
-  /* ── Footer ─────────────────────────────────────────────── */
-  .footer { padding: 20px 32px; background: var(--bg-chrome); color: var(--text-chrome-muted); font-size: 11px; line-height: 1.6; text-align: center; }
-  .footer a { color: var(--text-chrome-link); text-decoration: none; }
-  .footer-failures { margin-bottom: 8px; color: #f0c0a0; }
-
-  @media (max-width: 480px) {
-    .header { padding: 24px 16px 20px; }
-    .spiritual { padding: 18px 16px; }
-    .bar { padding: 12px 16px; }
-    .section { padding: 22px 16px; }
-    .footer { padding: 18px 16px; }
-    .card { padding: 18px 16px; }
-    .market-cell { display: block; padding: 0 0 4px 0; }
-  }
+{{ digest_css | safe }}
 </style>
 </head>
 <body>
@@ -475,4 +274,4 @@ def render_email(data: dict) -> str:
     before being passed here, so Jinja2 autoescape renders them as HTML rather than
     escaping the tags as literal text.
     """
-    return EMAIL_TEMPLATE.render(**data)
+    return EMAIL_TEMPLATE.render(**data, digest_css=_DIGEST_CSS)
