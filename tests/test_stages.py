@@ -16,6 +16,7 @@ from stages.briefing_packet import (
     _build_source_index,
     _build_transcript_summaries,
     _build_connection_hooks,
+    _build_metadata,
     _compress_to_budget,
 )
 from stages.anomaly import (
@@ -206,6 +207,45 @@ class TestBriefingPacketHelpers:
         }
         result = _build_connection_hooks(domain_analysis)
         assert len(result) == 2  # deduplicated
+
+    def test_build_metadata_uses_run_meta_from_context(self):
+        context = {
+            "run_meta": {
+                "run_date": "2026-04-21",
+                "stage_timings": {"collect": 1.2},
+                "stage_failures": [{"stage": "weather", "error": "timeout"}],
+            },
+            "raw_sources": {
+                "rss": [
+                    {"category": "tech"},
+                    {"category": "tech"},
+                    {"category": "space"},
+                ],
+                "analysis_transcripts": [{"title": "One"}],
+            },
+        }
+        config = {
+            "pipeline": {
+                "stages": [
+                    {"name": "analyze_domain", "model": {"model": "model-a"}},
+                    {"name": "prepare_weather"},
+                ]
+            }
+        }
+
+        metadata = _build_metadata(context, config)
+
+        assert metadata["date"] == "2026-04-21"
+        assert metadata["source_counts"] == {
+            "tech": 2,
+            "space": 1,
+            "transcripts": 1,
+        }
+        assert metadata["models_used"] == {"analyze_domain": "model-a"}
+        assert metadata["stage_timings"] == {"collect": 1.2}
+        assert metadata["stage_failures"] == [
+            {"stage": "weather", "error": "timeout"}
+        ]
 
     def test_compress_to_budget_under_limit(self):
         packet = {"source_index": [], "transcript_summaries": [], "domain_analyses": {}}

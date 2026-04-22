@@ -594,6 +594,7 @@ def run_pipeline(
             "from_plan": from_plan,
         },
     }
+    context["run_meta"] = run_meta
 
     _OUTPUT_DIR.mkdir(exist_ok=True)
 

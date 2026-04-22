@@ -13,7 +13,6 @@ Last updated: 2026-04-21
 
 ### High — Review sweep (2026-04-21)
 
-- **Briefing packet metadata is pretending run metadata exists in context.** `_build_metadata` reads `context["run_meta"]` (`stages/briefing_packet.py:100-123`), but `pipeline.run_pipeline` keeps `run_meta` as a local variable and never merges it into `context` before `briefing_packet` runs (`pipeline.py:552-676`). So `stage_timings` and `stage_failures` in `latest_briefing_packet.json` are usually empty even when stages failed. Put `context["run_meta"] = run_meta` before stages that consume it, or load the saved artifact after finalization if the packet must be post-run.
 - **The pipeline can produce a "successful" dry run with no final editorial validation artifact.** If `cross_domain` has no items or its LLM call fails, it returns only `cross_domain_output` (`stages/cross_domain.py:453-455`, `stages/cross_domain.py:507-509`) and skips `cross_domain_plan` / `validation_diagnostics`, despite `_STAGE_METADATA["cross_domain"]["context_keys"]` expecting all three. Downstream code mostly survives because dicts are optional everywhere, but the contract is lying. Return empty plan + explicit validation diagnostics on every path, and assert that in tests.
 
 ### Low — Review sweep (2026-04-21)
@@ -95,6 +94,11 @@ Last updated: 2026-04-21
 - **Stopped article enrichment from rewriting the `raw_sources` artifact.** `enrich_articles.run()` now writes enriched RSS summaries under `enriched_sources` while preserving the original collector artifact name for collector output.
 - **Made downstream promotion explicit.** Pipeline hooks promote `enriched_sources` back into in-memory `context["raw_sources"]` only after successful enrichment or cached enrichment reload, so later stages still consume normalized summaries.
 - **Covered rerun behavior.** Tests assert the separate artifact contract, runtime promotion, cached `--stage` promotion, and failure behavior that preserves the original `raw_sources`.
+
+### 2026-04-21 — Briefing packet run metadata fixed
+
+- **Exposed live pipeline run metadata to stages.** `run_pipeline` now stores the mutable `run_meta` object in shared context so `briefing_packet` can include prior stage timings, failures, and run options.
+- **Covered metadata propagation.** Tests assert `briefing_packet` sees the live run metadata during orchestration and that `_build_metadata` preserves timings and failures from context.
 
 ### 2026-04-17 — Weather: AQI overlay restored
 

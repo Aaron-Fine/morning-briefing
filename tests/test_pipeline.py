@@ -22,6 +22,7 @@ from pipeline import (
     _save_artifact,
     _load_artifact,
     _prune_artifacts,
+    run_pipeline,
 )
 
 
@@ -247,6 +248,50 @@ class TestArtifactPersistence:
 
         assert "cross_domain_plan" not in context
         assert "cross_domain_from_plan" not in context
+
+
+class TestRunPipeline:
+    def test_run_meta_is_available_to_briefing_packet_stage(self, tmp_path):
+        captured = {}
+
+        class CollectModule:
+            @staticmethod
+            def run(context, config, model_config, **kwargs):
+                return {"raw_sources": {"rss": []}}
+
+        class BriefingPacketModule:
+            @staticmethod
+            def run(context, config, model_config, **kwargs):
+                captured["run_meta"] = context.get("run_meta")
+                return {"briefing_packet": {"metadata": context.get("run_meta", {})}}
+
+        def load_stage(name):
+            return {
+                "collect": CollectModule,
+                "briefing_packet": BriefingPacketModule,
+            }[name]
+
+        config = {
+            "pipeline": {
+                "stages": [
+                    {"name": "collect"},
+                    {"name": "briefing_packet"},
+                ]
+            }
+        }
+
+        with (
+            patch("pipeline._setup_log_file"),
+            patch("pipeline.load_config", return_value=config),
+            patch("pipeline._artifact_dir", return_value=tmp_path),
+            patch("pipeline._prune_artifacts"),
+            patch("pipeline._load_stage_module", side_effect=load_stage),
+        ):
+            run_pipeline(dry_run=True)
+
+        assert captured["run_meta"]["options"]["dry_run"] is True
+        assert "collect" in captured["run_meta"]["stage_timings"]
+        assert captured["run_meta"]["stage_failures"] == []
 
 
 class TestPruneArtifacts:
