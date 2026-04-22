@@ -23,6 +23,7 @@ Last updated: 2026-04-22
 ### High — Design (architecture)
 
 - **Stage I/O is untyped dicts.** `context.get("domain_analysis", {})` everywhere. Pydantic models for `DomainAnalysis`, `CrossDomainOutput`, `SeamData` would catch schema drift — that seam is the most likely silent-regression spot.
+  - Plan 2026-04-22: see `docs/superpowers/plans/2026-04-22-stage-contract-hardening.md`. First implementation slice targets `DomainAnalysis` at the `analyze_domain` boundary.
 
 ### High — Performance
 
