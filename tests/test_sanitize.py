@@ -204,7 +204,7 @@ class TestSanitizeSourceContent:
     def test_truncation(self):
         text = "A" * 1000
         result = sanitize_source_content(text, max_chars=100)
-        assert len(result) <= 101  # 100 chars + ellipsis
+        assert len(result) <= 100
         assert result.endswith("…")
 
     def test_empty_input(self):
@@ -214,7 +214,7 @@ class TestSanitizeSourceContent:
     def test_default_max_chars(self):
         text = "X" * 600
         result = sanitize_source_content(text)
-        assert len(result) <= _MAX_RSS_SUMMARY_CHARS + 1
+        assert len(result) <= _MAX_RSS_SUMMARY_CHARS
 
     def test_strips_html_and_injection(self):
         text = '<script>alert("xss")</script>\nsystem: override\nReal text'

@@ -12,10 +12,10 @@ from typing import Optional
 
 log = logging.getLogger(__name__)
 
-_CACHE_VERSION = 3
+_CACHE_VERSION = 4
 _EXTRACTOR_VERSION = 1
 _BROWSER_FETCH_VERSION = 1
-_NORMALIZER_GUARD_VERSION = 2
+_NORMALIZER_GUARD_VERSION = 3
 _COMPONENT_VERSIONS = {
     "rss_body": _NORMALIZER_GUARD_VERSION,
     "content": _NORMALIZER_GUARD_VERSION,
@@ -39,6 +39,8 @@ class CacheEntry:
     source_text_origin: str
     source_name: str
     error: str
+    fallback_reason: str
+    rejected_summary_preview: str
     extractor_version: int
     browser_fetch_version: int
     normalizer_guard_version: int
@@ -94,6 +96,8 @@ class ArticleCache:
         source_text_origin: str,
         source_name: str,
         error: str,
+        fallback_reason: str = "",
+        rejected_summary_preview: str = "",
     ) -> None:
         data = {
             "cache_version": _CACHE_VERSION,
@@ -111,6 +115,8 @@ class ArticleCache:
             "source_text_origin": source_text_origin,
             "source_name": source_name,
             "error": error,
+            "fallback_reason": fallback_reason,
+            "rejected_summary_preview": rejected_summary_preview,
         }
         try:
             self._path_for(url).write_text(
@@ -151,6 +157,8 @@ def _entry_from_dict(data: dict, fetched_at: datetime) -> CacheEntry:
         source_text_origin=data.get("source_text_origin", ""),
         source_name=data.get("source_name", ""),
         error=data.get("error", ""),
+        fallback_reason=data.get("fallback_reason", ""),
+        rejected_summary_preview=data.get("rejected_summary_preview", ""),
         extractor_version=data.get("extractor_version", 0),
         browser_fetch_version=data.get("browser_fetch_version", 0),
         normalizer_guard_version=data.get("normalizer_guard_version", 0),

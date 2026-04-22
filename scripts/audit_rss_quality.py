@@ -123,7 +123,9 @@ def merge_enrich_metrics(feed_metrics: dict[str, dict], records: list[dict]) -> 
         total = len(statuses)
         feed_metrics[source]["enrichment_attempts"] = total
         feed_metrics[source]["success_rate"] = _rate(
-            statuses, lambda value: value == "ok" or value == "cache_hit:ok"
+            statuses,
+            lambda value: value in {"ok", "normalizer_fallback"}
+            or value in {"cache_hit:ok", "cache_hit:normalizer_fallback"},
         )
         feed_metrics[source]["paywall_rate"] = _rate(
             statuses, lambda value: value == "paywall"
@@ -143,8 +145,14 @@ def merge_enrich_metrics(feed_metrics: dict[str, dict], records: list[dict]) -> 
         feed_metrics[source]["extraction_failed_rate"] = _rate(
             statuses, lambda value: value == "extraction_failed"
         )
-        feed_metrics[source]["llm_fallback_rate"] = _rate(
-            statuses, lambda value: value == "llm_failed"
+        feed_metrics[source]["normalizer_fallback_rate"] = _rate(
+            statuses,
+            lambda value: value == "normalizer_fallback"
+            or value == "cache_hit:normalizer_fallback",
+        )
+        feed_metrics[source]["llm_failure_rate"] = _rate(
+            statuses,
+            lambda value: value == "llm_failed" or value == "cache_hit:llm_failed",
         )
         lengths = native_lengths[source]
         feed_metrics[source]["native_mean_chars"] = (
@@ -163,7 +171,8 @@ def merge_enrich_metrics(feed_metrics: dict[str, dict], records: list[dict]) -> 
         metric.setdefault("fetch_cap_skipped", 0)
         metric.setdefault("browser_cap_skipped", 0)
         metric.setdefault("extraction_failed_rate", None)
-        metric.setdefault("llm_fallback_rate", None)
+        metric.setdefault("normalizer_fallback_rate", None)
+        metric.setdefault("llm_failure_rate", None)
         metric.setdefault("native_mean_chars", 0)
         metric.setdefault("native_median_chars", 0)
 
@@ -250,8 +259,8 @@ def render_markdown_report(feed_metrics: dict[str, dict]) -> str:
     lines = [
         "# RSS Feed Quality Audit",
         "",
-        "| Feed | Items | Median chars | Empty % | Paywall % | HTTP % | Browser fail % | Mode | Strategy | Policy | Recommend |",
-        "|---|---:|---:|---:|---:|---:|---:|---|---|---|---|",
+        "| Feed | Items | Median chars | Empty % | Paywall % | HTTP % | Browser fail % | Normalizer fallback % | Mode | Strategy | Policy | Recommend |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|",
     ]
     for source, metric in sorted(
         feed_metrics.items(), key=lambda item: (item[1]["median_chars"], item[0])
@@ -266,7 +275,7 @@ def render_markdown_report(feed_metrics: dict[str, dict]) -> str:
             browser_failure_rate=metric.get("browser_failure_rate"),
         )
         lines.append(
-            "| {source} | {items} | {median} | {empty} | {paywall} | {http} | {browser} | {mode} | {strategy} | {policy} | {rec} |".format(
+            "| {source} | {items} | {median} | {empty} | {paywall} | {http} | {browser} | {fallback} | {mode} | {strategy} | {policy} | {rec} |".format(
                 source=source,
                 items=metric["items"],
                 median=metric["median_chars"],
@@ -274,6 +283,7 @@ def render_markdown_report(feed_metrics: dict[str, dict]) -> str:
                 paywall=_pct(metric.get("paywall_rate")),
                 http=_pct(metric.get("http_error_rate")),
                 browser=_pct(metric.get("browser_failure_rate")),
+                fallback=_pct(metric.get("normalizer_fallback_rate")),
                 mode=metric.get("mode", "rss"),
                 strategy=metric.get("strategy", "auto"),
                 policy=metric.get("skip_policy", ""),

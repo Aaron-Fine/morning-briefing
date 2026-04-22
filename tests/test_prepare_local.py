@@ -6,7 +6,7 @@ import os
 # Add project root to path so we can import stages/ modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from stages.prepare_local import _is_local_news
+from stages.prepare_local import _is_local_news, run
 
 
 class TestIsLocalNews:
@@ -74,3 +74,19 @@ class TestIsLocalNews:
         """Edge case: None values should not crash."""
         item = {"url": None, "summary": None}
         assert _is_local_news(item) is True
+
+
+def test_run_demotes_empty_summary_items():
+    items = [
+        {"title": "Livestream", "summary": "", "url": "https://local/1"},
+        {
+            "title": "Council",
+            "summary": "A detailed local summary with enough context to be useful.",
+            "url": "https://local/2",
+        },
+    ]
+    result = run(
+        {"raw_sources": {"local_news": items}},
+        {"digest": {"local": {"max_items": 1}}},
+    )
+    assert result["local_items"][0]["title"] == "Council"

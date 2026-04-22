@@ -54,13 +54,32 @@ def fetch_rss(config: dict) -> list[dict]:
     
     Returns list of dicts: {source, title, url, published, summary}
     """
+    items, _diagnostics = fetch_rss_with_diagnostics(config)
+    return items
+
+
+def fetch_rss_with_diagnostics(config: dict) -> tuple[list[dict], list[dict]]:
+    """Return RSS items plus per-feed collection diagnostics."""
     rss_config = config.get("rss", {})
     provider = rss_config.get("provider", "direct")
 
     if provider == "freshrss" and rss_config.get("freshrss_url"):
-        return _fetch_from_freshrss(rss_config)
-    else:
-        return _fetch_direct(rss_config)
+        # FreshRSS is aggregate-oriented; direct per-feed diagnostics are unavailable.
+        items = _fetch_from_freshrss(rss_config)
+        return items, [
+            {
+                "source": "FreshRSS",
+                "url": rss_config.get("freshrss_url", ""),
+                "mode": "freshrss",
+                "status": "ok" if items else "empty",
+                "item_count": len(items),
+                "error": "",
+            }
+        ]
+    result = _fetch_direct(rss_config, include_diagnostics=True)
+    if isinstance(result, tuple):
+        return result
+    return result, []
 
 
 class _FeedParseTimeout(Exception):
@@ -118,11 +137,15 @@ def _parse_feed_with_timeout(content: bytes, feed_name: str, timeout_secs: int =
         signal.signal(signal.SIGALRM, prev_handler)
 
 
-def _fetch_direct(rss_config: dict) -> list[dict]:
+def _fetch_direct(
+    rss_config: dict,
+    include_diagnostics: bool = False,
+) -> list[dict] | tuple[list[dict], list[dict]]:
     """Fetch from individual RSS feed URLs."""
     feeds = rss_config.get("feeds", [])
     cutoff = datetime.now(timezone.utc) - timedelta(hours=36)
     all_items = []
+    diagnostics = []
     consecutive_failures = 0
     fetch_state = _load_fetch_state()
     state_changed = False
@@ -141,6 +164,9 @@ def _fetch_direct(rss_config: dict) -> list[dict]:
                 break
 
             if fetch_result.get("skipped"):
+                diagnostics.append(
+                    _feed_diagnostic(feed_conf, fetch_result, "skipped_cooldown", 0)
+                )
                 continue
 
             _apply_fetch_state(feed_conf, fetch_result, fetch_state)
@@ -149,6 +175,9 @@ def _fetch_direct(rss_config: dict) -> list[dict]:
             feed_content = fetch_result.get("content")
             if feed_content is None:
                 consecutive_failures += 1
+                diagnostics.append(
+                    _feed_diagnostic(feed_conf, fetch_result, "http_error", 0)
+                )
                 continue
 
             consecutive_failures = 0
@@ -160,8 +189,21 @@ def _fetch_direct(rss_config: dict) -> list[dict]:
                     cutoff,
                 )
                 all_items.extend(items)
+                diagnostics.append(
+                    _feed_diagnostic(
+                        feed_conf,
+                        fetch_result,
+                        "ok" if items else "empty",
+                        len(items),
+                    )
+                )
             except Exception as e:
-                log.warning(f"RSS parse failed for {feed_conf['name']}: {e}")
+                error = str(e)
+                log.warning(f"RSS parse failed for {feed_conf['name']}: {error}")
+                fetch_result["error"] = error
+                diagnostics.append(
+                    _feed_diagnostic(feed_conf, fetch_result, "parse_error", 0)
+                )
         else:
             continue
         break
@@ -174,7 +216,29 @@ def _fetch_direct(rss_config: dict) -> list[dict]:
     else:
         log.warning("RSS: no items fetched from any feed")
     all_items.sort(key=lambda x: x.get("published", ""), reverse=True)
+    if include_diagnostics:
+        return all_items, diagnostics
     return all_items
+
+
+def _feed_diagnostic(
+    feed_conf: dict,
+    fetch_result: dict,
+    status: str,
+    item_count: int,
+) -> dict:
+    return {
+        "source": feed_conf.get("name", ""),
+        "url": feed_conf.get("url", ""),
+        "mode": feed_conf.get("mode", "rss"),
+        "cap": feed_conf.get("cap", ""),
+        "status": status,
+        "status_code": fetch_result.get("status_code"),
+        "item_count": item_count,
+        "content_type": fetch_result.get("content_type", ""),
+        "error": fetch_result.get("error", ""),
+        "skipped": bool(fetch_result.get("skipped", False)),
+    }
 
 
 def _fetch_feed_batch(feeds: list[dict], fetch_state: dict) -> list[dict]:

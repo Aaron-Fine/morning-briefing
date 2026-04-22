@@ -5,6 +5,7 @@ Outputs: raw_sources (dict)
 """
 
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from morning_digest.sanitize import sanitize_all_sources
@@ -12,7 +13,7 @@ from sources.youtube import fetch_analysis_transcripts
 from sources.weather import fetch_weather
 from sources.markets import fetch_markets
 from sources.launches import fetch_upcoming_launches
-from sources.rss_feeds import fetch_rss
+from sources.rss_feeds import fetch_rss_with_diagnostics
 from sources.hackernews import fetch_hackernews
 from sources.github_trending import fetch_github_trending
 from sources.astronomy import fetch_astronomy
@@ -69,7 +70,8 @@ def _fetch_youtube(config):
 
 def _fetch_rss(config):
     log.info("  → RSS feeds")
-    return "rss", fetch_rss(config)
+    items, diagnostics = fetch_rss_with_diagnostics(config)
+    return "rss", items, {"rss_feeds": diagnostics}
 
 
 def _fetch_hackernews(config):
@@ -97,14 +99,63 @@ def _fetch_local_news(config):
     if local_sources:
         log.info("  → Local news")
         local_rss_config = {"rss": {"feeds": local_sources, "provider": "direct"}}
-        return "local_news", fetch_rss(local_rss_config)
-    return "local_news", []
+        items, diagnostics = fetch_rss_with_diagnostics(local_rss_config)
+        return "local_news", items, {"local_news_feeds": diagnostics}
+    return "local_news", [], {"local_news_feeds": []}
+
+
+def _item_count(value) -> int | None:
+    if isinstance(value, list):
+        return len(value)
+    if isinstance(value, dict):
+        if "events" in value and isinstance(value["events"], list):
+            return len(value["events"])
+        if "selected" in value and isinstance(value["selected"], list):
+            return len(value["selected"])
+        return None
+    return None
+
+
+def _run_collect_task(fn, cfg):
+    started = time.monotonic()
+    key = ""
+    try:
+        result = fn(cfg)
+        extra = {}
+        if len(result) == 3:
+            key, value, extra = result
+        else:
+            key, value = result
+        elapsed = time.monotonic() - started
+        diagnostic = {
+            "source": key,
+            "status": "ok",
+            "item_count": _item_count(value),
+            "elapsed_seconds": round(elapsed, 2),
+            "error": "",
+        }
+        return key, value, diagnostic, extra
+    except Exception as exc:
+        elapsed = time.monotonic() - started
+        return (
+            key or fn.__name__.removeprefix("_fetch_"),
+            None,
+            {
+                "source": key or fn.__name__.removeprefix("_fetch_"),
+                "status": "error",
+                "item_count": None,
+                "elapsed_seconds": round(elapsed, 2),
+                "error": str(exc),
+            },
+            {},
+        )
 
 
 def run(context: dict, config: dict, model_config: dict | None = None, **kwargs) -> dict:
     """Collect all sources and return raw_sources artifact."""
     log.info("Collecting from sources (parallel)...")
     data: dict = {}
+    diagnostics: dict = {"sources": [], "rss_feeds": [], "local_news_feeds": []}
 
     # RSS parsing and YouTube transcript collection use SIGALRM timeout guards.
     # Python only permits signal handlers in the main thread, so keep those
@@ -132,24 +183,30 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
         tasks.append((_fetch_come_follow_me, config))
 
     with ThreadPoolExecutor(max_workers=_MAX_PARALLEL_FETCHES) as pool:
-        futures = {pool.submit(fn, cfg): fn.__name__ for fn, cfg in tasks}
+        futures = {pool.submit(_run_collect_task, fn, cfg): fn.__name__ for fn, cfg in tasks}
         for future in as_completed(futures):
             name = futures[future]
-            try:
-                key, result = future.result()
-                if key == "calendar":
-                    data.update(result)
-                else:
-                    data[key] = result
-            except Exception as e:
-                log.error(f"  collect[{name}]: fetch failed: {e}")
+            key, result, diagnostic, extra = future.result()
+            diagnostics["sources"].append(diagnostic)
+            diagnostics["rss_feeds"].extend(extra.get("rss_feeds", []))
+            diagnostics["local_news_feeds"].extend(extra.get("local_news_feeds", []))
+            if diagnostic["status"] == "error":
+                log.error(f"  collect[{name}]: fetch failed: {diagnostic['error']}")
+                continue
+            if key == "calendar":
+                data.update(result)
+            else:
+                data[key] = result
 
     for fn, cfg in main_thread_tasks:
-        try:
-            key, result = fn(cfg)
-            data[key] = result
-        except Exception as e:
-            log.error(f"  collect[{fn.__name__}]: fetch failed: {e}")
+        key, result, diagnostic, extra = _run_collect_task(fn, cfg)
+        diagnostics["sources"].append(diagnostic)
+        diagnostics["rss_feeds"].extend(extra.get("rss_feeds", []))
+        diagnostics["local_news_feeds"].extend(extra.get("local_news_feeds", []))
+        if diagnostic["status"] == "error":
+            log.error(f"  collect[{fn.__name__}]: fetch failed: {diagnostic['error']}")
+            continue
+        data[key] = result
 
     # Ensure keys exist even if tasks were skipped or failed
     data.setdefault("weather", {})
@@ -167,7 +224,7 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
     data.setdefault("on_this_day", {})
     data.setdefault("local_news", [])
 
-    data["source_counts"] = {
+    source_counts = {
         "analysis_transcripts": len(data.get("analysis_transcripts", [])),
         "rss_items": len(data.get("rss", [])),
         "local_news_items": len(data.get("local_news", [])),
@@ -176,15 +233,18 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
         "astronomy_events": len(data.get("astronomy", {}).get("events", [])),
         "history_items": len(data.get("on_this_day", {}).get("selected", [])),
     }
+    data["source_counts"] = source_counts
 
     log.info(
-        f"  Collected: {data['source_counts']['rss_items']} RSS items, "
-        f"{data['source_counts']['local_news_items']} local news items, "
-        f"{data['source_counts']['analysis_transcripts']} analysis transcripts"
+        f"  Collected: {source_counts['rss_items']} RSS items, "
+        f"{source_counts['local_news_items']} local news items, "
+        f"{source_counts['analysis_transcripts']} analysis transcripts"
     )
 
     # Security Layer 1: sanitize all source content before it touches any prompt
     log.info("  → Sanitizing source content (Layer 1)")
     data = sanitize_all_sources(data)
+    data.setdefault("source_counts", source_counts)
 
-    return {"raw_sources": data}
+    diagnostics["source_counts"] = source_counts
+    return {"raw_sources": data, "collect_diagnostics": diagnostics}

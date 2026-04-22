@@ -19,6 +19,7 @@ from sources.come_follow_me import (
 from sources.economic_calendar import fetch_economic_calendar
 from sources.rss_feeds import (
     fetch_rss,
+    fetch_rss_with_diagnostics,
     _clean_summary,
     _parse_feed_date,
     _fetch_direct,
@@ -281,6 +282,37 @@ class TestRssFeeds:
 
         assert len(result) == 2
         assert {item["source"] for item in result} == {"Feed A", "Feed B"}
+
+    @patch("sources.rss_feeds._fetch_feed_batch")
+    def test_fetch_rss_with_diagnostics_reports_per_feed_status(self, mock_batch):
+        feeds = [
+            {"name": "Feed A", "url": "https://example.com/a", "category": "alpha"},
+            {"name": "Feed B", "url": "https://example.com/b", "category": "beta"},
+        ]
+        mock_batch.return_value = [
+            {
+                "content": b"<rss />",
+                "content_type": "application/rss+xml",
+                "status_code": 200,
+                "error": "",
+                "skipped": False,
+            },
+            {
+                "content": None,
+                "content_type": "",
+                "status_code": 401,
+                "error": "blocked",
+                "skipped": False,
+            },
+        ]
+
+        items, diagnostics = fetch_rss_with_diagnostics({"rss": {"feeds": feeds}})
+
+        assert items == []
+        assert [entry["source"] for entry in diagnostics] == ["Feed A", "Feed B"]
+        assert diagnostics[0]["status"] == "empty"
+        assert diagnostics[1]["status"] == "http_error"
+        assert diagnostics[1]["status_code"] == 401
 
     def test_items_from_html_index_extracts_article_links(self):
         html = b"""

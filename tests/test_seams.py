@@ -407,9 +407,15 @@ class TestSeamsRun:
         assert len(result["seam_candidates"]["candidates"]) == 1
         assert len(result["seam_annotations"]["per_item"]) == 1
         assert len(result["seam_annotations"]["cross_domain"]) == 1
+        assert result["seam_annotations"]["per_item"][0]["links"] == [
+            {"url": "https://example.com", "label": "Example"}
+        ]
         seam_data = result["seam_data"]
         assert result["seam_candidates"]["schema_version"] == 1
         assert len(seam_data["contested_narratives"]) == 1
+        assert seam_data["contested_narratives"][0]["links"] == [
+            {"url": "https://example.com", "label": "Example"}
+        ]
         assert len(seam_data["coverage_gaps"]) == 0
         assert seam_data["seam_count"] == 1
         assert seam_data["quiet_day"] is True

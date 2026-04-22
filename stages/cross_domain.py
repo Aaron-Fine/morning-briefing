@@ -514,7 +514,16 @@ def run(
         return {"cross_domain_output": _empty_output(domain_analysis)}
 
     result = _validated_output(result, domain_analysis, raw_sources, config)
-    result = validate_stage_output(result, raw_sources, "cross_domain")
+    result = validate_stage_output(
+        result,
+        raw_sources,
+        "cross_domain",
+        collect_diagnostics=True,
+    )
+    validation_diagnostics = result.pop(
+        "_validation_diagnostics",
+        {"stage": "cross_domain", "issue_count": 0, "issues": []},
+    )
 
     n_glance = len(result["at_a_glance"])
     n_dives = len(result["deep_dives"])
@@ -527,6 +536,7 @@ def run(
     return {
         "cross_domain_plan": cross_domain_plan,
         "cross_domain_output": result,
+        "validation_diagnostics": validation_diagnostics,
     }
 
 

@@ -37,7 +37,7 @@ class TestCollectRun:
     @patch("stages.collect.fetch_economic_calendar")
     @patch("stages.collect.get_current_lesson")
     @patch("stages.collect.fetch_analysis_transcripts")
-    @patch("stages.collect.fetch_rss")
+    @patch("stages.collect.fetch_rss_with_diagnostics")
     @patch("stages.collect.sanitize_all_sources")
     def test_calls_all_sources(
         self,
@@ -68,7 +68,7 @@ class TestCollectRun:
         mock_econ_cal.return_value = []
         mock_lesson.return_value = {}
         mock_yt.return_value = []
-        mock_rss.return_value = []
+        mock_rss.return_value = ([], [])
         mock_sanitize.return_value = {
             "rss": [],
             "local_news": [],
@@ -105,7 +105,7 @@ class TestCollectRun:
     @patch("stages.collect.fetch_economic_calendar")
     @patch("stages.collect.get_current_lesson")
     @patch("stages.collect.fetch_analysis_transcripts")
-    @patch("stages.collect.fetch_rss")
+    @patch("stages.collect.fetch_rss_with_diagnostics")
     @patch("stages.collect.sanitize_all_sources")
     def test_markets_disabled_when_config_says_so(
         self,
@@ -135,7 +135,7 @@ class TestCollectRun:
         mock_econ_cal.return_value = []
         mock_lesson.return_value = {}
         mock_yt.return_value = []
-        mock_rss.return_value = []
+        mock_rss.return_value = ([], [])
         mock_sanitize.return_value = {
             "rss": [],
             "local_news": [],
@@ -160,7 +160,7 @@ class TestCollectRun:
     @patch("stages.collect.fetch_economic_calendar")
     @patch("stages.collect.get_current_lesson")
     @patch("stages.collect.fetch_analysis_transcripts")
-    @patch("stages.collect.fetch_rss")
+    @patch("stages.collect.fetch_rss_with_diagnostics")
     @patch("stages.collect.sanitize_all_sources")
     def test_spiritual_disabled_when_config_says_so(
         self,
@@ -191,7 +191,7 @@ class TestCollectRun:
         mock_econ_cal.return_value = []
         mock_lesson.return_value = {}  # Consistent with other tests
         mock_yt.return_value = []
-        mock_rss.return_value = []
+        mock_rss.return_value = ([], [])
         mock_sanitize.return_value = {
             "rss": [],
             "local_news": [],
@@ -216,7 +216,7 @@ class TestCollectRun:
     @patch("stages.collect.fetch_economic_calendar")
     @patch("stages.collect.get_current_lesson")
     @patch("stages.collect.fetch_analysis_transcripts")
-    @patch("stages.collect.fetch_rss")
+    @patch("stages.collect.fetch_rss_with_diagnostics")
     @patch("stages.collect.sanitize_all_sources")
     def test_youtube_failure_doesnt_crash_pipeline(
         self,
@@ -247,7 +247,7 @@ class TestCollectRun:
         mock_econ_cal.return_value = []
         mock_lesson.return_value = {}
         mock_yt.side_effect = Exception("YouTube API down")
-        mock_rss.return_value = []
+        mock_rss.return_value = ([], [])
         mock_sanitize.return_value = {
             "rss": [],
             "local_news": [],
@@ -270,7 +270,7 @@ class TestCollectRun:
     @patch("stages.collect.fetch_economic_calendar")
     @patch("stages.collect.get_current_lesson")
     @patch("stages.collect.fetch_analysis_transcripts")
-    @patch("stages.collect.fetch_rss")
+    @patch("stages.collect.fetch_rss_with_diagnostics")
     @patch("stages.collect.sanitize_all_sources")
     def test_local_news_fetched_when_configured(
         self,
@@ -301,7 +301,7 @@ class TestCollectRun:
         mock_econ_cal.return_value = []
         mock_lesson.return_value = {}
         mock_yt.return_value = []
-        mock_rss.return_value = []
+        mock_rss.return_value = ([], [])
         mock_sanitize.return_value = {
             "rss": [],
             "local_news": [],
@@ -328,7 +328,7 @@ class TestCollectRun:
     @patch("stages.collect.fetch_economic_calendar")
     @patch("stages.collect.get_current_lesson")
     @patch("stages.collect.fetch_analysis_transcripts")
-    @patch("stages.collect.fetch_rss")
+    @patch("stages.collect.fetch_rss_with_diagnostics")
     @patch("stages.collect.sanitize_all_sources")
     def test_local_news_empty_when_no_sources(
         self,
@@ -359,7 +359,7 @@ class TestCollectRun:
         mock_econ_cal.return_value = []
         mock_lesson.return_value = {}
         mock_yt.return_value = []
-        mock_rss.return_value = []
+        mock_rss.return_value = ([], [])
         mock_sanitize.return_value = {
             "rss": [],
             "local_news": [],
@@ -385,7 +385,7 @@ class TestCollectRun:
     @patch("stages.collect.fetch_economic_calendar")
     @patch("stages.collect.get_current_lesson")
     @patch("stages.collect.fetch_analysis_transcripts")
-    @patch("stages.collect.fetch_rss")
+    @patch("stages.collect.fetch_rss_with_diagnostics")
     @patch("stages.collect.sanitize_all_sources")
     def test_rss_fetch_runs_on_main_thread(
         self,
@@ -424,7 +424,7 @@ class TestCollectRun:
 
         def _fetch_rss_on_main_thread(_config):
             assert threading.current_thread() is threading.main_thread()
-            return []
+            return [], []
 
         mock_rss.side_effect = _fetch_rss_on_main_thread
 
@@ -444,7 +444,7 @@ class TestCollectRun:
     @patch("stages.collect.fetch_economic_calendar")
     @patch("stages.collect.get_current_lesson")
     @patch("stages.collect.fetch_analysis_transcripts")
-    @patch("stages.collect.fetch_rss")
+    @patch("stages.collect.fetch_rss_with_diagnostics")
     @patch("stages.collect.sanitize_all_sources")
     def test_youtube_fetch_runs_on_main_thread(
         self,
@@ -474,7 +474,7 @@ class TestCollectRun:
         mock_holidays.return_value = []
         mock_econ_cal.return_value = []
         mock_lesson.return_value = {}
-        mock_rss.return_value = []
+        mock_rss.return_value = ([], [])
         mock_sanitize.return_value = {
             "rss": [],
             "local_news": [],
@@ -499,7 +499,7 @@ class TestCollectRun:
     @patch("stages.collect.fetch_economic_calendar")
     @patch("stages.collect.get_current_lesson")
     @patch("stages.collect.fetch_analysis_transcripts")
-    @patch("stages.collect.fetch_rss")
+    @patch("stages.collect.fetch_rss_with_diagnostics")
     @patch("stages.collect.sanitize_all_sources")
     def test_source_counts_included(
         self,
@@ -522,7 +522,7 @@ class TestCollectRun:
         mock_econ_cal.return_value = []
         mock_lesson.return_value = {}
         mock_yt.return_value = [{"title": "v1"}]
-        mock_rss.return_value = [{"title": "a1"}, {"title": "a2"}]
+        mock_rss.return_value = ([{"title": "a1"}, {"title": "a2"}], [])
         mock_sanitize.return_value = {
             "rss": [{"title": "a1"}, {"title": "a2"}],
             "local_news": [],
@@ -557,7 +557,7 @@ class TestCollectRun:
     @patch("stages.collect.fetch_economic_calendar")
     @patch("stages.collect.get_current_lesson")
     @patch("stages.collect.fetch_analysis_transcripts")
-    @patch("stages.collect.fetch_rss")
+    @patch("stages.collect.fetch_rss_with_diagnostics")
     @patch("stages.collect.sanitize_all_sources")
     def test_returns_raw_sources_key(
         self,
@@ -588,7 +588,7 @@ class TestCollectRun:
         mock_econ_cal.return_value = []
         mock_lesson.return_value = {}
         mock_yt.return_value = []
-        mock_rss.return_value = []
+        mock_rss.return_value = ([], [])
         mock_sanitize.return_value = {
             "rss": [],
             "local_news": [],
@@ -599,3 +599,5 @@ class TestCollectRun:
 
         assert "raw_sources" in result
         assert isinstance(result["raw_sources"], dict)
+        assert "collect_diagnostics" in result
+        assert "sources" in result["collect_diagnostics"]

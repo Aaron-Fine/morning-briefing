@@ -268,6 +268,30 @@ def _valid_item_ids(domain_analysis: dict) -> set[str]:
     return ids
 
 
+def _links_by_item_id(domain_analysis: dict) -> dict[str, list[dict]]:
+    links: dict[str, list[dict]] = {}
+    for domain_result in domain_analysis.values():
+        if not isinstance(domain_result, dict):
+            continue
+        for item in domain_result.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            item_id = str(item.get("item_id", "")).strip()
+            if not item_id:
+                continue
+            item_links = [
+                {
+                    "url": str(link.get("url", "")).strip(),
+                    "label": str(link.get("label", "")).strip(),
+                }
+                for link in item.get("links", []) or []
+                if isinstance(link, dict) and str(link.get("url", "")).strip()
+            ]
+            if item_links:
+                links[item_id] = item_links
+    return links
+
+
 def _normalize_confidence(value: str) -> str:
     confidence = str(value or "medium").strip().lower()
     return confidence if confidence in _VALID_CONFIDENCE else "medium"
@@ -300,6 +324,7 @@ def _validate_seam_annotations(result: dict | None, domain_analysis: dict) -> di
         return _empty_annotations()
 
     ids = _valid_item_ids(domain_analysis)
+    links_by_item_id = _links_by_item_id(domain_analysis)
     cleaned_per_item: list[dict] = []
     for raw_item in result.get("per_item", []) or []:
         if not isinstance(raw_item, dict):
@@ -336,6 +361,7 @@ def _validate_seam_annotations(result: dict | None, domain_analysis: dict) -> di
                 "item_id": item_id,
                 "seam_type": seam_type,
                 "one_line": str(raw_item.get("one_line", "")).strip(),
+                "links": links_by_item_id.get(item_id, []),
                 "evidence": cleaned_evidence,
                 "confidence": _normalize_confidence(raw_item.get("confidence", "")),
             }
@@ -373,7 +399,7 @@ def _legacy_seam_data(seam_annotations: dict) -> dict:
         entry = {
             "topic": annotation.get("item_id", ""),
             "description": annotation.get("one_line", ""),
-            "links": [],
+            "links": annotation.get("links", []),
             "sources_a": "",
             "sources_b": "",
             "analytical_significance": annotation.get("seam_type", ""),
@@ -385,7 +411,7 @@ def _legacy_seam_data(seam_annotations: dict) -> dict:
                     "description": annotation.get("one_line", ""),
                     "present_in": "",
                     "absent_from": "",
-                    "links": [],
+                    "links": annotation.get("links", []),
                 }
             )
         else:

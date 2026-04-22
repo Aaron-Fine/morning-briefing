@@ -80,6 +80,15 @@ class _Candidate:
     browser_fetch_allowed: bool = False
 
 
+@dataclass
+class _CanonicalResult:
+    summary: str
+    status: str
+    error: str = ""
+    fallback_reason: str = ""
+    rejected_summary_preview: str = ""
+
+
 def run(
     context: dict, config: dict, model_config: dict | None = None, **kwargs
 ) -> dict:
@@ -317,8 +326,11 @@ def _normalize_one(
             ),
             summary_length=cached.summary_length,
             http_status=cached.http_status,
+            fallback_reason=cached.fallback_reason,
+            rejected_summary_preview=cached.rejected_summary_preview,
         )
-        if cached.status in {"ok", "llm_failed"} and cached.canonical_summary:
+        cached_summary_statuses = {"ok", "normalizer_fallback", "llm_failed"}
+        if cached.status in cached_summary_statuses and cached.canonical_summary:
             item["summary"] = cached.canonical_summary
         return record
 
@@ -430,38 +442,53 @@ def _normalize_one(
             http_status=http_status,
         )
 
-    summary, status, error = _canonical_summary(
+    canonical = _canonical_summary(
         source_text,
         enrich_cfg,
         system_prompt,
         model_config,
     )
     if fetch_error:
-        error = "; ".join(part for part in [fetch_error, error] if part)
-    if not summary:
+        canonical.error = "; ".join(part for part in [fetch_error, canonical.error] if part)
+    if not canonical.summary:
         item["summary"] = original_summary
         return _record(
             item,
-            status,
-            error,
+            canonical.status,
+            canonical.error,
             source_text_origin=origin,
             native_length=native_length,
             fetched_length=fetched_length,
             http_status=http_status,
+            fallback_reason=canonical.fallback_reason,
+            rejected_summary_preview=canonical.rejected_summary_preview,
         )
 
-    item["summary"] = summary
+    item["summary"] = canonical.summary
     raw_length = len(source_text)
-    cache.put(url, status, http_status, summary, raw_length, origin, source, error)
+    cache.put(
+        url,
+        canonical.status,
+        http_status,
+        canonical.summary,
+        raw_length,
+        origin,
+        source,
+        canonical.error,
+        fallback_reason=canonical.fallback_reason,
+        rejected_summary_preview=canonical.rejected_summary_preview,
+    )
     return _record(
         item,
-        status,
-        error,
+        canonical.status,
+        canonical.error,
         source_text_origin=origin,
         native_length=native_length,
         fetched_length=fetched_length,
-        summary_length=len(summary),
+        summary_length=len(canonical.summary),
         http_status=http_status,
+        fallback_reason=canonical.fallback_reason,
+        rejected_summary_preview=canonical.rejected_summary_preview,
     )
 
 
@@ -530,18 +557,21 @@ def _canonical_summary(
     enrich_cfg: dict,
     system_prompt: str,
     model_config: dict | None,
-) -> tuple[str, str, str]:
+) -> _CanonicalResult:
     max_chars = int(enrich_cfg.get("canonical_summary_max_chars", 700))
     summarize_above = int(enrich_cfg.get("summarize_above_chars", 800))
 
     if not needs_distillation(source_text, summarize_above):
-        return sanitize_source_content(source_text, max_chars=max_chars), "ok", ""
+        return _CanonicalResult(
+            sanitize_source_content(source_text, max_chars=max_chars),
+            "ok",
+        )
 
     if not model_config:
-        return (
-            sanitize_source_content(source_text, max_chars=max_chars),
-            "llm_failed",
-            "no model_config",
+        return _fallback_canonical_result(
+            source_text,
+            max_chars,
+            "no_model_config",
         )
 
     user_content = (
@@ -558,30 +588,66 @@ def _canonical_summary(
             stream=False,
         )
     except Exception as exc:
-        return (
-            sanitize_source_content(source_text, max_chars=max_chars),
-            "llm_failed",
-            str(exc),
+        return _fallback_canonical_result(
+            source_text,
+            max_chars,
+            "llm_error",
+            error=str(exc),
         )
 
     summary = sanitize_source_content((summary or "").strip(), max_chars=max_chars)
     if not summary:
-        return (
-            sanitize_source_content(source_text, max_chars=max_chars),
-            "llm_failed",
-            "empty LLM response",
+        return _fallback_canonical_result(
+            source_text,
+            max_chars,
+            "empty_response",
         )
-    if _looks_like_bad_llm_summary(summary, source_text):
-        return (
-            sanitize_source_content(source_text, max_chars=max_chars),
-            "llm_failed",
-            "invalid LLM summary",
+    rejection_reason = _llm_summary_rejection_reason(summary, source_text)
+    if rejection_reason:
+        return _fallback_canonical_result(
+            source_text,
+            max_chars,
+            rejection_reason,
+            rejected_summary=summary,
         )
-    return summary, "ok", ""
+    return _CanonicalResult(summary, "ok")
+
+
+def _fallback_canonical_result(
+    source_text: str,
+    max_chars: int,
+    fallback_reason: str,
+    *,
+    error: str = "",
+    rejected_summary: str = "",
+) -> _CanonicalResult:
+    """Return a usable source-derived summary when normalizer output is unusable."""
+    summary = sanitize_source_content(source_text, max_chars=max_chars)
+    rejected_preview = sanitize_source_content(rejected_summary, max_chars=300)
+    if summary:
+        return _CanonicalResult(
+            summary,
+            "normalizer_fallback",
+            error or f"normalizer fallback: {fallback_reason}",
+            fallback_reason=fallback_reason,
+            rejected_summary_preview=rejected_preview,
+        )
+    return _CanonicalResult(
+        "",
+        "llm_failed",
+        error or f"normalizer failed: {fallback_reason}",
+        fallback_reason=fallback_reason,
+        rejected_summary_preview=rejected_preview,
+    )
 
 
 def _looks_like_bad_llm_summary(summary: str, source_text: str) -> bool:
     """Reject meta-reasoning or unusably short summaries from normalizer models."""
+    return bool(_llm_summary_rejection_reason(summary, source_text))
+
+
+def _llm_summary_rejection_reason(summary: str, source_text: str) -> str:
+    """Return a stable reason when normalizer output is not safe to use."""
     lowered = summary[:300].lower()
     meta_markers = (
         "the user wants",
@@ -594,9 +660,12 @@ def _looks_like_bad_llm_summary(summary: str, source_text: str) -> bool:
         "core substance",
         "not article content",
     )
-    if any(marker in lowered for marker in meta_markers):
-        return True
-    return len(source_text) >= 800 and len(summary) < 80
+    for marker in meta_markers:
+        if marker in lowered:
+            return f"meta_response:{marker}"
+    if len(source_text) >= 800 and len(summary) < 80:
+        return "too_short"
+    return ""
 
 
 def _record(
@@ -609,8 +678,10 @@ def _record(
     fetched_length: int = 0,
     summary_length: int = 0,
     http_status: int | None = None,
+    fallback_reason: str = "",
+    rejected_summary_preview: str = "",
 ) -> dict:
-    return {
+    record = {
         "url": item.get("url", ""),
         "source": item.get("source", ""),
         "status": status,
@@ -621,3 +692,8 @@ def _record(
         "http_status": http_status,
         "error": error,
     }
+    if fallback_reason:
+        record["fallback_reason"] = fallback_reason
+    if rejected_summary_preview:
+        record["rejected_summary_preview"] = rejected_summary_preview
+    return record

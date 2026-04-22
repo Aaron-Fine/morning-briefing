@@ -38,6 +38,11 @@ def _is_local_news(item: dict) -> bool:
     return True
 
 
+def _has_useful_summary(item: dict) -> bool:
+    summary = (item.get("summary") or item.get("_rss_body") or "").strip()
+    return len(summary) >= 40
+
+
 def run(
     context: dict, config: dict, model_config: dict | None = None, **kwargs
 ) -> dict:
@@ -46,11 +51,14 @@ def run(
     max_items = config.get("digest", {}).get("local", {}).get("max_items", 4)
 
     local_only = [item for item in local_news if _is_local_news(item)]
-    selected = local_only[:max_items]
+    useful = [item for item in local_only if _has_useful_summary(item)]
+    thin = [item for item in local_only if not _has_useful_summary(item)]
+    selected = (useful + thin)[:max_items]
 
     log.info(
         f"prepare_local: {len(local_news)} raw items → {len(local_only)} local "
-        f"(filtered {len(local_news) - len(local_only)} press releases) → {len(selected)} selected "
+        f"(filtered {len(local_news) - len(local_only)} press releases; "
+        f"{len(thin)} empty/thin summaries) → {len(selected)} selected "
         f"(max_items={max_items})"
     )
     return {"local_items": selected}

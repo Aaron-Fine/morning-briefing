@@ -294,9 +294,30 @@ def test_rejects_meta_llm_summary_for_long_source(tmp_path):
     ):
         out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path, feeds=feeds), model)
     summary = out["raw_sources"]["rss"][0]["summary"]
+    record = out["enrich_articles"]["records"][0]
     assert "The user wants" not in summary
     assert "Full source sentence." in summary
-    assert out["enrich_articles"]["records"][0]["status"] == "llm_failed"
+    assert record["status"] == "normalizer_fallback"
+    assert record["fallback_reason"] == "meta_response:the user wants"
+    assert "The user wants" in record["rejected_summary_preview"]
+
+
+def test_short_llm_summary_records_rejection_reason(tmp_path):
+    feeds = [{"name": "A", "url": "x", "enrich": {"strategy": "rss_only"}}]
+    item = {
+        "source": "A",
+        "url": "https://x/1",
+        "summary": "teaser",
+        "_rss_body": "Full source sentence. " * 80,
+    }
+    model = {"provider": "fireworks", "model": "x"}
+    with patch("stages.enrich_articles.call_llm", return_value="Too short"):
+        out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path, feeds=feeds), model)
+    record = out["enrich_articles"]["records"][0]
+    assert out["raw_sources"]["rss"][0]["summary"].startswith("Full source sentence.")
+    assert record["status"] == "normalizer_fallback"
+    assert record["fallback_reason"] == "too_short"
+    assert record["rejected_summary_preview"] == "Too short"
 
 
 def test_bad_llm_summary_detection():

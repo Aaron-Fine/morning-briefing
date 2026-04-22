@@ -220,7 +220,7 @@ def _load_cached_assemble_outputs(context: dict, *, artifact_dir: Path, **_kwarg
 _STAGE_METADATA = {
     "collect": {
         "artifact_key": "raw_sources",
-        "context_keys": ["raw_sources"],
+        "context_keys": ["raw_sources", "collect_diagnostics"],
         "non_critical": False,
         "empty_output": None,
         "model_defaults": None,
@@ -319,7 +319,11 @@ _STAGE_METADATA = {
     },
     "cross_domain": {
         "artifact_key": "cross_domain_output",
-        "context_keys": ["cross_domain_plan", "cross_domain_output"],
+        "context_keys": [
+            "cross_domain_plan",
+            "cross_domain_output",
+            "validation_diagnostics",
+        ],
         "non_critical": False,
         "empty_output": None,
         "model_defaults": {},

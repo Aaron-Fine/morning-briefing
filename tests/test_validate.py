@@ -337,7 +337,21 @@ class TestValidateAtAGlance:
         known = {"https://known.com"}
         result = _validate_at_a_glance(items, known, {})
         assert result[0]["links"][0]["url"] == "https://known.com"
-        assert result[0]["links"][1]["url"] == ""
+        assert len(result[0]["links"]) == 1
+
+    def test_url_diagnostics_record_stripped_links(self):
+        items = [
+            {
+                "tag": "tech",
+                "headline": "Test",
+                "links": [{"url": "https://unknown.com", "label": "Unknown"}],
+            }
+        ]
+        diagnostics = []
+        result = _validate_at_a_glance(items, set(), {}, diagnostics)
+        assert result[0]["links"] == []
+        stripped = [issue for issue in diagnostics if issue["kind"] == "stripped_url"]
+        assert stripped[0]["url"] == "https://unknown.com"
 
 
 class TestValidateDeepDives:
@@ -388,7 +402,7 @@ class TestValidateDeepDives:
         known = {"https://known.com"}
         result = _validate_deep_dives([dive], known)
         assert result[0]["further_reading"][0]["url"] == "https://known.com"
-        assert result[0]["further_reading"][1]["url"] == ""
+        assert len(result[0]["further_reading"]) == 1
 
     def test_empty_list_returns_empty(self):
         assert _validate_deep_dives([], set()) == []
@@ -447,11 +461,36 @@ class TestValidateSeamItems:
             }
         ]
         result = _validate_seam_items(items, set(), "contested")
-        assert result[0]["links"][0]["url"] == ""
+        assert result[0]["links"] == []
 
 
 class TestValidateStageOutput:
     """Integration tests for the main validate_stage_output function."""
+
+    def test_validation_diagnostics_sidecar(self):
+        output = {
+            "at_a_glance": [
+                {
+                    "tag": "war",
+                    "headline": "H",
+                    "links": [{"url": "https://bad.com", "label": "Bad"}],
+                }
+            ]
+        }
+        source_data = {"rss": [{"url": "https://known.com", "title": "Known"}]}
+        result = validate_stage_output(
+            output,
+            source_data,
+            "cross_domain",
+            collect_diagnostics=True,
+        )
+        diagnostics = result["_validation_diagnostics"]
+        assert diagnostics["stage"] == "cross_domain"
+        stripped = [
+            issue for issue in diagnostics["issues"] if issue["kind"] == "stripped_url"
+        ]
+        assert stripped[0]["url"] == "https://bad.com"
+        assert result["at_a_glance"][0]["links"] == []
 
     def test_non_dict_input_returns_empty(self, caplog):
         with caplog.at_level(logging.ERROR):

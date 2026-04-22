@@ -126,7 +126,12 @@ def sanitize_source_content(text: str, max_chars: int | None = None) -> str:
 
     # 4. Truncate
     if len(text) > cap:
-        text = text[:cap].rstrip() + "…"
+        if cap <= 0:
+            text = ""
+        elif cap == 1:
+            text = "…"
+        else:
+            text = text[: cap - 1].rstrip() + "…"
 
     return text.strip()
 

@@ -79,7 +79,12 @@ def _strip_disallowed_html(html: str) -> str:
     return _HTML_TAG_RE.sub(replace_tag, html)
 
 
-def validate_urls(output_json: Any, known_urls: set[str]) -> Any:
+def validate_urls(
+    output_json: Any,
+    known_urls: set[str],
+    diagnostics: list[dict] | None = None,
+    path: str = "",
+) -> Any:
     """Strip URLs in output_json that are not in known_urls.
 
     Works recursively over dicts and lists. Returns cleaned structure.
@@ -91,18 +96,43 @@ def validate_urls(output_json: Any, known_urls: set[str]) -> Any:
             if k == "url" and isinstance(v, str):
                 if v and v not in known_urls:
                     log.warning(f"validate: stripped hallucinated URL: {v[:80]}")
+                    if diagnostics is not None:
+                        diagnostics.append(
+                            {
+                                "kind": "stripped_url",
+                                "path": f"{path}.{k}" if path else k,
+                                "url": v,
+                            }
+                        )
                     result[k] = ""
                 else:
                     result[k] = v
             else:
-                result[k] = validate_urls(v, known_urls)
+                child_path = f"{path}.{k}" if path else k
+                result[k] = validate_urls(v, known_urls, diagnostics, child_path)
         return result
     elif isinstance(output_json, list):
-        return [validate_urls(item, known_urls) for item in output_json]
+        return [
+            validate_urls(item, known_urls, diagnostics, f"{path}[{idx}]")
+            for idx, item in enumerate(output_json)
+        ]
     return output_json
 
 
-def _validate_at_a_glance(items: list, known_urls: set[str], source_data: dict) -> list:
+def _drop_empty_url_links(links: list) -> list:
+    return [
+        link
+        for link in links
+        if isinstance(link, dict) and str(link.get("url", "")).strip()
+    ]
+
+
+def _validate_at_a_glance(
+    items: list,
+    known_urls: set[str],
+    source_data: dict,
+    diagnostics: list[dict] | None = None,
+) -> list:
     """Validate and clean at_a_glance items."""
     if not isinstance(items, list):
         log.warning("validate: at_a_glance is not a list, resetting to []")
@@ -122,10 +152,25 @@ def _validate_at_a_glance(items: list, known_urls: set[str], source_data: dict) 
     total = len(items)
     for source, count in source_counts.items():
         if total > 0 and count / total > 0.4:
-            log.warning(
-                f"validate: source distribution anomaly — '{source}' accounts for "
-                f"{count}/{total} items ({count / total:.0%}). Possible editorial manipulation."
+            detail = (
+                f"'{source}' accounts for {count}/{total} items "
+                f"({count / total:.0%})"
             )
+            log.warning(
+                f"validate: source distribution anomaly — {detail}. "
+                "Possible editorial manipulation."
+            )
+            if diagnostics is not None:
+                diagnostics.append(
+                    {
+                        "kind": "source_distribution_anomaly",
+                        "source": source,
+                        "count": count,
+                        "total": total,
+                        "rate": count / total,
+                        "detail": detail,
+                    }
+                )
 
     # Collect source titles for verbatim echo detection
     source_titles = {
@@ -159,13 +204,24 @@ def _validate_at_a_glance(items: list, known_urls: set[str], source_data: dict) 
         entry["tag_label"] = item.get("tag_label") or VALID_TAG_LABELS.get(tag, tag.capitalize())
         entry["headline"] = headline
         entry["context"] = str(item.get("context", ""))
-        entry["links"] = validate_urls(item.get("links") or [], known_urls)
+        entry["links"] = _drop_empty_url_links(
+            validate_urls(
+                item.get("links") or [],
+                known_urls,
+                diagnostics,
+                f"at_a_glance[{i}].links",
+            )
+        )
         cleaned.append(entry)
 
     return cleaned
 
 
-def _validate_deep_dives(dives: list, known_urls: set[str]) -> list:
+def _validate_deep_dives(
+    dives: list,
+    known_urls: set[str],
+    diagnostics: list[dict] | None = None,
+) -> list:
     """Validate and clean deep_dives items. Sanitizes HTML in body field."""
     if not isinstance(dives, list):
         return []
@@ -185,14 +241,24 @@ def _validate_deep_dives(dives: list, known_urls: set[str]) -> list:
         entry["headline"] = str(dive.get("headline", ""))
         entry["body"] = body_clean
         entry["why_it_matters"] = str(dive.get("why_it_matters", ""))
-        entry["further_reading"] = validate_urls(
-            dive.get("further_reading", []), known_urls
+        entry["further_reading"] = _drop_empty_url_links(
+            validate_urls(
+                dive.get("further_reading", []),
+                known_urls,
+                diagnostics,
+                f"deep_dives[{i}].further_reading",
+            )
         )
         cleaned.append(entry)
     return cleaned
 
 
-def _validate_seam_items(items: list, known_urls: set[str], item_type: str) -> list:
+def _validate_seam_items(
+    items: list,
+    known_urls: set[str],
+    item_type: str,
+    diagnostics: list[dict] | None = None,
+) -> list:
     """Validate contested_narratives or coverage_gaps items."""
     if not isinstance(items, list):
         return []
@@ -203,7 +269,14 @@ def _validate_seam_items(items: list, known_urls: set[str], item_type: str) -> l
         entry = {
             "topic": str(item.get("topic", "")),
             "description": str(item.get("description", "")),
-            "links": validate_urls(item.get("links", []), known_urls),
+            "links": _drop_empty_url_links(
+                validate_urls(
+                    item.get("links", []),
+                    known_urls,
+                    diagnostics,
+                    f"{item_type}.links",
+                )
+            ),
         }
         if item_type == "contested":
             entry["sources_a"] = str(item.get("sources_a", ""))
@@ -215,7 +288,13 @@ def _validate_seam_items(items: list, known_urls: set[str], item_type: str) -> l
     return cleaned
 
 
-def validate_stage_output(output: dict, source_data: dict, stage_name: str) -> dict:
+def validate_stage_output(
+    output: dict,
+    source_data: dict,
+    stage_name: str,
+    *,
+    collect_diagnostics: bool = False,
+) -> dict:
     """Validate and clean LLM stage output.
 
     Args:
@@ -235,10 +314,16 @@ def validate_stage_output(output: dict, source_data: dict, stage_name: str) -> d
 
     known_urls = collect_known_urls(source_data)
     result = dict(output)
+    diagnostics: list[dict] = []
 
     # --- At a Glance ---
     if "at_a_glance" in result:
-        items = _validate_at_a_glance(result["at_a_glance"], known_urls, source_data)
+        items = _validate_at_a_glance(
+            result["at_a_glance"],
+            known_urls,
+            source_data,
+            diagnostics if collect_diagnostics else None,
+        )
         # Sanity-check bounds — LLM output outside this range is suspicious
         # regardless of the configured target. Not enforced, only logged.
         min_items = 3
@@ -255,7 +340,11 @@ def validate_stage_output(output: dict, source_data: dict, stage_name: str) -> d
 
     # --- Deep Dives ---
     if "deep_dives" in result:
-        dives = _validate_deep_dives(result["deep_dives"], known_urls)
+        dives = _validate_deep_dives(
+            result["deep_dives"],
+            known_urls,
+            diagnostics if collect_diagnostics else None,
+        )
         if not dives:
             log.warning(f"validate [{stage_name}]: no valid deep dives in output")
         result["deep_dives"] = dives
@@ -263,11 +352,17 @@ def validate_stage_output(output: dict, source_data: dict, stage_name: str) -> d
     # --- Seams ---
     if "contested_narratives" in result:
         result["contested_narratives"] = _validate_seam_items(
-            result["contested_narratives"], known_urls, "contested"
+            result["contested_narratives"],
+            known_urls,
+            "contested",
+            diagnostics if collect_diagnostics else None,
         )
     if "coverage_gaps" in result:
         result["coverage_gaps"] = _validate_seam_items(
-            result["coverage_gaps"], known_urls, "gap"
+            result["coverage_gaps"],
+            known_urls,
+            "gap",
+            diagnostics if collect_diagnostics else None,
         )
 
     # --- Local Items ---
@@ -276,7 +371,12 @@ def validate_stage_output(output: dict, source_data: dict, stage_name: str) -> d
         if not isinstance(items, list):
             result["local_items"] = []
         else:
-            result["local_items"] = validate_urls(items, known_urls)
+            result["local_items"] = validate_urls(
+                items,
+                known_urls,
+                diagnostics if collect_diagnostics else None,
+                "local_items",
+            )
 
     # --- URL validation on any remaining fields ---
     for field in (
@@ -286,6 +386,17 @@ def validate_stage_output(output: dict, source_data: dict, stage_name: str) -> d
         "spiritual_reflection",
     ):
         if field in result:
-            result[field] = validate_urls(result[field], known_urls)
+            result[field] = validate_urls(
+                result[field],
+                known_urls,
+                diagnostics if collect_diagnostics else None,
+                field,
+            )
 
+    if collect_diagnostics:
+        result["_validation_diagnostics"] = {
+            "stage": stage_name,
+            "issue_count": len(diagnostics),
+            "issues": diagnostics,
+        }
     return result
