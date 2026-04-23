@@ -37,6 +37,13 @@ def _to_bool(value: Any) -> bool:
     return bool(value)
 
 
+def _to_str_list(value: Any, path: str, issues: list[ContractIssue]) -> list[str]:
+    if not isinstance(value, list):
+        issues.append(ContractIssue(path, "value is not a list"))
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
 def _extra_fields(raw: dict, known: set[str]) -> dict:
     return {key: value for key, value in raw.items() if key not in known}
 
@@ -567,3 +574,307 @@ def normalize_seam_annotations_artifact(
     return {"per_item": per_item, "cross_domain": cross_domain}, [
         issue.to_dict() for issue in issues
     ]
+
+
+def _normalize_plan_entries(
+    raw: Any,
+    path: str,
+    issues: list[ContractIssue],
+    *,
+    limit: int | None = None,
+) -> list[dict]:
+    if not isinstance(raw, list):
+        issues.append(ContractIssue(path, "value is not a list"))
+        return []
+
+    entries = []
+    for idx, item in enumerate(raw):
+        item_path = f"{path}[{idx}]"
+        if not isinstance(item, dict):
+            issues.append(ContractIssue(item_path, "plan entry is not an object"))
+            continue
+        entries.append(dict(item))
+        if limit is not None and len(entries) >= limit:
+            break
+    return entries
+
+
+def normalize_cross_domain_plan_artifact(
+    raw: Any,
+    *,
+    deep_dive_count: int = 2,
+    worth_reading_count: int = 3,
+    connection_count: int = 3,
+) -> tuple[dict, list[dict]]:
+    """Normalize a persisted or freshly generated cross-domain plan artifact."""
+    issues: list[ContractIssue] = []
+    if not isinstance(raw, dict):
+        issues.append(ContractIssue("cross_domain_plan", "artifact is not an object"))
+        raw = {}
+
+    planning_scope = raw.get("planning_scope")
+    if not isinstance(planning_scope, dict):
+        if planning_scope is not None:
+            issues.append(
+                ContractIssue(
+                    "cross_domain_plan.planning_scope",
+                    "planning_scope is not an object",
+                )
+            )
+        planning_scope = {
+            "deep_dive_count": deep_dive_count,
+            "worth_reading_count": worth_reading_count,
+            "connection_count": connection_count,
+        }
+
+    known = {
+        "schema_version",
+        "cross_domain_connections",
+        "deep_dives",
+        "worth_reading",
+        "rejected_alternatives",
+        "planning_scope",
+    }
+    normalized = {
+        **_extra_fields(raw, known),
+        "schema_version": 1,
+        "cross_domain_connections": _normalize_plan_entries(
+            raw.get("cross_domain_connections", []),
+            "cross_domain_plan.cross_domain_connections",
+            issues,
+            limit=connection_count,
+        ),
+        "deep_dives": _normalize_plan_entries(
+            raw.get("deep_dives", []),
+            "cross_domain_plan.deep_dives",
+            issues,
+            limit=deep_dive_count,
+        ),
+        "worth_reading": _normalize_plan_entries(
+            raw.get("worth_reading", []),
+            "cross_domain_plan.worth_reading",
+            issues,
+            limit=worth_reading_count,
+        ),
+        "rejected_alternatives": _normalize_plan_entries(
+            raw.get("rejected_alternatives", []),
+            "cross_domain_plan.rejected_alternatives",
+            issues,
+        ),
+        "planning_scope": planning_scope,
+    }
+    return normalized, [issue.to_dict() for issue in issues]
+
+
+def _normalize_links(raw: Any, path: str, issues: list[ContractIssue]) -> list[dict]:
+    if not isinstance(raw, list):
+        issues.append(ContractIssue(path, "links is not a list"))
+        return []
+    links = []
+    for idx, link_raw in enumerate(raw):
+        link = SourceLink.from_raw(link_raw, f"{path}[{idx}]", issues)
+        if link is not None:
+            links.append(link.to_dict())
+    return links
+
+
+def _normalize_at_a_glance_entries(
+    raw: Any, path: str, issues: list[ContractIssue]
+) -> list[dict]:
+    if not isinstance(raw, list):
+        issues.append(ContractIssue(path, "at_a_glance is not a list"))
+        return []
+
+    entries = []
+    for idx, item in enumerate(raw):
+        item_path = f"{path}[{idx}]"
+        if not isinstance(item, dict):
+            issues.append(ContractIssue(item_path, "at_a_glance entry is not an object"))
+            continue
+        hooks_raw = item.get("connection_hooks", [])
+        if not isinstance(hooks_raw, list):
+            issues.append(
+                ContractIssue(
+                    f"{item_path}.connection_hooks", "connection_hooks is not a list"
+                )
+            )
+            hooks_raw = []
+        hooks = []
+        for hook_idx, hook_raw in enumerate(hooks_raw):
+            hook = ConnectionHook.from_raw(
+                hook_raw, f"{item_path}.connection_hooks[{hook_idx}]", issues
+            )
+            if hook is not None:
+                hooks.append(hook.to_dict())
+
+        known = {
+            "item_id",
+            "tag",
+            "tag_label",
+            "headline",
+            "context",
+            "facts",
+            "analysis",
+            "source_depth",
+            "cross_domain_note",
+            "connection_hooks",
+            "links",
+        }
+        entries.append(
+            {
+                **_extra_fields(item, known),
+                "item_id": _to_str(item.get("item_id")),
+                "tag": _to_str(item.get("tag")),
+                "tag_label": _to_str(item.get("tag_label")),
+                "headline": _to_str(item.get("headline")),
+                "context": _to_str(item.get("context")),
+                "facts": _to_str(item.get("facts")),
+                "analysis": _to_str(item.get("analysis")),
+                "source_depth": _to_str(item.get("source_depth")),
+                "cross_domain_note": _to_str(item.get("cross_domain_note")),
+                "connection_hooks": hooks,
+                "links": _normalize_links(
+                    item.get("links", []), f"{item_path}.links", issues
+                ),
+            }
+        )
+    return entries
+
+
+def _normalize_deep_dive_entries(
+    raw: Any, path: str, issues: list[ContractIssue]
+) -> list[dict]:
+    if not isinstance(raw, list):
+        issues.append(ContractIssue(path, "deep_dives is not a list"))
+        return []
+
+    entries = []
+    for idx, dive in enumerate(raw):
+        dive_path = f"{path}[{idx}]"
+        if not isinstance(dive, dict):
+            issues.append(ContractIssue(dive_path, "deep dive entry is not an object"))
+            continue
+        known = {
+            "headline",
+            "body",
+            "why_it_matters",
+            "further_reading",
+            "source_depth",
+            "domains_bridged",
+        }
+        entries.append(
+            {
+                **_extra_fields(dive, known),
+                "headline": _to_str(dive.get("headline")),
+                "body": _to_str(dive.get("body")),
+                "why_it_matters": _to_str(dive.get("why_it_matters")),
+                "further_reading": _normalize_links(
+                    dive.get("further_reading", []),
+                    f"{dive_path}.further_reading",
+                    issues,
+                ),
+                "source_depth": _to_str(dive.get("source_depth")),
+                "domains_bridged": _to_str_list(
+                    dive.get("domains_bridged", []),
+                    f"{dive_path}.domains_bridged",
+                    issues,
+                ),
+            }
+        )
+    return entries
+
+
+def _normalize_cross_domain_connection_entries(
+    raw: Any, path: str, issues: list[ContractIssue]
+) -> list[dict]:
+    if not isinstance(raw, list):
+        issues.append(ContractIssue(path, "cross_domain_connections is not a list"))
+        return []
+
+    entries = []
+    for idx, item in enumerate(raw):
+        item_path = f"{path}[{idx}]"
+        if not isinstance(item, dict):
+            issues.append(
+                ContractIssue(item_path, "cross-domain connection is not an object")
+            )
+            continue
+        known = {"title", "summary", "domains", "entities", "why_it_matters"}
+        entries.append(
+            {
+                **_extra_fields(item, known),
+                "title": _to_str(item.get("title")),
+                "summary": _to_str(item.get("summary")),
+                "domains": _to_str_list(
+                    item.get("domains", []), f"{item_path}.domains", issues
+                ),
+                "entities": _to_str_list(
+                    item.get("entities", []), f"{item_path}.entities", issues
+                ),
+                "why_it_matters": _to_str(item.get("why_it_matters")),
+            }
+        )
+    return entries
+
+
+def _normalize_worth_reading_entries(
+    raw: Any, path: str, issues: list[ContractIssue]
+) -> list[dict]:
+    if not isinstance(raw, list):
+        issues.append(ContractIssue(path, "worth_reading is not a list"))
+        return []
+
+    entries = []
+    for idx, item in enumerate(raw):
+        item_path = f"{path}[{idx}]"
+        if not isinstance(item, dict):
+            issues.append(ContractIssue(item_path, "worth_reading entry is not an object"))
+            continue
+        known = {"title", "url", "source", "description", "read_time"}
+        entries.append(
+            {
+                **_extra_fields(item, known),
+                "title": _to_str(item.get("title")),
+                "url": _to_str(item.get("url")),
+                "source": _to_str(item.get("source")),
+                "description": _to_str(item.get("description")),
+                "read_time": _to_str(item.get("read_time")),
+            }
+        )
+    return entries
+
+
+def normalize_cross_domain_output_artifact(raw: Any) -> tuple[dict, list[dict]]:
+    """Normalize a cross-domain execute output before downstream validation."""
+    issues: list[ContractIssue] = []
+    if not isinstance(raw, dict):
+        issues.append(ContractIssue("cross_domain_output", "artifact is not an object"))
+        raw = {}
+
+    known = {
+        "at_a_glance",
+        "deep_dives",
+        "cross_domain_connections",
+        "market_context",
+        "worth_reading",
+    }
+    normalized = {
+        **_extra_fields(raw, known),
+        "at_a_glance": _normalize_at_a_glance_entries(
+            raw.get("at_a_glance", []), "cross_domain_output.at_a_glance", issues
+        ),
+        "deep_dives": _normalize_deep_dive_entries(
+            raw.get("deep_dives", []), "cross_domain_output.deep_dives", issues
+        ),
+        "cross_domain_connections": _normalize_cross_domain_connection_entries(
+            raw.get("cross_domain_connections", []),
+            "cross_domain_output.cross_domain_connections",
+            issues,
+        ),
+        "worth_reading": _normalize_worth_reading_entries(
+            raw.get("worth_reading", []), "cross_domain_output.worth_reading", issues
+        ),
+    }
+    if "market_context" in raw:
+        normalized["market_context"] = _to_str(raw.get("market_context"))
+    return normalized, [issue.to_dict() for issue in issues]

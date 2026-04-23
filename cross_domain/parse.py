@@ -191,12 +191,14 @@ def _fallback_outputs(
     *,
     reason: str,
     message: str = "",
+    contract_issues: list[dict] | None = None,
 ) -> dict:
     """Return the full cross-domain artifact contract for fallback paths."""
     return {
         "cross_domain_plan": cross_domain_plan or _empty_cross_domain_plan(),
         "cross_domain_output": _empty_output(domain_analysis),
         "validation_diagnostics": _fallback_validation_diagnostics(reason, message),
+        "cross_domain_contract_issues": contract_issues or [],
     }
 
 

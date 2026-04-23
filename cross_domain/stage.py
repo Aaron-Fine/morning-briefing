@@ -2,6 +2,11 @@
 
 import logging
 
+from morning_digest.contracts import (
+    normalize_cross_domain_output_artifact,
+    normalize_cross_domain_plan_artifact,
+    normalize_domain_analysis,
+)
 from morning_digest.llm import call_llm
 from morning_digest.validate import validate_stage_output
 
@@ -63,7 +68,9 @@ def run(
     context: dict, config: dict, model_config: dict | None = None, **kwargs
 ) -> dict:
     """Run cross-domain synthesis and return the editorial product."""
-    domain_analysis = context.get("domain_analysis", {})
+    domain_analysis, contract_issues = normalize_domain_analysis(
+        context.get("domain_analysis", {})
+    )
     seam_data = context.get("seam_data", {})
     raw_sources = context.get("raw_sources", {})
 
@@ -82,7 +89,11 @@ def run(
     )
     if not has_items:
         log.warning("cross_domain: no domain analysis items — returning passthrough")
-        return _fallback_outputs(domain_analysis, reason="no_domain_analysis_items")
+        return _fallback_outputs(
+            domain_analysis,
+            reason="no_domain_analysis_items",
+            contract_issues=contract_issues,
+        )
 
     cross_domain_plan = context.get("cross_domain_plan")
     try:
@@ -101,12 +112,21 @@ def run(
                 plan_config,
                 "plan",
             )
-            cross_domain_plan = _normalize_cross_domain_plan(
-                cross_domain_plan,
-                deep_dive_count=deep_dive_count,
-                worth_reading_count=worth_reading_count,
-                connection_count=connection_count,
-            )
+        cross_domain_plan, plan_issues = normalize_cross_domain_plan_artifact(
+            cross_domain_plan,
+            deep_dive_count=deep_dive_count,
+            worth_reading_count=worth_reading_count,
+            connection_count=connection_count,
+        )
+        contract_issues.extend(
+            {"artifact": "cross_domain_plan", **issue} for issue in plan_issues
+        )
+        cross_domain_plan = _normalize_cross_domain_plan(
+            cross_domain_plan,
+            deep_dive_count=deep_dive_count,
+            worth_reading_count=worth_reading_count,
+            connection_count=connection_count,
+        )
 
         log.info("Stage: cross_domain — running Turn 2 execution...")
         result = _call_turn_json(
@@ -128,6 +148,7 @@ def run(
             cross_domain_plan if isinstance(cross_domain_plan, dict) else None,
             reason="llm_call_failed",
             message=str(e),
+            contract_issues=contract_issues,
         )
 
     if not isinstance(result, dict):
@@ -136,8 +157,13 @@ def run(
             domain_analysis,
             cross_domain_plan,
             reason="non_dict_llm_output",
+            contract_issues=contract_issues,
         )
 
+    result, output_issues = normalize_cross_domain_output_artifact(result)
+    contract_issues.extend(
+        {"artifact": "cross_domain_output", **issue} for issue in output_issues
+    )
     result = _validated_output(result, domain_analysis, raw_sources, config)
     result = validate_stage_output(
         result,
@@ -163,4 +189,5 @@ def run(
         "cross_domain_plan": cross_domain_plan,
         "cross_domain_output": result,
         "validation_diagnostics": validation_diagnostics,
+        "cross_domain_contract_issues": contract_issues,
     }

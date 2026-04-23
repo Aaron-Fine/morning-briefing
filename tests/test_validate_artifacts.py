@@ -3,6 +3,7 @@
 import json
 
 from scripts.validate_artifacts import validate_domain_analysis
+from scripts.validate_artifacts import validate_optional_cross_domain_artifacts
 from scripts.validate_artifacts import validate_optional_seam_artifacts
 
 
@@ -33,5 +34,21 @@ def test_validate_optional_seam_artifacts_reports_shape_issue(tmp_path):
             "artifact": "seam_candidates",
             "path": "seam_candidates.candidates[0].possible_evidence",
             "message": "possible_evidence is not a list",
+        }
+    ]
+
+
+def test_validate_optional_cross_domain_artifacts_reports_shape_issue(tmp_path):
+    (tmp_path / "cross_domain_output.json").write_text(
+        json.dumps({"at_a_glance": [{"headline": "Item", "links": "bad"}]})
+    )
+
+    issues = validate_optional_cross_domain_artifacts(tmp_path)
+
+    assert issues == [
+        {
+            "artifact": "cross_domain_output",
+            "path": "cross_domain_output.at_a_glance[0].links",
+            "message": "links is not a list",
         }
     ]

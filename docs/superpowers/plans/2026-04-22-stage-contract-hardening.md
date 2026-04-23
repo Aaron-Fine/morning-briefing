@@ -77,11 +77,18 @@ Verification: focused Dockerized Phase 2 suite passed (`34 passed`).
 
 ### Phase 3 — Cross-Domain Boundary
 
-- Add contracts for `CrossDomainPlan` and `CrossDomainOutput`.
-- Validate plan output before execution.
-- Validate final cross-domain output before URL/editorial validation.
-- Cover `at_a_glance`, `deep_dives`, `worth_reading`, and
+- Implemented `CrossDomainPlan` and `CrossDomainOutput` normalizers in
+  `morning_digest/contracts.py`.
+- `cross_domain` now normalizes fresh and reused plans before execution.
+- Execute output is normalized before URL/editorial validation.
+- `cross_domain_contract_issues` records non-fatal drift from plan, output, or
+  boundary `domain_analysis` input.
+- `scripts/validate_artifacts.py` now validates optional
+  `cross_domain_plan.json` and `cross_domain_output.json`.
+- Covered `at_a_glance`, `deep_dives`, `worth_reading`, and
   `cross_domain_connections`.
+
+Verification: focused Dockerized Phase 3 suite passed (`46 passed`).
 
 ### Phase 4 — Assemble Boundary
 

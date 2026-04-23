@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 
 from morning_digest.contracts import (
+    normalize_cross_domain_output_artifact,
+    normalize_cross_domain_plan_artifact,
     normalize_domain_analysis,
     normalize_seam_annotations_artifact,
     normalize_seam_candidates_artifact,
@@ -63,6 +65,28 @@ def validate_optional_seam_artifacts(path: Path, domain_analysis: dict) -> list[
     return issues
 
 
+def validate_optional_cross_domain_artifacts(path: Path) -> list[dict]:
+    if not path.is_dir():
+        return []
+
+    issues: list[dict] = []
+    plan_path = path / "cross_domain_plan.json"
+    if plan_path.exists():
+        _, plan_issues = normalize_cross_domain_plan_artifact(_load_json(plan_path))
+        issues.extend({"artifact": "cross_domain_plan", **issue} for issue in plan_issues)
+
+    output_path = path / "cross_domain_output.json"
+    if output_path.exists():
+        _, output_issues = normalize_cross_domain_output_artifact(
+            _load_json(output_path)
+        )
+        issues.extend(
+            {"artifact": "cross_domain_output", **issue} for issue in output_issues
+        )
+
+    return issues
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Validate saved Morning Digest pipeline artifacts."
@@ -82,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
             _load_json(domain_analysis_path)
         )
         issues.extend(validate_optional_seam_artifacts(args.path, domain_analysis))
+        issues.extend(validate_optional_cross_domain_artifacts(args.path))
     if not issues:
         print("artifacts: OK")
         return 0

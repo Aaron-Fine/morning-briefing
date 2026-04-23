@@ -339,6 +339,7 @@ _STAGE_METADATA = {
             "cross_domain_plan",
             "cross_domain_output",
             "validation_diagnostics",
+            "cross_domain_contract_issues",
         ],
         "non_critical": False,
         "empty_output": None,

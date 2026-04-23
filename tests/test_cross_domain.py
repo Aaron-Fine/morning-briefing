@@ -370,6 +370,67 @@ class TestCrossDomainRun:
         )
 
     @patch("stages.cross_domain.call_llm")
+    def test_contract_issues_are_returned_as_sidecar(self, mock_llm):
+        mock_llm.side_effect = [
+            {
+                "schema_version": 1,
+                "cross_domain_connections": "bad",
+                "deep_dives": ["bad"],
+                "worth_reading": [],
+                "rejected_alternatives": [],
+            },
+            {
+                "at_a_glance": [{"headline": "Fallback", "links": "bad"}],
+                "deep_dives": "bad",
+                "cross_domain_connections": [],
+                "worth_reading": [],
+            },
+        ]
+        context = {
+            "domain_analysis": {
+                "geopolitics": {
+                    "items": [
+                        {
+                            "headline": "Fallback",
+                            "facts": "Facts",
+                            "analysis": "Analysis",
+                            "links": [],
+                        }
+                    ]
+                }
+            },
+            "seam_data": {},
+            "raw_sources": {"rss": []},
+        }
+        config = {"llm": {"provider": "fireworks"}}
+
+        result = run(context, config)
+
+        assert result["cross_domain_output"]["at_a_glance"][0]["headline"] == "Fallback"
+        assert result["cross_domain_contract_issues"] == [
+            {
+                "artifact": "cross_domain_plan",
+                "path": "cross_domain_plan.cross_domain_connections",
+                "message": "value is not a list",
+            },
+            {
+                "artifact": "cross_domain_plan",
+                "path": "cross_domain_plan.deep_dives[0]",
+                "message": "plan entry is not an object",
+            },
+            {
+                "artifact": "cross_domain_output",
+                "path": "cross_domain_output.at_a_glance[0].links",
+                "message": "links is not a list",
+            },
+            {
+                "artifact": "cross_domain_output",
+                "path": "cross_domain_output.deep_dives",
+                "message": "deep_dives is not a list",
+            },
+        ]
+
+    @patch("stages.cross_domain.call_llm")
     def test_at_a_glance_cap_enforced(self, mock_llm):
         items = []
         for i in range(10):
