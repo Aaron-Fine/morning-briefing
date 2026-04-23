@@ -103,10 +103,18 @@ Verification: focused Dockerized Phase 4 suite passed (`102 passed`).
 
 ### Phase 5 — Tightening
 
-- Review historical artifacts with the validation script.
-- Decide which extra fields should be preserved and which should be rejected.
-- Consider replacing the dataclass normalizers with Pydantic if validation
-  complexity grows.
+- Historical dated artifact directories from 2026-04-04 through 2026-04-22 were
+  reviewed with `scripts/validate_artifacts.py`; all validated cleanly.
+- Fixed the validator CLI so direct `python scripts/validate_artifacts.py ...`
+  usage works from the repo root.
+- Extra fields remain preserved for now so existing artifacts and downstream
+  consumers keep their current shape while required nested collections are
+  normalized.
+- Pydantic remains deferred until schema churn slows or the dependency becomes
+  justified by validation complexity.
+
+Verification: Dockerized validator/lint suite passed after the CLI fix
+(`4 passed`). Full Dockerized suite passed after Phase 4 (`924 passed`).
 
 ## Acceptance Criteria For Phase 1
 

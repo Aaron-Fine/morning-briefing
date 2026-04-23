@@ -28,6 +28,7 @@ Last updated: 2026-04-22
   - Status 2026-04-22: Phase 2 implemented for `seams` boundary normalization plus `seam_contract_issues`; focused Dockerized suite passed (`34 passed`). Remaining scope: cross-domain and assemble boundary contracts.
   - Status 2026-04-22: Phase 3 implemented for cross-domain plan/output boundary normalization plus `cross_domain_contract_issues`; focused Dockerized suite passed (`46 passed`). Remaining scope: assemble boundary contracts and historical artifact review.
   - Status 2026-04-22: Phase 4 implemented for assemble render-boundary normalization plus `assemble_contract_issues`; focused Dockerized suite passed (`102 passed`). Remaining scope: historical artifact review and follow-up tightening decisions.
+  - Status 2026-04-22: Phase 5 historical artifact review completed; dated artifacts from 2026-04-04 through 2026-04-22 validated cleanly. Full Dockerized suite passed (`924 passed`); validator/lint focused suite passed after CLI fix (`4 passed`). Pydantic remains deferred until schema churn slows.
 
 ### High — Performance
 
