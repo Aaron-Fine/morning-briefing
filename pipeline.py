@@ -48,18 +48,39 @@ _ARTIFACTS_BASE = _OUTPUT_DIR / "artifacts"
 # ---------------------------------------------------------------------------
 
 
-def _setup_log_file() -> None:
+def _setup_logging() -> None:
     _OUTPUT_DIR.mkdir(exist_ok=True)
-    handler = logging.handlers.TimedRotatingFileHandler(
-        _OUTPUT_DIR / "digest.log",
-        when="midnight",
-        backupCount=30,
-        encoding="utf-8",
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     )
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+    log_path = (_OUTPUT_DIR / "digest.log").resolve()
+    has_file_handler = any(
+        isinstance(handler, logging.FileHandler)
+        and Path(getattr(handler, "baseFilename", "")).resolve() == log_path
+        for handler in root.handlers
     )
-    logging.getLogger().addHandler(handler)
+    if not has_file_handler:
+        file_handler = logging.handlers.TimedRotatingFileHandler(
+            log_path,
+            when="midnight",
+            backupCount=30,
+            encoding="utf-8",
+        )
+        file_handler.setFormatter(formatter)
+        root.addHandler(file_handler)
+
+    has_console_handler = any(
+        isinstance(handler, logging.StreamHandler)
+        and not isinstance(handler, logging.FileHandler)
+        for handler in root.handlers
+    )
+    if not has_console_handler:
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        root.addHandler(console_handler)
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +239,50 @@ def _load_cached_enrich_articles_outputs(
     enrich_articles = _load_artifact(artifact_dir, "enrich_articles")
     if enrich_articles is not None:
         context["enrich_articles"] = enrich_articles
+
+
+def _log_stage_observability(stage_name: str, outputs: dict) -> None:
+    """Promote diagnostic sidecars into the run log."""
+    for key, value in outputs.items():
+        if key.endswith("_contract_issues") and isinstance(value, list) and value:
+            first = value[0]
+            log.warning(
+                f"Stage '{stage_name}' emitted {len(value)} contract issue(s) in "
+                f"{key}; first={first.get('path', '?')}: {first.get('message', '')}"
+            )
+
+    failures = outputs.get("domain_analysis_failures")
+    if isinstance(failures, list) and failures:
+        domains = ", ".join(str(item.get("domain", "?")) for item in failures[:5])
+        log.warning(
+            f"Stage '{stage_name}' reported {len(failures)} domain analysis "
+            f"failure(s): {domains}"
+        )
+
+    diagnostics = outputs.get("validation_diagnostics")
+    if isinstance(diagnostics, dict) and diagnostics.get("issue_count", 0):
+        first_issue = (diagnostics.get("issues") or [{}])[0]
+        log.warning(
+            f"Stage '{stage_name}' validation reported "
+            f"{diagnostics['issue_count']} issue(s); first={first_issue}"
+        )
+
+    anomaly_report = outputs.get("anomaly_report")
+    if isinstance(anomaly_report, dict) and anomaly_report.get("anomaly_count", 0):
+        log.warning(
+            f"Stage '{stage_name}' found {anomaly_report['anomaly_count']} "
+            f"anomaly warning(s) across {anomaly_report.get('checks_run', 0)} checks"
+        )
+
+    coverage_gaps = outputs.get("coverage_gaps")
+    if isinstance(coverage_gaps, dict):
+        gap_count = len(coverage_gaps.get("gaps", []) or [])
+        pattern_count = len(coverage_gaps.get("recurring_patterns", []) or [])
+        if gap_count or pattern_count:
+            log.info(
+                f"Stage '{stage_name}' coverage diagnostics: {gap_count} gap(s), "
+                f"{pattern_count} recurring pattern(s)"
+            )
 
 
 _STAGE_METADATA = {
@@ -536,11 +601,7 @@ def run_pipeline(
         lookback_hours: Override YouTube lookback window.
         stage_from:    If set, load prior artifacts and re-run from this stage onwards.
     """
-    _setup_log_file()
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    )
+    _setup_logging()
     log.info("=== Morning Digest pipeline starting ===")
 
     config = load_config()
@@ -683,6 +744,7 @@ def run_pipeline(
 
         # Merge outputs into context
         context.update(outputs)
+        _log_stage_observability(stage_name, outputs)
 
         # Persist each output artifact
         for key, value in outputs.items():

@@ -144,13 +144,23 @@ def _normalize_result(result: dict | None, date: str) -> dict:
     if not isinstance(result, dict):
         return _empty_result(date)
 
+    gaps = []
+    dropped_blank = 0
+    for item in result.get("gaps", []) or []:
+        normalized = _normalize_gap_item(item)
+        if not normalized["topic"] and not normalized["description"]:
+            dropped_blank += 1
+            continue
+        gaps.append(normalized)
+        if len(gaps) >= 5:
+            break
+    if dropped_blank:
+        log.warning(f"coverage_gaps: dropped {dropped_blank} blank gap entries")
+
     return {
         "schema_version": 1,
         "date": str(result.get("date", date)).strip() or date,
-        "gaps": [
-            _normalize_gap_item(item)
-            for item in list(result.get("gaps", []) or [])[:5]
-        ],
+        "gaps": gaps,
         "recurring_patterns": [
             str(item).strip()
             for item in list(result.get("recurring_patterns", []) or [])

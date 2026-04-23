@@ -56,6 +56,15 @@ Last updated: 2026-04-22
 
 ## Changelog
 
+### 2026-04-22 — Dry-run observability pass
+
+- **Ran a full Docker dry run.** The run completed successfully and wrote artifacts under `output/artifacts/2026-04-22`; artifact validation passed.
+- **Promoted diagnostic sidecars into pipeline logs.** Contract issues, validation diagnostics, anomaly reports, domain-analysis failures, and coverage-gap counts now emit run-log summaries instead of requiring manual artifact inspection.
+- **Restored console progress logging.** Pipeline logging now adds both file and console handlers explicitly, so long dry runs show stage progress instead of appearing idle on stdout/stderr.
+- **Dropped blank coverage-gap entries.** Coverage gap normalization now filters empty LLM gap objects and logs when it drops them.
+- **Observed dry-run warnings:** one seam contract issue for an unknown linked item ID, six anomaly warnings around category skew/source absence, and recurring coverage gaps around maritime insurance, uranium/nuclear supply chains, and North Korea coverage.
+- **Tests:** Focused Dockerized observability suite passed (`50 passed`).
+
 ### 2026-04-22 — Open TODO sweep
 
 - **Closed stale docs and contract drift items.** `assemble.py` no longer documents the removed Phase 0 `synthesis_output` path, README desk guidance now matches `_DOMAIN_CONFIGS` plus the shared prompt, and tag contract tests now cover `_TAG_KEYWORDS` plus the prompt allowed-tag list.

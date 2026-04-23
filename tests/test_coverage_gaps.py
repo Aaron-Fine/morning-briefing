@@ -117,6 +117,26 @@ class TestNormalizeResult:
             }
         ]
 
+    def test_drops_blank_gap_items(self):
+        result = _normalize_result(
+            {
+                "gaps": [
+                    {"topic": "", "description": ""},
+                    {"topic": "Gap", "description": "Desc"},
+                ]
+            },
+            "2026-04-18",
+        )
+        assert result["gaps"] == [
+            {
+                "topic": "Gap",
+                "description": "Desc",
+                "significance": "low",
+                "hypothesis": "",
+                "suggested_source_category": "",
+            }
+        ]
+
 
 class TestHistory:
     def test_append_and_load(self, tmp_path):

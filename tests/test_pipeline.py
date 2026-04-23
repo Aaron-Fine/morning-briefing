@@ -19,6 +19,7 @@ from pipeline import (
     _load_cached_stage_outputs,
     _run_stage_after_hook,
     _prepare_cross_domain_context,
+    _log_stage_observability,
     _save_artifact,
     _load_artifact,
     _prune_artifacts,
@@ -45,6 +46,31 @@ class TestStageMetadata:
         assert meta["artifact_key"] == "enrich_articles"
         assert meta["context_keys"] == ["enriched_sources", "enrich_articles"]
         assert "raw_sources" not in meta["context_keys"]
+
+
+class TestStageObservability:
+    def test_contract_issues_are_logged(self, caplog):
+        with caplog.at_level("WARNING", logger="pipeline"):
+            _log_stage_observability(
+                "seams",
+                {
+                    "seam_contract_issues": [
+                        {"path": "seam_candidates[0]", "message": "bad shape"}
+                    ]
+                },
+            )
+
+        assert "emitted 1 contract issue(s)" in caplog.text
+        assert "seam_candidates[0]: bad shape" in caplog.text
+
+    def test_anomaly_report_is_logged(self, caplog):
+        with caplog.at_level("WARNING", logger="pipeline"):
+            _log_stage_observability(
+                "anomaly",
+                {"anomaly_report": {"anomaly_count": 2, "checks_run": 5}},
+            )
+
+        assert "found 2 anomaly warning(s) across 5 checks" in caplog.text
 
 
 class TestStageArtifactKey:
@@ -281,7 +307,7 @@ class TestRunPipeline:
         }
 
         with (
-            patch("pipeline._setup_log_file"),
+            patch("pipeline._setup_logging"),
             patch("pipeline.load_config", return_value=config),
             patch("pipeline._artifact_dir", return_value=tmp_path),
             patch("pipeline._prune_artifacts"),
