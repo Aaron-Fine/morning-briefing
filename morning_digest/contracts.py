@@ -285,3 +285,285 @@ def normalize_domain_analysis(raw: Any) -> tuple[dict, list[dict]]:
         normalized[domain_key] = result.to_dict()
 
     return normalized, [issue.to_dict() for issue in issues]
+
+
+def _known_item_ids(domain_analysis: dict) -> set[str]:
+    ids: set[str] = set()
+    for domain_result in domain_analysis.values():
+        if not isinstance(domain_result, dict):
+            continue
+        for item in domain_result.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            item_id = str(item.get("item_id", "")).strip()
+            if item_id:
+                ids.add(item_id)
+    return ids
+
+
+def normalize_seam_candidates_artifact(
+    raw: Any, domain_analysis: dict | None = None
+) -> tuple[dict, list[dict]]:
+    """Normalize the broad seam candidate artifact."""
+    issues: list[ContractIssue] = []
+    if not isinstance(raw, dict):
+        issues.append(ContractIssue("seam_candidates", "artifact is not an object"))
+        raw = {}
+
+    ids = _known_item_ids(domain_analysis or {})
+    candidates_raw = raw.get("candidates", [])
+    if not isinstance(candidates_raw, list):
+        issues.append(
+            ContractIssue("seam_candidates.candidates", "candidates is not a list")
+        )
+        candidates_raw = []
+
+    candidates = []
+    for idx, item in enumerate(candidates_raw):
+        path = f"seam_candidates.candidates[{idx}]"
+        if not isinstance(item, dict):
+            issues.append(ContractIssue(path, "candidate is not an object"))
+            continue
+        item_id = str(item.get("item_id", "")).strip()
+        if ids and item_id and item_id not in ids:
+            issues.append(ContractIssue(f"{path}.item_id", "item_id is unknown"))
+            continue
+        evidence_raw = item.get("possible_evidence", [])
+        if not isinstance(evidence_raw, list):
+            issues.append(
+                ContractIssue(
+                    f"{path}.possible_evidence",
+                    "possible_evidence is not a list",
+                )
+            )
+            evidence_raw = []
+        evidence = []
+        for evidence_idx, entry in enumerate(evidence_raw):
+            if not isinstance(entry, dict):
+                issues.append(
+                    ContractIssue(
+                        f"{path}.possible_evidence[{evidence_idx}]",
+                        "evidence entry is not an object",
+                    )
+                )
+                continue
+            evidence.append(
+                {
+                    "source": _to_str(entry.get("source")),
+                    "excerpt": _to_str(entry.get("excerpt")),
+                    "framing": _to_str(entry.get("framing")),
+                }
+            )
+        candidates.append(
+            {
+                **_extra_fields(
+                    item,
+                    {
+                        "item_id",
+                        "seam_type",
+                        "candidate_one_line",
+                        "why_it_might_matter",
+                        "possible_evidence",
+                        "drop_if_weak_reason",
+                    },
+                ),
+                "item_id": item_id,
+                "seam_type": _to_str(item.get("seam_type")),
+                "candidate_one_line": _to_str(item.get("candidate_one_line")),
+                "why_it_might_matter": _to_str(item.get("why_it_might_matter")),
+                "possible_evidence": evidence,
+                "drop_if_weak_reason": _to_str(item.get("drop_if_weak_reason")),
+            }
+        )
+
+    cross_raw = raw.get("cross_domain_candidates", [])
+    if not isinstance(cross_raw, list):
+        issues.append(
+            ContractIssue(
+                "seam_candidates.cross_domain_candidates",
+                "cross_domain_candidates is not a list",
+            )
+        )
+        cross_raw = []
+
+    cross_domain_candidates = []
+    for idx, item in enumerate(cross_raw):
+        path = f"seam_candidates.cross_domain_candidates[{idx}]"
+        if not isinstance(item, dict):
+            issues.append(ContractIssue(path, "cross-domain candidate is not an object"))
+            continue
+        linked_raw = item.get("linked_item_ids", [])
+        if not isinstance(linked_raw, list):
+            issues.append(
+                ContractIssue(
+                    f"{path}.linked_item_ids",
+                    "linked_item_ids is not a list",
+                )
+            )
+            linked_raw = []
+        linked_ids = [
+            str(item_id).strip() for item_id in linked_raw if str(item_id).strip()
+        ]
+        if ids:
+            unknown = [item_id for item_id in linked_ids if item_id not in ids]
+            for item_id in unknown:
+                issues.append(
+                    ContractIssue(
+                        f"{path}.linked_item_ids",
+                        f"unknown item_id: {item_id}",
+                    )
+                )
+            linked_ids = [item_id for item_id in linked_ids if item_id in ids]
+        cross_domain_candidates.append(
+            {
+                **_extra_fields(
+                    item,
+                    {"candidate_one_line", "linked_item_ids", "why_it_might_matter"},
+                ),
+                "candidate_one_line": _to_str(item.get("candidate_one_line")),
+                "linked_item_ids": linked_ids,
+                "why_it_might_matter": _to_str(item.get("why_it_might_matter")),
+            }
+        )
+
+    normalized = {
+        "schema_version": 1,
+        "candidates": candidates,
+        "cross_domain_candidates": cross_domain_candidates,
+    }
+    return normalized, [issue.to_dict() for issue in issues]
+
+
+def normalize_seam_annotations_artifact(
+    raw: Any, domain_analysis: dict | None = None
+) -> tuple[dict, list[dict]]:
+    """Normalize the per-item seam annotation artifact."""
+    issues: list[ContractIssue] = []
+    if not isinstance(raw, dict):
+        issues.append(ContractIssue("seam_annotations", "artifact is not an object"))
+        raw = {}
+
+    ids = _known_item_ids(domain_analysis or {})
+    per_item_raw = raw.get("per_item", [])
+    if not isinstance(per_item_raw, list):
+        issues.append(
+            ContractIssue("seam_annotations.per_item", "per_item is not a list")
+        )
+        per_item_raw = []
+
+    per_item = []
+    for idx, item in enumerate(per_item_raw):
+        path = f"seam_annotations.per_item[{idx}]"
+        if not isinstance(item, dict):
+            issues.append(ContractIssue(path, "annotation is not an object"))
+            continue
+        item_id = str(item.get("item_id", "")).strip()
+        if ids and item_id and item_id not in ids:
+            issues.append(ContractIssue(f"{path}.item_id", "item_id is unknown"))
+            continue
+        evidence_raw = item.get("evidence", [])
+        if not isinstance(evidence_raw, list):
+            issues.append(ContractIssue(f"{path}.evidence", "evidence is not a list"))
+            evidence_raw = []
+        links_raw = item.get("links", [])
+        if not isinstance(links_raw, list):
+            issues.append(ContractIssue(f"{path}.links", "links is not a list"))
+            links_raw = []
+        links = [
+            link.to_dict()
+            for link_idx, link_raw in enumerate(links_raw)
+            if (
+                link := SourceLink.from_raw(
+                    link_raw, f"{path}.links[{link_idx}]", issues
+                )
+            )
+            is not None
+        ]
+        evidence = []
+        for evidence_idx, entry in enumerate(evidence_raw):
+            if not isinstance(entry, dict):
+                issues.append(
+                    ContractIssue(
+                        f"{path}.evidence[{evidence_idx}]",
+                        "evidence entry is not an object",
+                    )
+                )
+                continue
+            evidence.append(
+                {
+                    "source": _to_str(entry.get("source")),
+                    "excerpt": _to_str(entry.get("excerpt")),
+                    "framing": _to_str(entry.get("framing")),
+                }
+            )
+        per_item.append(
+            {
+                **_extra_fields(
+                    item,
+                    {
+                        "item_id",
+                        "seam_type",
+                        "one_line",
+                        "links",
+                        "evidence",
+                        "confidence",
+                    },
+                ),
+                "item_id": item_id,
+                "seam_type": _to_str(item.get("seam_type")),
+                "one_line": _to_str(item.get("one_line")),
+                "links": links,
+                "evidence": evidence,
+                "confidence": _to_str(item.get("confidence"), default="medium"),
+            }
+        )
+
+    cross_raw = raw.get("cross_domain", [])
+    if not isinstance(cross_raw, list):
+        issues.append(
+            ContractIssue(
+                "seam_annotations.cross_domain", "cross_domain is not a list"
+            )
+        )
+        cross_raw = []
+
+    cross_domain = []
+    for idx, item in enumerate(cross_raw):
+        path = f"seam_annotations.cross_domain[{idx}]"
+        if not isinstance(item, dict):
+            issues.append(ContractIssue(path, "cross-domain annotation is not an object"))
+            continue
+        linked_raw = item.get("linked_item_ids", [])
+        if not isinstance(linked_raw, list):
+            issues.append(
+                ContractIssue(
+                    f"{path}.linked_item_ids",
+                    "linked_item_ids is not a list",
+                )
+            )
+            linked_raw = []
+        linked_ids = [
+            str(item_id).strip() for item_id in linked_raw if str(item_id).strip()
+        ]
+        if ids:
+            unknown = [item_id for item_id in linked_ids if item_id not in ids]
+            for item_id in unknown:
+                issues.append(
+                    ContractIssue(
+                        f"{path}.linked_item_ids",
+                        f"unknown item_id: {item_id}",
+                    )
+                )
+            linked_ids = [item_id for item_id in linked_ids if item_id in ids]
+        cross_domain.append(
+            {
+                **_extra_fields(item, {"seam_type", "one_line", "linked_item_ids"}),
+                "seam_type": _to_str(item.get("seam_type")),
+                "one_line": _to_str(item.get("one_line")),
+                "linked_item_ids": linked_ids,
+            }
+        )
+
+    return {"per_item": per_item, "cross_domain": cross_domain}, [
+        issue.to_dict() for issue in issues
+    ]

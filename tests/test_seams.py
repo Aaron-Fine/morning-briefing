@@ -477,6 +477,7 @@ class TestSeamsRun:
         assert result["seam_annotations"]["per_item"][0]["links"] == [
             {"url": "https://example.com", "label": "Example"}
         ]
+        assert result["seam_contract_issues"] == []
         seam_data = result["seam_data"]
         assert result["seam_candidates"]["schema_version"] == 1
         assert len(seam_data["contested_narratives"]) == 1
@@ -598,3 +599,68 @@ class TestSeamsRun:
         assert result["seam_candidates"]["schema_version"] == 1
         assert result["seam_annotations"] == {"per_item": [], "cross_domain": []}
         assert result["seam_data"]["seam_count"] == 0
+
+    @patch("stages.seams.call_llm")
+    def test_contract_issues_are_returned_as_sidecar(self, mock_llm):
+        mock_llm.side_effect = [
+            {
+                "schema_version": 1,
+                "candidates": [
+                    {
+                        "item_id": "item-1",
+                        "seam_type": "framing_divergence",
+                        "candidate_one_line": "Candidate",
+                        "possible_evidence": "not a list",
+                        "why_it_might_matter": "Reason",
+                    }
+                ],
+                "cross_domain_candidates": [],
+            },
+            {
+                "per_item": [
+                    {
+                        "item_id": "item-1",
+                        "seam_type": "framing_divergence",
+                        "one_line": "Annotation",
+                        "evidence": "not a list",
+                        "confidence": "high",
+                    }
+                ],
+                "cross_domain": [],
+            },
+        ]
+        context = {
+            "domain_analysis": {
+                "geopolitics": {
+                    "items": [
+                        {
+                            "item_id": "item-1",
+                            "headline": "T",
+                            "links": "not a list",
+                        }
+                    ]
+                }
+            },
+            "raw_sources": {"rss": []},
+            "compressed_transcripts": [],
+        }
+
+        result = run(context, {"llm": {}})
+
+        assert result["seam_annotations"]["per_item"] == []
+        assert result["seam_contract_issues"] == [
+            {
+                "path": "domain_analysis.geopolitics.items[0].links",
+                "message": "links is not a list",
+            },
+            {
+                "artifact": "seam_candidates",
+                "path": "seam_candidates.candidates[0].possible_evidence",
+                "message": "possible_evidence is not a list",
+            },
+            {
+                "artifact": "seam_annotations",
+                "path": "seam_annotations.per_item[0].evidence",
+                "message": "evidence is not a list",
+            },
+        ]

@@ -8,7 +8,11 @@ import json
 import sys
 from pathlib import Path
 
-from morning_digest.contracts import normalize_domain_analysis
+from morning_digest.contracts import (
+    normalize_domain_analysis,
+    normalize_seam_annotations_artifact,
+    normalize_seam_candidates_artifact,
+)
 
 
 def _load_json(path: Path):
@@ -34,6 +38,31 @@ def validate_domain_analysis(path: Path) -> list[dict]:
     return issues
 
 
+def validate_optional_seam_artifacts(path: Path, domain_analysis: dict) -> list[dict]:
+    if not path.is_dir():
+        return []
+
+    issues: list[dict] = []
+    candidates_path = path / "seam_candidates.json"
+    if candidates_path.exists():
+        _, candidate_issues = normalize_seam_candidates_artifact(
+            _load_json(candidates_path), domain_analysis
+        )
+        issues.extend({"artifact": "seam_candidates", **issue} for issue in candidate_issues)
+
+    annotations_path = path / "seam_annotations.json"
+    if annotations_path.exists():
+        _, annotation_issues = normalize_seam_annotations_artifact(
+            _load_json(annotations_path), domain_analysis
+        )
+        issues.extend(
+            {"artifact": "seam_annotations", **issue}
+            for issue in annotation_issues
+        )
+
+    return issues
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Validate saved Morning Digest pipeline artifacts."
@@ -45,14 +74,23 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    domain_analysis_path = _domain_analysis_path(args.path)
+    domain_analysis = {}
     issues = validate_domain_analysis(args.path)
+    if domain_analysis_path.exists():
+        domain_analysis, _domain_issues = normalize_domain_analysis(
+            _load_json(domain_analysis_path)
+        )
+        issues.extend(validate_optional_seam_artifacts(args.path, domain_analysis))
     if not issues:
-        print("domain_analysis: OK")
+        print("artifacts: OK")
         return 0
 
-    print("domain_analysis: contract issues found")
+    print("artifacts: contract issues found")
     for issue in issues:
-        print(f"- {issue['path']}: {issue['message']}")
+        artifact = issue.get("artifact")
+        prefix = f"{artifact}: " if artifact else ""
+        print(f"- {prefix}{issue['path']}: {issue['message']}")
     return 1
 
 

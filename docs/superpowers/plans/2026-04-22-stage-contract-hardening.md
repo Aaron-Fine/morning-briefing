@@ -54,11 +54,26 @@ Status: implemented 2026-04-22.
 
 ### Phase 2 — Seams Boundary
 
+Status: implemented 2026-04-22.
+
 - Validate `domain_analysis` before seam candidate and annotation logic reads
   item IDs or links.
 - Validate `seam_candidates`, `seam_annotations`, and legacy `seam_data`.
 - Add tests that renamed/missing item IDs are reported before seam annotations
   silently collapse.
+
+Implementation notes:
+
+- `seams.run()` now normalizes `domain_analysis` again at the stage boundary so
+  cached or manually edited artifacts are checked before item IDs and links are
+  consumed.
+- `seam_candidates` and `seam_annotations` are normalized before the existing
+  semantic pruning/evidence gates run.
+- `seam_contract_issues` records non-fatal contract drift as a sidecar artifact.
+- `scripts/validate_artifacts.py` now validates optional seam artifacts when
+  they are present next to `domain_analysis.json`.
+
+Verification: focused Dockerized Phase 2 suite passed (`34 passed`).
 
 ### Phase 3 — Cross-Domain Boundary
 
@@ -91,5 +106,5 @@ Status: implemented 2026-04-22.
 - Done — `scripts/validate_artifacts.py` can validate saved `domain_analysis.json`
   artifacts directly.
 
-Verification: Dockerized full suite passed after Phase 1 implementation
+Phase 1 verification: Dockerized full suite passed after implementation
 (`917 passed`).

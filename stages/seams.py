@@ -17,6 +17,11 @@ import logging
 import json
 from json import JSONDecodeError
 
+from morning_digest.contracts import (
+    normalize_domain_analysis,
+    normalize_seam_annotations_artifact,
+    normalize_seam_candidates_artifact,
+)
 from morning_digest.llm import call_llm
 from morning_digest.sanitize import sanitize_source_content
 from utils.prompts import load_prompt
@@ -571,6 +576,7 @@ def _empty_seam_result() -> dict:
         "seam_scan": empty_candidates,
         "seam_annotations": empty_annotations,
         "seam_data": _legacy_seam_data(empty_annotations),
+        "seam_contract_issues": [],
     }
 
 
@@ -578,7 +584,15 @@ def run(
     context: dict, config: dict, model_config: dict | None = None, **kwargs
 ) -> dict:
     """Detect per-item seam annotations."""
-    domain_analysis = context.get("domain_analysis", {})
+    domain_analysis, seam_contract_issues = normalize_domain_analysis(
+        context.get("domain_analysis", {})
+    )
+    for issue in seam_contract_issues:
+        log.warning(
+            "seams: contract issue at %s — %s",
+            issue["path"],
+            issue["message"],
+        )
     raw_sources = context.get("raw_sources", {})
     compressed_transcripts = context.get("compressed_transcripts", [])
 
@@ -612,6 +626,12 @@ def run(
             "candidates",
             _empty_candidates(),
         )
+        seam_candidates_raw, candidate_issues = normalize_seam_candidates_artifact(
+            seam_candidates_raw, domain_analysis
+        )
+        seam_contract_issues.extend(
+            {"artifact": "seam_candidates", **issue} for issue in candidate_issues
+        )
         seam_candidates = _normalize_seam_candidates(
             seam_candidates_raw, domain_analysis
         )
@@ -629,6 +649,13 @@ def run(
             "annotations",
             _empty_annotations(),
         )
+        result, annotation_issues = normalize_seam_annotations_artifact(
+            result, domain_analysis
+        )
+        seam_contract_issues.extend(
+            {"artifact": "seam_annotations", **issue}
+            for issue in annotation_issues
+        )
         seam_annotations = _validate_seam_annotations(result, domain_analysis)
         seam_data = _legacy_seam_data(seam_annotations)
 
@@ -641,8 +668,11 @@ def run(
             "seam_scan": seam_candidates,
             "seam_annotations": seam_annotations,
             "seam_data": seam_data,
+            "seam_contract_issues": seam_contract_issues,
         }
 
     except Exception as e:
         log.warning(f"Seam detection failed (non-fatal): {e}")
-        return _empty_seam_result()
+        result = _empty_seam_result()
+        result["seam_contract_issues"] = seam_contract_issues
+        return result

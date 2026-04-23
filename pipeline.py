@@ -301,7 +301,13 @@ _STAGE_METADATA = {
     },
     "seams": {
         "artifact_key": "seam_data",
-        "context_keys": ["seam_candidates", "seam_scan", "seam_annotations", "seam_data"],
+        "context_keys": [
+            "seam_candidates",
+            "seam_scan",
+            "seam_annotations",
+            "seam_data",
+            "seam_contract_issues",
+        ],
         "non_critical": True,
         "empty_output": {
             "seam_candidates": {
@@ -321,7 +327,8 @@ _STAGE_METADATA = {
                 "key_assumptions": [],
                 "seam_count": 0,
                 "quiet_day": True,
-            }
+            },
+            "seam_contract_issues": [],
         },
         "model_defaults": {},
         "turn_model_overrides": None,
