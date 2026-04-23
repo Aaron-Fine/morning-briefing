@@ -45,6 +45,7 @@ def test_markets_render_as_table_not_flex_strip():
     assert 'class="markets-table"' in html
     assert 'class="market-cell"' in html
     assert 'class="markets"' not in html
+    assert "table-layout: fixed;" in html
 
 
 def test_scan_header_renders_as_table_not_flex_container():
@@ -104,3 +105,24 @@ def test_stage_failures_render_in_footer_when_present():
     assert "Pipeline notices:" in html
     assert "prepare_weather" in html
     assert "coverage_gaps" in html
+
+
+def test_thread_voice_uses_badge_style():
+    html = render_email(
+        _base_data(
+            at_a_glance=[
+                {
+                    "tag": "tech",
+                    "tag_label": "Technology",
+                    "headline": "A durable headline",
+                    "facts": "",
+                    "analysis": "",
+                    "cross_domain_note": "A thread note.",
+                    "links": [],
+                }
+            ]
+        )
+    )
+
+    assert "scan-voice-thread" in html
+    assert ".scan-voice-thread   { color: var(--accent-seam); background: #f7efe6; }" in html

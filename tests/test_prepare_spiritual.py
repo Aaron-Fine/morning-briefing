@@ -112,6 +112,21 @@ class TestPrepareSpiritualRun:
         )
 
     @patch("stages.prepare_spiritual.call_llm")
+    def test_meta_leakage_falls_back_to_scripture(self, mock_llm):
+        mock_llm.return_value = (
+            "The user wants me to write a spiritual thought. "
+            "Let me craft something warm and direct."
+        )
+        result = run(
+            self._make_context(),
+            self._make_config(),
+            model_config={"provider": "fireworks"},
+        )
+        assert (
+            result["spiritual"]["reflection"] == self._make_cfm_data()["scripture_text"]
+        )
+
+    @patch("stages.prepare_spiritual.call_llm")
     def test_passes_correct_prompt_content(self, mock_llm):
         mock_llm.return_value = "Reflection"
         cfm = self._make_cfm_data()

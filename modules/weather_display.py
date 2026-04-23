@@ -12,7 +12,7 @@ The chart renders:
   - a legend keying the AQI color bands used on the daily bars
   - a 7-day grid. Each row shows day name, low temp, a hi→lo gradient range
     bar with that day's AQI number overlaid at its scale position (0–200),
-    normal and record hi/lo bands when enabled,
+    normal and record hi/lo marker lines when enabled,
     the high temp, and a right column with condition + precip chance.
   - a thin blue precip underline when the day has measurable precip.
 
@@ -21,7 +21,7 @@ multi-stop linear-gradient background (temp range colored, rest gray) and
 an inline-block spacer sized to the AQI's fraction of AQI_SCALE_MAX. This
 replaces an earlier position:absolute approach that Gmail stripped.
 
-Normal and record bands are positioned with the same spacer-table approach,
+Normal and record markers are positioned with the same spacer-table approach,
 not absolute positioning, so they survive Gmail sanitization.
 """
 
@@ -145,9 +145,9 @@ def _build_legend_html(
             ("151-200 Unhealthy", "#dc2626"),
         ])
     if show_normal:
-        bands.append(("Normal range", "#508c50"))
+        bands.append(("Normal marker", "#508c50"))
     if show_record:
-        bands.append(("Record range", "#c0392b"))
+        bands.append(("Record marker", "#c0392b"))
     items = "".join(
         f'<td class="wx-legend-item">'
         f'<span class="wx-legend-swatch" style="background:{color};"></span>'
@@ -217,9 +217,9 @@ def _build_chart_html(
         lo_pct = _temp_to_pct(lo, temp_min, temp_max) if lo is not None else 0
         hi_pct = _temp_to_pct(hi, temp_min, temp_max) if hi is not None else 100
         bar_width = max(hi_pct - lo_pct, 1)
-        band_overlay_html = ""
+        marker_overlay_html = ""
         if show_record:
-            band_overlay_html += _temp_range_overlay_html(
+            marker_overlay_html += _temp_marker_overlay_html(
                 day,
                 temp_min,
                 temp_max,
@@ -229,7 +229,7 @@ def _build_chart_html(
                 class_name="wx-record-band",
             )
         if show_normal:
-            band_overlay_html += _temp_range_overlay_html(
+            marker_overlay_html += _temp_marker_overlay_html(
                 day,
                 temp_min,
                 temp_max,
@@ -328,7 +328,7 @@ def _build_chart_html(
             f'<td class="wx-bar-fill" style="width:{bar_width:.1f}%;"></td>'
             f'<td class="wx-bar-pad"></td>'
             f'</tr>'
-            f'{band_overlay_html}'
+            f'{marker_overlay_html}'
             f'{aqi_overlay_html}'
             f'</table>'
             f'</td>'
@@ -359,7 +359,7 @@ def _build_chart_html(
 # ====================================================================
 
 
-def _temp_range_overlay_html(
+def _temp_marker_overlay_html(
     day: dict,
     temp_min: float,
     temp_max: float,
@@ -369,26 +369,42 @@ def _temp_range_overlay_html(
     color: str,
     class_name: str,
 ) -> str:
-    """Build a Gmail-safe range marker row using spacer table cells."""
-    lo = day.get(low_key)
-    hi = day.get(high_key)
-    if lo is None or hi is None:
+    """Build Gmail-safe vertical marker lines for low/high reference temps."""
+    markers = [
+        _temp_to_pct(value, temp_min, temp_max)
+        for value in (day.get(low_key), day.get(high_key))
+        if value is not None
+    ]
+    if not markers:
         return ""
 
-    lo_pct = _temp_to_pct(min(lo, hi), temp_min, temp_max)
-    hi_pct = _temp_to_pct(max(lo, hi), temp_min, temp_max)
-    width_pct = max(hi_pct - lo_pct, 0.8)
+    markers = sorted(markers)
+    marker_width = 0.6
+    cells = []
+    cursor = 0.0
+    for pct in markers:
+        pad_width = max(pct - cursor - marker_width / 2.0, 0.0)
+        if pad_width:
+            cells.append(
+                f'<td style="width:{pad_width:.2f}%;font-size:0;line-height:0;'
+                f'padding:0;"></td>'
+            )
+        cells.append(
+            f'<td class="{class_name}" style="width:{marker_width:.2f}%;height:14px;'
+            f'background:{color};opacity:0.8;font-size:0;line-height:0;'
+            f'padding:0;"></td>'
+        )
+        cursor = min(pct + marker_width / 2.0, 100.0)
+    if cursor < 100.0:
+        cells.append(
+            '<td style="font-size:0;line-height:0;padding:0;"></td>'
+        )
     return (
         f'<tr><td colspan="3" style="padding:1px 0 0;">'
         f'<table cellspacing="0" cellpadding="0" border="0" '
         f'style="width:100%;border-collapse:collapse;">'
         f'<tr>'
-        f'<td style="width:{lo_pct:.1f}%;font-size:0;line-height:0;'
-        f'padding:0;"></td>'
-        f'<td class="{class_name}" style="width:{width_pct:.1f}%;height:2px;'
-        f'background:{color};opacity:0.75;font-size:0;line-height:0;'
-        f'padding:0;"></td>'
-        f'<td style="padding:0;font-size:0;line-height:0;"></td>'
+        f'{"".join(cells)}'
         f'</tr></table></td></tr>'
     )
 

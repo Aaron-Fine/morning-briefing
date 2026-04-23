@@ -496,18 +496,23 @@ class TestBuildLegendHtml:
 
     def test_normal_and_record_legend_entries(self):
         html = _build_legend_html(False, show_normal=True, show_record=True)
-        assert "Normal range" in html
-        assert "Record range" in html
+        assert "Normal marker" in html
+        assert "Record marker" in html
 
 
 class TestNormalRecordOverlayOnBar:
-    """Normal and record bands drawn with Gmail-safe spacer tables."""
+    """Normal and record markers drawn with Gmail-safe spacer tables."""
 
-    def test_normal_and_record_bands_render_by_default(self):
+    def test_normal_and_record_markers_render_by_default(self):
         weather = _load_fixture("weather_clear.json")
         html = _build_chart_html(weather)
         assert "wx-normal-band" in html
         assert "wx-record-band" in html
+
+    def test_normal_and_record_markers_do_not_render_as_ranges(self):
+        weather = _load_fixture("weather_clear.json")
+        html = _build_chart_html(weather)
+        assert "height:2px" not in html
 
     def test_normal_and_record_bands_can_be_suppressed(self):
         weather = _load_fixture("weather_clear.json")

@@ -164,6 +164,33 @@ def _generate_reflection(user_content: str, model_config: dict | None) -> str:
         return ""
 
 
+def _sanitize_reflection(reflection: str) -> str:
+    """Reject obvious prompt/meta leakage before rendering."""
+    cleaned = str(reflection or "").strip()
+    if not cleaned:
+        return ""
+
+    meta_markers = (
+        "the user wants me to",
+        "let me craft",
+        "i want to avoid",
+        "i want to",
+        "i need to",
+        "write an 80-150 word reflection",
+        "write the spiritual thought",
+        "today's focus:",
+        "weekly purpose:",
+        "related misuse",
+        "conspicuous absences:",
+    )
+    lowered = cleaned.lower()
+    if any(marker in lowered for marker in meta_markers):
+        log.warning("prepare_spiritual: rejected reflection with prompt/meta leakage")
+        return ""
+
+    return cleaned
+
+
 def run(context: dict, config: dict, model_config: dict | None = None, **kwargs) -> dict:
     raw = context.get("raw_sources", {})
     cfm = raw.get("come_follow_me", {})
@@ -176,7 +203,9 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
     focus = None if not weekly or weekly.get("missing_guide") else _select_focus(weekly)
     if weekly and focus:
         user_content = _weekly_user_content(cfm, weekly, focus)
-        reflection = _generate_reflection(user_content, model_config)
+        reflection = _sanitize_reflection(
+            _generate_reflection(user_content, model_config)
+        )
         extra = {
             "weekly_artifact": weekly.get("week_start", ""),
             "focus_id": focus.get("id", ""),
@@ -189,7 +218,9 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
             log.warning("prepare_spiritual: weekly guide missing; using legacy fallback")
         else:
             log.warning("prepare_spiritual: no valid weekly focus; using legacy fallback")
-        reflection = _generate_reflection(_legacy_user_content(cfm), model_config)
+        reflection = _sanitize_reflection(
+            _generate_reflection(_legacy_user_content(cfm), model_config)
+        )
         extra = {}
 
     return {
