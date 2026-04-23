@@ -491,7 +491,14 @@ class TestAssembleRun:
         assert result["template_data"]["market_context"] == "Markets up."
         assert len(result["template_data"]["worth_reading"]) == 1
         assert result["digest_json"]["cross_domain_connections"] == [
-            {"entity": "OpenAI"}
+            {
+                "entity": "OpenAI",
+                "title": "",
+                "summary": "",
+                "domains": [],
+                "entities": [],
+                "why_it_matters": "",
+            }
         ]
         mock_render.assert_called_once()
 
@@ -556,6 +563,87 @@ class TestAssembleRun:
         assert result["template_data"]["deep_dives"] == []
         assert result["template_data"]["market_context"] == ""
         assert result["template_data"]["worth_reading"] == []
+
+    @patch("stages.assemble.render_email")
+    def test_malformed_cross_domain_output_falls_back_to_domain_analysis(
+        self, mock_render
+    ):
+        mock_render.return_value = "<html>fallback</html>"
+        context = {
+            "cross_domain_output": {"at_a_glance": "bad"},
+            "domain_analysis": {
+                "ai_tech": {
+                    "items": [
+                        {
+                            "tag": "ai",
+                            "headline": "Domain fallback",
+                            "facts": "Facts",
+                            "analysis": "Analysis",
+                            "links": [],
+                        }
+                    ]
+                }
+            },
+            "seam_data": {},
+            "raw_sources": {},
+        }
+        config = {
+            "digest": {
+                "at_a_glance": {"max_items": 14, "normal_items": 10},
+                "deep_dives": {"count": 2},
+            }
+        }
+
+        result = run(context, config)
+
+        assert result["template_data"]["at_a_glance"][0]["headline"] == (
+            "Domain fallback"
+        )
+        assert result["assemble_contract_issues"] == [
+            {
+                "artifact": "cross_domain_output",
+                "path": "cross_domain_output.at_a_glance",
+                "message": "at_a_glance is not a list",
+            }
+        ]
+        assert result["digest_json"]["assemble_contract_issues"] == (
+            result["assemble_contract_issues"]
+        )
+
+    @patch("stages.assemble.render_email")
+    def test_malformed_seam_annotations_are_reported(self, mock_render):
+        mock_render.return_value = "<html>seam fallback</html>"
+        context = {
+            "cross_domain_output": {
+                "at_a_glance": [
+                    {
+                        "item_id": "item-1",
+                        "tag": "ai",
+                        "headline": "AI story",
+                        "facts": "Facts",
+                        "analysis": "Analysis",
+                    }
+                ],
+                "deep_dives": [],
+                "market_context": "",
+                "worth_reading": [],
+                "cross_domain_connections": [],
+            },
+            "seam_annotations": {"per_item": "bad"},
+            "seam_data": {},
+            "raw_sources": {},
+        }
+
+        result = run(context, {"digest": {}})
+
+        assert "seam_annotation" not in result["template_data"]["at_a_glance"][0]
+        assert result["assemble_contract_issues"] == [
+            {
+                "artifact": "seam_annotations",
+                "path": "seam_annotations.per_item",
+                "message": "per_item is not a list",
+            }
+        ]
 
     @patch("stages.assemble.render_email")
     def test_deep_dive_body_wrapped_in_markup(self, mock_render):

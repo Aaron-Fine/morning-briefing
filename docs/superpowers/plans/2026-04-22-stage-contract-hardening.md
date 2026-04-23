@@ -92,10 +92,14 @@ Verification: focused Dockerized Phase 3 suite passed (`46 passed`).
 
 ### Phase 4 — Assemble Boundary
 
-- Validate or normalize `cross_domain_output`, fallback `domain_analysis`, and
-  `seam_annotations` before template rendering.
-- Keep degraded rendering behavior, but make degraded input explicit in logs or
-  diagnostics.
+- Implemented render-boundary normalization for `cross_domain_output`,
+  fallback `domain_analysis`, and `seam_annotations`.
+- Malformed or empty cross-domain output can now degrade to normalized
+  `domain_analysis` before template rendering.
+- `assemble_contract_issues` records non-fatal render-boundary drift, and
+  `digest_json` preserves those issues for artifact inspection.
+
+Verification: focused Dockerized Phase 4 suite passed (`102 passed`).
 
 ### Phase 5 — Tightening
 

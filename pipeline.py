@@ -364,7 +364,7 @@ _STAGE_METADATA = {
     },
     "assemble": {
         "artifact_key": "digest_json",
-        "context_keys": ["template_data", "digest_json"],
+        "context_keys": ["template_data", "digest_json", "assemble_contract_issues"],
         "non_critical": False,
         "empty_output": None,
         "model_defaults": None,

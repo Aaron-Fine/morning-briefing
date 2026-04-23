@@ -22,6 +22,11 @@ import logging
 import re
 from markupsafe import Markup
 
+from morning_digest.contracts import (
+    normalize_cross_domain_output_artifact,
+    normalize_domain_analysis,
+    normalize_seam_annotations_artifact,
+)
 from templates.email_template import render_email
 from utils.time import format_display_date, format_display_time, now_local, tz_abbrev
 
@@ -225,25 +230,59 @@ def run(
 ) -> dict:
     """Assemble template data, render HTML, and return html + template_data artifacts."""
     seam_data = context.get("seam_data", {})
-    seam_annotations = context.get("seam_annotations", {})
     raw_sources = context.get("raw_sources", {})
     dry_run = kwargs.get("dry_run", False)
+    assemble_contract_issues: list[dict] = []
+
+    domain_analysis = {}
+    if "domain_analysis" in context:
+        domain_analysis, domain_issues = normalize_domain_analysis(
+            context.get("domain_analysis", {})
+        )
+        assemble_contract_issues.extend(
+            {"artifact": "domain_analysis", **issue} for issue in domain_issues
+        )
+
+    seam_annotations, seam_annotation_issues = normalize_seam_annotations_artifact(
+        context.get("seam_annotations", {}), domain_analysis
+    )
+    assemble_contract_issues.extend(
+        {"artifact": "seam_annotations", **issue}
+        for issue in seam_annotation_issues
+    )
+
+    cross_domain_output = {}
+    if "cross_domain_output" in context:
+        cross_domain_output, cross_domain_issues = (
+            normalize_cross_domain_output_artifact(context.get("cross_domain_output"))
+        )
+        assemble_contract_issues.extend(
+            {"artifact": "cross_domain_output", **issue}
+            for issue in cross_domain_issues
+        )
 
     today = now_local()
 
     # --- Select pipeline mode ---
-    if context.get("cross_domain_output"):
+    use_cross_domain_output = bool(
+        cross_domain_output.get("at_a_glance")
+        or cross_domain_output.get("deep_dives")
+        or cross_domain_output.get("worth_reading")
+        or cross_domain_output.get("market_context")
+        or cross_domain_output.get("cross_domain_connections")
+    )
+    if use_cross_domain_output:
         log.info("assemble: using cross_domain_output (Phase 3 mode)")
-        xd = context["cross_domain_output"]
+        xd = cross_domain_output
         at_a_glance = [_item_to_glance(i) for i in xd.get("at_a_glance", [])]
         deep_dives_raw = xd.get("deep_dives", [])
         market_context = xd.get("market_context", "")
         worth_reading = xd.get("worth_reading", [])
 
-    elif context.get("domain_analysis"):
+    elif domain_analysis:
         log.info("assemble: using domain_analysis artifacts (Phase 1 mode)")
         at_a_glance, deep_dives_raw, market_context = _build_from_domain_analysis(
-            context, config
+            {**context, "domain_analysis": domain_analysis}, config
         )
         worth_reading = []
 
@@ -326,8 +365,10 @@ def run(
     # - cross_domain metadata preserved for briefing_packet and future use
     digest_json = dict(template_data)
     digest_json["deep_dives"] = deep_dives_raw
-    xd = context.get("cross_domain_output", {})
-    digest_json["cross_domain_connections"] = xd.get("cross_domain_connections", [])
+    digest_json["cross_domain_connections"] = cross_domain_output.get(
+        "cross_domain_connections", []
+    )
+    digest_json["assemble_contract_issues"] = assemble_contract_issues
 
     log.info(
         f"assemble: rendered digest — "
@@ -340,4 +381,5 @@ def run(
         "html": html,
         "template_data": template_data,
         "digest_json": digest_json,
+        "assemble_contract_issues": assemble_contract_issues,
     }
