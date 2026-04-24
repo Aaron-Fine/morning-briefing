@@ -16,6 +16,7 @@ from pathlib import Path
 
 from morning_digest.llm import call_llm
 from sources.come_follow_me import get_lesson_for_date
+from stages.spiritual_units import normalize_daily_units
 from utils.prompts import load_prompt
 from utils.time import now_local
 
@@ -27,14 +28,6 @@ _ARTIFACT_DIR = _ROOT / "output" / "artifacts" / "spiritual"
 _SYSTEM_PROMPT = load_prompt("prepare_spiritual_weekly.md")
 _GUIDE_SYSTEM_PROMPT = load_prompt("generate_spiritual_weekly_guide.md")
 _DAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday")
-_VALID_DAILY_UNIT_KINDS = {
-    "narrative_unit",
-    "key_scripture",
-    "misuse_correction",
-    "scholarly_insight",
-    "language_context",
-    "faithful_application",
-}
 
 
 def _current_lesson(context: dict, config: dict) -> dict:
@@ -147,68 +140,6 @@ def generate_weekly_guide(
     return path
 
 
-def _normalize_daily_units(result: dict) -> list[dict]:
-    raw_units = result.get("daily_units", []) or []
-    if not raw_units:
-        raw_units = [
-            {
-                "id": focus.get("id", ""),
-                "kind": "narrative_unit",
-                "title": focus.get("text_ref", ""),
-                "anchor_ref": focus.get("text_ref", ""),
-                "source_refs": [focus.get("text_ref", "")],
-                "core_claim": "",
-                "supporting_excerpt": focus.get("guide_excerpt", ""),
-                "enhancement": "",
-                "application": "",
-                "prompt_hint": "",
-            }
-            for focus in (result.get("daily_foci", []) or [])
-            if isinstance(focus, dict)
-        ]
-
-    daily_units = []
-    seen_ids: set[str] = set()
-    for idx, unit in enumerate(raw_units, start=1):
-        if not isinstance(unit, dict):
-            continue
-        unit_id = str(unit.get("id") or f"focus-{idx}").strip()
-        if not unit_id or unit_id in seen_ids:
-            unit_id = f"focus-{idx}"
-        seen_ids.add(unit_id)
-        kind = str(unit.get("kind", "")).strip().lower() or "narrative_unit"
-        if kind not in _VALID_DAILY_UNIT_KINDS:
-            kind = "narrative_unit"
-        source_refs = [
-            str(ref).strip()
-            for ref in (unit.get("source_refs", []) or [])
-            if str(ref).strip()
-        ]
-        anchor_ref = str(unit.get("anchor_ref", "")).strip()
-        if anchor_ref and anchor_ref not in source_refs:
-            source_refs.insert(0, anchor_ref)
-        if not anchor_ref and source_refs:
-            anchor_ref = source_refs[0]
-        daily_units.append(
-            {
-                "id": unit_id,
-                "kind": kind,
-                "title": str(unit.get("title", "")).strip(),
-                "anchor_ref": anchor_ref,
-                "source_refs": source_refs,
-                "core_claim": str(unit.get("core_claim", "")).strip(),
-                "supporting_excerpt": str(
-                    unit.get("supporting_excerpt")
-                    or unit.get("guide_excerpt", "")
-                ).strip(),
-                "enhancement": str(unit.get("enhancement", "")).strip(),
-                "application": str(unit.get("application", "")).strip(),
-                "prompt_hint": str(unit.get("prompt_hint", "")).strip(),
-            }
-        )
-    return daily_units
-
-
 def _ensure_misuse_units(daily_units: list[dict], misuses: list[dict]) -> list[dict]:
     daily_units = list(daily_units)
     misuse_count = sum(
@@ -273,7 +204,7 @@ def _validate_artifact(result: dict | None, lesson: dict) -> dict:
         for item in (result.get("misuses", []) or [])
         if isinstance(item, dict)
     ]
-    daily_units = _ensure_misuse_units(_normalize_daily_units(result), misuses)
+    daily_units = _ensure_misuse_units(normalize_daily_units(result), misuses)
     daily_foci = _derive_daily_foci(daily_units)
 
     valid_ids = {unit["id"] for unit in daily_units}
@@ -332,6 +263,10 @@ def run(
 
     guide_path = _guide_path(week_start)
     if not guide_path.exists():
+        # User-authored guides at state/spiritual/weekly/{week_start}.md are the
+        # happy path. This LLM generation is an intentional fallback for weeks
+        # when the guide wasn't uploaded in time — do not remove it without
+        # replacing the ergonomic it covers.
         try:
             guide_path = generate_weekly_guide(lesson, model_config)
             log.info(f"prepare_spiritual_weekly: generated guide {guide_path.name}")

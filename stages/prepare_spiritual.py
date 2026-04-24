@@ -2,8 +2,9 @@
 
 This stage no longer asks the LLM to improvise a new reflection every day.
 Instead it selects a typed daily unit from the weekly spiritual artifact and
-renders 1-3 short paragraphs deterministically so the output is stable,
-week-aligned, and easy to validate.
+emits the unit's own prose fields as short paragraphs — no canned English
+scaffolds — so the weekly model's voice carries through and the output is
+stable across runs.
 
 Input:  context["raw_sources"]["come_follow_me"]
 Output: {"spiritual": {reading, title, key_scripture, scripture_text, reflection,
@@ -14,6 +15,7 @@ import json
 import logging
 from pathlib import Path
 
+from stages.spiritual_units import normalize_daily_units
 from utils.time import now_local
 
 log = logging.getLogger(__name__)
@@ -21,14 +23,6 @@ log = logging.getLogger(__name__)
 _ROOT = Path(__file__).resolve().parent.parent
 _WEEKLY_ARTIFACT_DIR = _ROOT / "output" / "artifacts" / "spiritual"
 _DAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday")
-_VALID_DAILY_UNIT_KINDS = {
-    "narrative_unit",
-    "key_scripture",
-    "misuse_correction",
-    "scholarly_insight",
-    "language_context",
-    "faithful_application",
-}
 
 
 def _artifact_path(week_start: str) -> Path:
@@ -74,65 +68,8 @@ def _resolve_weekly_artifact(cfm: dict) -> dict | None:
     return _find_latest_weekly_artifact()
 
 
-def _normalize_daily_units(weekly: dict) -> list[dict]:
-    raw_units = weekly.get("daily_units", []) or []
-    if not raw_units:
-        raw_units = [
-            {
-                "id": focus.get("id", ""),
-                "kind": "narrative_unit",
-                "title": focus.get("text_ref", ""),
-                "anchor_ref": focus.get("text_ref", ""),
-                "source_refs": [focus.get("text_ref", "")],
-                "core_claim": "",
-                "supporting_excerpt": focus.get("guide_excerpt", ""),
-                "enhancement": "",
-                "application": "",
-                "prompt_hint": "",
-            }
-            for focus in (weekly.get("daily_foci", []) or [])
-            if isinstance(focus, dict)
-        ]
-
-    units = []
-    for idx, unit in enumerate(raw_units, start=1):
-        if not isinstance(unit, dict):
-            continue
-        kind = str(unit.get("kind", "")).strip().lower() or "narrative_unit"
-        if kind not in _VALID_DAILY_UNIT_KINDS:
-            kind = "narrative_unit"
-        source_refs = [
-            str(ref).strip()
-            for ref in (unit.get("source_refs", []) or [])
-            if str(ref).strip()
-        ]
-        anchor_ref = str(unit.get("anchor_ref", "")).strip()
-        if anchor_ref and anchor_ref not in source_refs:
-            source_refs.insert(0, anchor_ref)
-        if not anchor_ref and source_refs:
-            anchor_ref = source_refs[0]
-        units.append(
-            {
-                "id": str(unit.get("id") or f"focus-{idx}").strip() or f"focus-{idx}",
-                "kind": kind,
-                "title": str(unit.get("title", "")).strip(),
-                "anchor_ref": anchor_ref,
-                "source_refs": source_refs,
-                "core_claim": str(unit.get("core_claim", "")).strip(),
-                "supporting_excerpt": str(
-                    unit.get("supporting_excerpt")
-                    or unit.get("guide_excerpt", "")
-                ).strip(),
-                "enhancement": str(unit.get("enhancement", "")).strip(),
-                "application": str(unit.get("application", "")).strip(),
-                "prompt_hint": str(unit.get("prompt_hint", "")).strip(),
-            }
-        )
-    return units
-
-
 def _units_by_id(weekly: dict) -> dict[str, dict]:
-    return {unit["id"]: unit for unit in _normalize_daily_units(weekly) if unit.get("id")}
+    return {unit["id"]: unit for unit in normalize_daily_units(weekly) if unit.get("id")}
 
 
 def _select_unit(weekly: dict, today=None) -> dict | None:
@@ -157,80 +94,33 @@ def _select_unit(weekly: dict, today=None) -> dict | None:
     return next(iter(units.values()))
 
 
-def _sentence(text: str, punctuation: str = ".") -> str:
-    cleaned = " ".join(str(text or "").split()).strip()
-    if not cleaned:
-        return ""
-    if cleaned[-1] in ".!?":
-        return cleaned
-    return cleaned + punctuation
-
-
-def _join_sentences(*parts: str) -> str:
-    return " ".join(part for part in (_sentence(p) for p in parts) if part).strip()
-
-
 def _render_unit(unit: dict) -> str:
-    kind = unit.get("kind", "narrative_unit")
-    title = unit.get("title", "")
-    anchor_ref = unit.get("anchor_ref", "")
-    core_claim = unit.get("core_claim", "")
-    supporting_excerpt = unit.get("supporting_excerpt", "")
-    enhancement = unit.get("enhancement", "")
-    application = unit.get("application", "")
+    """Emit the weekly model's own prose, one field per paragraph.
 
-    if kind == "misuse_correction":
-        paragraph_one = _join_sentences(
-            f"{title} is easy to flatten into a slogan" if title else "",
-            supporting_excerpt,
-            core_claim,
-        )
-        paragraph_two = _join_sentences(
-            "A better reading takes the text on its own terms",
-            enhancement,
-            application,
-        )
-        return "\n\n".join(p for p in (paragraph_one, paragraph_two) if p)
+    Anchor_ref, title, and other metadata are surfaced elsewhere in the
+    template (spiritual-ref, key_scripture); the reflection body is just the
+    prose fields concatenated. Contained duplicates are dropped.
+    """
 
-    if kind == "key_scripture":
-        paragraph_one = _join_sentences(
-            f"{anchor_ref} deserves slow reading" if anchor_ref else title,
-            supporting_excerpt,
-        )
-        paragraph_two = _join_sentences(core_claim, enhancement, application)
-        return "\n\n".join(p for p in (paragraph_one, paragraph_two) if p)
+    def clean(text: str) -> str:
+        return " ".join(str(text or "").split()).strip()
 
-    if kind == "scholarly_insight":
-        paragraph_one = _join_sentences(
-            title or "One useful scholarly insight from this week",
-            supporting_excerpt,
-        )
-        paragraph_two = _join_sentences(core_claim, enhancement, application)
-        return "\n\n".join(p for p in (paragraph_one, paragraph_two) if p)
+    ordered = [
+        clean(unit.get("supporting_excerpt")),
+        clean(unit.get("core_claim")),
+        clean(unit.get("enhancement")),
+        clean(unit.get("application")),
+    ]
 
-    if kind == "language_context":
-        paragraph_one = _join_sentences(
-            title or "One language and context note matters here",
-            supporting_excerpt,
-        )
-        paragraph_two = _join_sentences(core_claim, enhancement, application)
-        return "\n\n".join(p for p in (paragraph_one, paragraph_two) if p)
+    paragraphs: list[str] = []
+    for text in ordered:
+        if not text:
+            continue
+        if any(text in prior or prior in text for prior in paragraphs):
+            continue
+        paragraphs.append(text)
 
-    if kind == "faithful_application":
-        paragraph_one = _join_sentences(
-            title or "This week asks something concrete of us",
-            core_claim,
-            supporting_excerpt,
-        )
-        paragraph_two = _join_sentences(enhancement, application)
-        return "\n\n".join(p for p in (paragraph_one, paragraph_two) if p)
-
-    paragraph_one = _join_sentences(
-        f"{title} comes into focus in {anchor_ref}" if title and anchor_ref else title,
-        supporting_excerpt,
-    )
-    paragraph_two = _join_sentences(core_claim, enhancement, application)
-    return "\n\n".join(p for p in (paragraph_one, paragraph_two) if p)
+    return "\n\n".join(paragraphs)
 
 
 def _clean_reflection(text: str) -> str:

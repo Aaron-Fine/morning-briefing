@@ -111,10 +111,13 @@ class TestPrepareSpiritualRun:
 
         result = run(self._make_context(), {})
 
-        assert (
-            "Mosiah 2:17 deserves slow reading."
-            in result["spiritual"]["reflection"]
-        )
+        reflection = result["spiritual"]["reflection"]
+        assert "Service is not side work in the kingdom" in reflection
+        assert "Benjamin ties devotion to service." in reflection
+        assert "Benjamin is teaching obligation." in reflection
+        assert "Choose one person to serve without announcing it." in reflection
+        # No canned scaffolds leak through
+        assert "deserves slow reading" not in reflection
         assert result["spiritual"]["focus_id"] == "focus-1"
         assert result["spiritual"]["daily_unit_kind"] == "key_scripture"
         assert result["spiritual"]["text_ref"] == "Mosiah 2:17"
@@ -155,14 +158,14 @@ class TestPrepareSpiritualRun:
 
         result = run(self._make_context(), {})
 
-        assert (
-            "Service as public image management is easy to flatten into a slogan."
-            in result["spiritual"]["reflection"]
-        )
-        assert (
-            "A better reading takes the text on its own terms."
-            in result["spiritual"]["reflection"]
-        )
+        reflection = result["spiritual"]["reflection"]
+        assert "use service language to talk about ourselves" in reflection
+        assert "Benjamin treats service as response to God" in reflection
+        assert "turns the neighbor into a stage prop." in reflection
+        assert "Do one needed thing today that nobody will applaud." in reflection
+        # No canned scaffolds leak through
+        assert "easy to flatten into a slogan" not in reflection
+        assert "better reading takes the text on its own terms" not in reflection
 
     def test_legacy_daily_foci_are_still_renderable(self, monkeypatch):
         weekly = {
@@ -187,5 +190,7 @@ class TestPrepareSpiritualRun:
 
         result = run(self._make_context(), {})
 
-        assert "Mosiah 2:17" in result["spiritual"]["reflection"]
-        assert "Serving others is the visible shape of devotion." in result["spiritual"]["reflection"]
+        # Legacy `daily_foci` surface the guide_excerpt as the reflection body.
+        # The anchor_ref is exposed separately via text_ref, not inlined.
+        assert result["spiritual"]["reflection"] == "Serving others is the visible shape of devotion."
+        assert result["spiritual"]["text_ref"] == "Mosiah 2:17"
