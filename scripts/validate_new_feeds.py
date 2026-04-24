@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Validate RSS/Atom feed URLs before adding to config.yaml.
+"""Validate RSS/Atom feed URLs before adding to runtime config.
 
 Usage:
     python scripts/validate_new_feeds.py                    # validate candidate feeds
-    python scripts/validate_new_feeds.py --config           # validate all feeds in config.yaml
+    python scripts/validate_new_feeds.py --config           # validate all feeds in config/sources.yaml
     python scripts/validate_new_feeds.py --category energy-materials  # validate one category
 
 Checks each URL:
@@ -143,7 +143,7 @@ def _load_configured_feeds() -> list[dict]:
 
 def main():
     parser = argparse.ArgumentParser(description="Validate RSS/Atom feed URLs")
-    parser.add_argument("--config", action="store_true", help="Validate all feeds from config.yaml")
+    parser.add_argument("--config", action="store_true", help="Validate all feeds from config/sources.yaml")
     parser.add_argument("--category", type=str, help="Validate only feeds in this category")
     args = parser.parse_args()
 

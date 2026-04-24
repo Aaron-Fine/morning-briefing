@@ -596,15 +596,14 @@ def run(
     raw_sources = context.get("raw_sources", {})
     compressed_transcripts = context.get("compressed_transcripts", [])
 
-    effective_config = model_config or config.get("llm", {}).get(
-        "seam_detection",
-        {
-            "provider": "anthropic",
-            "model": "claude-sonnet-4-6",
-            "max_tokens": 8192,
-            "temperature": 0.3,
-        },
-    )
+    effective_config = model_config or config.get("llm", {})
+    if not effective_config:
+        log.warning("seams: no model config available")
+        return {
+            "seam_candidates": _empty_candidates(),
+            "seam_annotations": _empty_annotations(),
+            "seam_data": {"contested_narratives": [], "coverage_gaps": []},
+        }
     stage_cfg = kwargs.get("stage_cfg") or {}
     candidate_config = _resolve_turn_model_config(
         effective_config, stage_cfg, "candidates"

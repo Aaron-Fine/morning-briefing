@@ -95,7 +95,9 @@ def _call_fireworks(
     import openai
 
     client = _fireworks_client()
-    model = model_config.get("model", "accounts/fireworks/models/kimi-k2p5")
+    model = model_config.get("model")
+    if not model:
+        raise ValueError("Fireworks model_config must include model")
     max_tokens = model_config.get("max_tokens", 12000)
     temperature = model_config.get("temperature", 0.4)
 
@@ -133,7 +135,7 @@ def _fireworks_call(client, create_kwargs: dict, stream: bool) -> str:
     if stream:
         kwargs = {**create_kwargs, "stream": True}
         content_chunks: list[str] = []
-        reasoning_chunks: list[str] = []
+        saw_reasoning_content = False
         empty_count = 0
         with client.chat.completions.create(**kwargs) as resp:
             for chunk in resp:
@@ -148,16 +150,15 @@ def _fireworks_call(client, create_kwargs: dict, stream: bool) -> str:
                 if getattr(delta, "content", None):
                     content_chunks.append(delta.content)
                 elif getattr(delta, "reasoning_content", None):
-                    # Kimi K2.5 extended thinking: collect as fallback
-                    reasoning_chunks.append(delta.reasoning_content)
+                    # Fireworks exposes internal thinking in reasoning_content.
+                    # This must never be surfaced as the user-visible answer.
+                    saw_reasoning_content = True
         text = "".join(content_chunks).strip()
-        if not text and reasoning_chunks:
-            # Model exhausted token budget on thinking — surface reasoning as the response.
-            # This should only happen when max_tokens is too low for the model to think + respond.
+        if not text and saw_reasoning_content:
             log.warning(
-                "Fireworks stream: no content chunks, using reasoning_content as fallback"
+                "Fireworks stream: reasoning_content received without assistant content; "
+                "ignoring reasoning trace"
             )
-            text = "".join(reasoning_chunks).strip()
         return text
     else:
         kwargs = {**create_kwargs, "stream": False}
@@ -176,7 +177,9 @@ def _call_anthropic(
     import anthropic
 
     client = _anthropic_client()
-    model = model_config.get("model", "claude-sonnet-4-6")
+    model = model_config.get("model")
+    if not model:
+        raise ValueError("Anthropic model_config must include model")
     max_tokens = model_config.get("max_tokens", 8192)
     temperature = model_config.get("temperature", 0.3)
 

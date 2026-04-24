@@ -76,7 +76,7 @@
   .spiritual-ref { font-size: 10px; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 8px; }
   .spiritual-text { font-family: Georgia, serif; font-size: 16px; line-height: 1.65; font-style: italic; color: var(--text); }
   .spiritual-cite { font-size: 14px; color: var(--text-secondary); margin-top: 6px; font-style: normal; }
-  .spiritual-ctx { font-size: 14px; color: var(--text-muted); margin-top: 8px; }
+  .spiritual-ctx { font-size: 14px; color: var(--text-muted); margin-top: 8px; white-space: pre-line; }
 
   /* ── Info bars (weather, markets) ───────────────────────── */
   .bar { padding: 12px 32px; background: var(--bg-bar); border-bottom: 1px solid var(--border); font-size: 14px; color: var(--text-secondary); }

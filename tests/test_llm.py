@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from morning_digest.llm import _parse_response, call_llm
+from morning_digest.llm import _fireworks_call, _parse_response, call_llm
 
 
 class TestParseResponse:
@@ -131,3 +131,55 @@ class TestCallLlm:
             model_config={},
         )
         mock_fireworks.assert_called_once()
+
+
+class _FakeStreamResponse:
+    def __init__(self, chunks):
+        self._chunks = chunks
+
+    def __enter__(self):
+        return iter(self._chunks)
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+class _FakeChunk:
+    def __init__(self, *, content=None, reasoning_content=None, has_choices=True):
+        self.choices = [] if not has_choices else [
+            MagicMock(
+                delta=MagicMock(
+                    content=content,
+                    reasoning_content=reasoning_content,
+                )
+            )
+        ]
+
+
+class TestFireworksCall:
+    def test_stream_returns_content_only(self):
+        client = MagicMock()
+        client.chat.completions.create.return_value = _FakeStreamResponse(
+            [
+                _FakeChunk(reasoning_content="hidden thinking"),
+                _FakeChunk(content='{"ok":'),
+                _FakeChunk(content=' true}'),
+            ]
+        )
+
+        result = _fireworks_call(client, {"model": "test"}, stream=True)
+
+        assert result == '{"ok": true}'
+
+    def test_stream_does_not_fallback_to_reasoning_content(self):
+        client = MagicMock()
+        client.chat.completions.create.return_value = _FakeStreamResponse(
+            [
+                _FakeChunk(reasoning_content="step 1"),
+                _FakeChunk(reasoning_content="step 2"),
+            ]
+        )
+
+        result = _fireworks_call(client, {"model": "test"}, stream=True)
+
+        assert result == ""

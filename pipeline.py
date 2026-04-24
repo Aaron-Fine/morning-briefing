@@ -2,7 +2,7 @@
 """Morning Digest v2 — Staged Pipeline Orchestrator.
 
 Replaces the monolithic digest.py with a stage-based pipeline that:
-  - Executes stages in dependency order defined in config.yaml
+  - Executes stages in dependency order defined in config/
   - Persists each stage's output as JSON artifacts in output/artifacts/{YYYY-MM-DD}/
   - Supports re-running any single stage from the command line (--stage NAME)
   - Logs timing per stage
@@ -617,7 +617,7 @@ def run_pipeline(
     # Load pipeline stage manifest from config
     stage_manifest = config.get("pipeline", {}).get("stages", [])
     if not stage_manifest:
-        log.error("No pipeline.stages defined in config.yaml")
+        log.error("No pipeline.stages defined in config/")
         sys.exit(1)
 
     # Determine which stages to skip (loading from artifacts) vs. run

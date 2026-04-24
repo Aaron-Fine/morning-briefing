@@ -51,7 +51,12 @@ def test_seams_returns_annotation_artifact(mock_llm):
             "raw_sources": {},
             "compressed_transcripts": [],
         },
-        {"llm": {}},
+        {
+            "llm": {
+                "provider": "fireworks",
+                "model": "accounts/fireworks/models/kimi-k2p6",
+            }
+        },
     )
 
     assert result["seam_candidates"]["candidates"][0]["item_id"] == "geo-1"

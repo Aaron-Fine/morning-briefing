@@ -91,7 +91,10 @@ class TestCompressOne:
 class TestCompressRun:
     def test_empty_transcripts_returns_empty_list(self):
         context = {"raw_sources": {"analysis_transcripts": []}}
-        result = compress_run(context, {})
+        result = compress_run(
+            context,
+            {"llm": {"provider": "fireworks", "model": "accounts/fireworks/models/minimax-m2p7"}},
+        )
         assert result == {"compressed_transcripts": []}
 
     @patch("stages.compress._compress_one")
@@ -105,7 +108,10 @@ class TestCompressRun:
                 ]
             }
         }
-        result = compress_run(context, {})
+        result = compress_run(
+            context,
+            {"llm": {"provider": "fireworks", "model": "accounts/fireworks/models/minimax-m2p7"}},
+        )
         # Assert on output, not implementation detail (call_count)
         assert len(result["compressed_transcripts"]) == 2
         assert all(ct["compressed"] for ct in result["compressed_transcripts"])

@@ -16,7 +16,7 @@ from morning_digest.config import load_config
 
 _ROOT = Path(__file__).resolve().parent.parent
 _ARTIFACTS_DIR = _ROOT / "output" / "artifacts"
-_CONFIG_PATH = _ROOT / "config.yaml"
+_CONFIG_PATH = _ROOT / "config"
 
 
 def load_artifacts(
@@ -180,9 +180,11 @@ def merge_enrich_metrics(feed_metrics: dict[str, dict], records: list[dict]) -> 
 
 
 def annotate_with_config(feed_metrics: dict[str, dict], config_path: Path) -> None:
-    """Add feed mode/cap/enrichment strategy from config.yaml."""
+    """Add feed mode/cap/enrichment strategy from runtime config."""
     try:
-        if config_path.name == "config.yaml":
+        if config_path.is_dir():
+            config = load_config(config_path.parent)
+        elif config_path.name == "config.yaml":
             config = load_config(config_path.parent)
         else:
             if not config_path.exists():

@@ -1,4 +1,0 @@
-# Morning Digest split configuration marker.
-# Runtime config is loaded from config/pipeline.yaml, config/sources.yaml, and config/delivery.yaml.
-# A deployment may still mount a full legacy config.yaml here as an override.
-_split_config: true

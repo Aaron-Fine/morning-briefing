@@ -35,7 +35,7 @@ def _send_digest(html: str, config: dict) -> bool:
         return False
 
     if not to_addr:
-        log.error("delivery.to_address not set in config.yaml")
+        log.error("delivery.to_address not set in config/")
         return False
 
     subject_template = delivery.get("subject_template", "Morning Digest — {date}")

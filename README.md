@@ -69,7 +69,7 @@ graph TD
     briefing_packet --> send
 
     subgraph LLM Providers
-        CFG["Configured provider(s) in config.yaml"]
+        CFG["Configured provider(s) in config/"]
     end
 ```
 
@@ -89,9 +89,10 @@ graph TD
 cp .env.example .env
 # Edit .env with your API keys
 
-# Edit config.yaml:
-# - Set delivery.to_address to your email address
-# - Adjust topics, channels, feeds, and schedule as desired
+# Edit config/:
+# - config/delivery.yaml: delivery.to_address, schedule, digest preferences
+# - config/sources.yaml: feeds, channels, location, markets
+# - config/pipeline.yaml: stages, desks, model settings
 ```
 
 ### 3. Build and test
@@ -177,7 +178,7 @@ cp .env.example .env
 nano .env   # fill in your keys
 ```
 
-**3. Edit `config.yaml`** — set your `delivery.to_address` and adjust preferences.
+**3. Edit `config/`** — set your `delivery.to_address` and adjust preferences.
 
 **4. In the Unraid UI:**
 
@@ -225,7 +226,7 @@ docker build -t morning-digest:latest .
 | Variable | Value |
 |----------|-------|
 | `TZ` | `America/Denver` |
-| Provider API key(s) | keys required by the models/providers configured in `config.yaml` |
+| Provider API key(s) | keys required by the models/providers configured in `config/` |
 | `FINNHUB_API_KEY` | your Finnhub key |
 | `SMTP_USER` | your email address |
 | `SMTP_PASSWORD` | your Gmail App Password (or SMTP password) |
@@ -234,7 +235,7 @@ docker build -t morning-digest:latest .
 
 | Container path | Host path | Access |
 |---------------|-----------|--------|
-| `/app/config.yaml` | `/mnt/user/appdata/morning-digest/config.yaml` | Read Only |
+| `/app/config` | `/mnt/user/appdata/morning-digest/config` | Read Only |
 | `/app/output` | `/mnt/user/appdata/morning-digest/output` | Read/Write |
 
 **5. Click Apply.** The container will start and wait until 6:00 AM MT to send the first digest.
@@ -243,7 +244,7 @@ docker build -t morning-digest:latest .
 
 ### Rebuilding after updates
 
-When you pull changes from git, **always rebuild the image** — only `config.yaml` and `output/` are volume-mounted, so Python code changes require a rebuild:
+When you pull changes from git, **always rebuild the image** — only `config/` and `output/` are volume-mounted, so Python code changes require a rebuild:
 
 ```bash
 cd /mnt/user/appdata/morning-digest
@@ -263,7 +264,13 @@ docker build -t morning-digest:latest .
 
 ## Configuration Reference
 
-### config.yaml
+### config/
+
+Runtime config is split across:
+
+- `config/pipeline.yaml`
+- `config/sources.yaml`
+- `config/delivery.yaml`
 
 **`schedule.cron`** — When to send. Default: `0 6 * * *` (6:00 AM daily)
 
@@ -438,7 +445,7 @@ Falls back to direct RSS fetching if the FreshRSS API is unreachable.
 
 ## Cost
 
-Costs vary by the providers and models configured in `config.yaml`.
+Costs vary by the providers and models configured in `config/`.
 
 | Stage | Input | Output | Est. cost |
 |-------|-------|--------|-----------|
@@ -458,7 +465,10 @@ All other sources are free with no API key required.
 
 ```text
 morning-digest/
-├── config.yaml              # All preferences — edit this
+├── config/
+│   ├── pipeline.yaml        # Stages, desks, model settings
+│   ├── sources.yaml         # RSS, YouTube, weather, markets, location
+│   └── delivery.yaml        # Schedule, delivery, digest preferences
 ├── pipeline.py              # Staged pipeline orchestrator (v2)
 ├── entrypoint.py            # Scheduler (runs at configured cron time)
 ├── stages/

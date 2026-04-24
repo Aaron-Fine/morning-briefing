@@ -465,7 +465,12 @@ class TestSeamsRun:
             },
             "compressed_transcripts": [],
         }
-        config = {"llm": {"seam_detection": {"provider": "fireworks"}}}
+        config = {
+            "llm": {
+                "provider": "fireworks",
+                "model": "accounts/fireworks/models/kimi-k2p6",
+            }
+        }
         result = run(context, config)
         assert "seam_candidates" in result
         assert "seam_scan" in result
@@ -500,7 +505,12 @@ class TestSeamsRun:
             "raw_sources": {"rss": []},
             "compressed_transcripts": [],
         }
-        config = {"llm": {}}
+        config = {
+            "llm": {
+                "provider": "fireworks",
+                "model": "accounts/fireworks/models/kimi-k2p6",
+            }
+        }
         result = run(context, config)
         assert result["seam_data"]["quiet_day"] is True
         assert result["seam_data"]["seam_count"] == 0
@@ -513,7 +523,12 @@ class TestSeamsRun:
             "raw_sources": {"rss": []},
             "compressed_transcripts": [],
         }
-        config = {"llm": {}}
+        config = {
+            "llm": {
+                "provider": "fireworks",
+                "model": "accounts/fireworks/models/kimi-k2p6",
+            }
+        }
         result = run(context, config)
         assert result["seam_candidates"]["candidates"] == []
         assert "seam_data" in result
@@ -532,7 +547,12 @@ class TestSeamsRun:
             "raw_sources": {"rss": []},
             "compressed_transcripts": [],
         }
-        config = {"llm": {}}
+        config = {
+            "llm": {
+                "provider": "fireworks",
+                "model": "accounts/fireworks/models/kimi-k2p6",
+            }
+        }
         result = run(context, config)
         seam_data = result["seam_data"]
         assert seam_data["contested_narratives"] == []
@@ -574,7 +594,12 @@ class TestSeamsRun:
             },
             "compressed_transcripts": [],
         }
-        config = {"llm": {}}
+        config = {
+            "llm": {
+                "provider": "fireworks",
+                "model": "accounts/fireworks/models/kimi-k2p6",
+            }
+        }
         result = run(context, config)
         assert result["seam_annotations"]["per_item"] == []
         assert result["seam_data"]["seam_count"] == 0
@@ -592,7 +617,12 @@ class TestSeamsRun:
             "raw_sources": {"rss": []},
             "compressed_transcripts": [],
         }
-        config = {"llm": {}}
+        config = {
+            "llm": {
+                "provider": "fireworks",
+                "model": "accounts/fireworks/models/kimi-k2p6",
+            }
+        }
 
         result = run(context, config)
 
@@ -645,7 +675,15 @@ class TestSeamsRun:
             "compressed_transcripts": [],
         }
 
-        result = run(context, {"llm": {}})
+        result = run(
+            context,
+            {
+                "llm": {
+                    "provider": "fireworks",
+                    "model": "accounts/fireworks/models/kimi-k2p6",
+                }
+            },
+        )
 
         assert result["seam_annotations"]["per_item"] == []
         assert result["seam_contract_issues"] == [

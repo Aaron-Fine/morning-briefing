@@ -22,7 +22,7 @@ def test_seams_turns_stay_below_fireworks_forced_stream_threshold():
         if stage.get("name") == "seams"
     )
 
-    assert seams_stage["model"]["model"] == "accounts/fireworks/models/kimi-k2p5"
+    assert seams_stage["model"]["model"] == "accounts/fireworks/models/kimi-k2p6"
     assert seams_stage["model"]["max_tokens"] <= 4096
     assert seams_stage["turns"]["candidates"]["max_tokens"] <= 4096
     assert seams_stage["turns"]["annotations"]["max_tokens"] <= 4096

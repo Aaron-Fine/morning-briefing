@@ -79,12 +79,10 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
         log.info("compress: no transcripts to compress")
         return {"compressed_transcripts": []}
 
-    effective_config = model_config or config.get("llm", {}).get("compression", {
-        "provider": "fireworks",
-        "model": "accounts/fireworks/models/minimax-m2p7",
-        "max_tokens": 2000,
-        "temperature": 0.2,
-    })
+    effective_config = model_config or config.get("llm", {})
+    if not effective_config:
+        log.warning("compress: no model config available")
+        return {"compressed_transcripts": []}
 
     log.info(f"Compressing {len(transcripts)} transcript(s) in parallel...")
     results = [None] * len(transcripts)
