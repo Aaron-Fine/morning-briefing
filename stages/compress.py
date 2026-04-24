@@ -81,8 +81,10 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
 
     effective_config = model_config or config.get("llm", {})
     if not effective_config:
-        log.warning("compress: no model config available")
-        return {"compressed_transcripts": []}
+        raise RuntimeError(
+            "compress: no model config available "
+            "(expected pipeline.stages[compress].model or top-level llm)"
+        )
 
     log.info(f"Compressing {len(transcripts)} transcript(s) in parallel...")
     results = [None] * len(transcripts)

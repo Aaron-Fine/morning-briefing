@@ -598,12 +598,10 @@ def run(
 
     effective_config = model_config or config.get("llm", {})
     if not effective_config:
-        log.warning("seams: no model config available")
-        return {
-            "seam_candidates": _empty_candidates(),
-            "seam_annotations": _empty_annotations(),
-            "seam_data": {"contested_narratives": [], "coverage_gaps": []},
-        }
+        raise RuntimeError(
+            "seams: no model config available "
+            "(expected pipeline.stages[seams].model or top-level llm)"
+        )
     stage_cfg = kwargs.get("stage_cfg") or {}
     candidate_config = _resolve_turn_model_config(
         effective_config, stage_cfg, "candidates"
