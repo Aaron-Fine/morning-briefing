@@ -434,10 +434,7 @@ def _items_from_parsed_feed(
         native_body = _entry_body(entry)
         if native_body:
             item["_rss_body"] = native_body
-        if tag:
-            item["tag"] = tag
-        if category:
-            item["category"] = category
+        _copy_feed_metadata(item, feed_conf, tag, category)
         items.append(item)
         if len(items) >= cap:
             break
@@ -497,15 +494,28 @@ def _items_from_html_index(feed_conf: dict, content: bytes) -> list[dict]:
             "freshness": "retrieved_at",
             "summary": "",
         }
-        if tag:
-            item["tag"] = tag
-        if category:
-            item["category"] = category
+        _copy_feed_metadata(item, feed_conf, tag, category)
         items.append(item)
         if len(items) >= cap:
             break
 
     return items
+
+
+def _copy_feed_metadata(
+    item: dict,
+    feed_conf: dict,
+    tag: str = "",
+    category: str = "",
+) -> None:
+    """Attach feed-level routing and trust metadata to collected items."""
+    if tag:
+        item["tag"] = tag
+    if category:
+        item["category"] = category
+    for key in ("reliability", "analysis_mode"):
+        if feed_conf.get(key):
+            item[key] = feed_conf[key]
 
 
 def _looks_like_article_link(base_netloc: str, href: str, title: str) -> bool:

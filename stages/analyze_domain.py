@@ -107,11 +107,13 @@ _DOMAIN_CONFIGS = {
         "min_items": 1,
         "domain_instructions": (
             "SOURCE TREATMENT:\n"
-            "- Primary-reporting sources (Breaking Defense, Air & Space Forces, SpaceNews): "
+            "- Primary-reporting sources (Breaking Defense, Air & Space Forces, "
+            "NASA feeds, JPL, Spaceflight Now): "
             "factual foundation. Attribute procurement figures, program milestones, and "
             "contract awards to the specific source. Dollar figures and timelines are "
             "facts — treat them as such.\n"
-            "- Analysis/opinion sources (War on the Rocks, Defense Tech and Acquisition): "
+            "- Analysis/opinion sources (Ars Technica Space, War on the Rocks, "
+            "Defense Tech and Acquisition): "
             "useful for strategic interpretation — label as analysis. Their value is "
             "connecting procurement decisions to strategic posture.\n"
             "- Perun (YouTube): expert military-industrial analysis with strong logistics "
@@ -268,7 +270,14 @@ _DOMAIN_CONFIGS = {
         "min_items": 1,
         "domain_instructions": (
             "SOURCE TREATMENT:\n"
-            "- Nature, Science Magazine: gold-standard primary research reporting. "
+            "- Nature and Science Magazine may appear only as headline-radar sources; "
+            "do not treat their title-only items as sufficient evidence without a "
+            "fuller source elsewhere.\n"
+            "- ScienceDaily and Phys.org are science-wire sources: useful for surfacing "
+            "new papers and institutional releases, but verify significance and avoid "
+            "overstating press-release claims.\n"
+            "- Nature, Science Magazine, STAT News, and Endpoints remain stronger when "
+            "full reporting is available. "
             "Attribute specific findings with journal names and, when available, "
             "lead researcher names.\n"
             "- STAT News: biotech and pharma industry reporting. Strong on FDA actions, "
@@ -418,7 +427,12 @@ RULES:
 
 
 def _filter_rss(rss_items: list[dict], categories: set[str]) -> list[dict]:
-    return [item for item in rss_items if item.get("category") in categories]
+    return [
+        item
+        for item in rss_items
+        if item.get("category") in categories
+        and item.get("analysis_mode") != "headline_radar"
+    ]
 
 
 def _filter_transcripts(compressed: list[dict], channel_names: set[str]) -> list[dict]:

@@ -56,6 +56,15 @@ class TestFilterRss:
         result = _filter_rss(items, {"ai-tech"})
         assert result == []
 
+    def test_headline_radar_items_do_not_feed_analysis(self):
+        items = [
+            {"category": "econ-trade", "title": "Title-only", "analysis_mode": "headline_radar"},
+            {"category": "econ-trade", "title": "Full-text"},
+        ]
+        result = _filter_rss(items, {"econ-trade"})
+        assert len(result) == 1
+        assert result[0]["title"] == "Full-text"
+
 
 class TestFilterTranscripts:
     def test_filters_by_channel(self):

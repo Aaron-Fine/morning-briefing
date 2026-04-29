@@ -85,11 +85,31 @@ rss:
     name: Air & Space Forces
     category: defense-mil
     reliability: primary-reporting
-  - url: https://spacenews.com/feed/
-    name: SpaceNews
+  - url: https://arstechnica.com/space/feed/
+    name: Ars Technica Space
+    cap: 5
+    category: defense-mil
+    reliability: analysis-opinion
+  - url: https://www.nasa.gov/news-release/feed/
+    name: NASA News Releases
+    cap: 4
     category: defense-mil
     reliability: primary-reporting
-    cooldown_on_429_seconds: 21600
+  - url: https://www.nasa.gov/blogs/artemis/feed/
+    name: NASA Artemis
+    cap: 3
+    category: defense-mil
+    reliability: primary-reporting
+  - url: https://www.jpl.nasa.gov/feeds/news/
+    name: NASA JPL
+    cap: 3
+    category: defense-mil
+    reliability: primary-reporting
+  - url: https://spaceflightnow.com/feed/
+    name: Spaceflight Now
+    cap: 5
+    category: defense-mil
+    reliability: primary-reporting
   - url: https://warontherocks.com/feed/
     name: War on the Rocks
     cap: 5
@@ -172,6 +192,7 @@ rss:
     cap: 5
     category: econ-trade
     reliability: primary-reporting
+    analysis_mode: headline_radar
     enrich:
       strategy: skip
       title_only_ok: true
@@ -182,21 +203,22 @@ rss:
     cap: 5
     category: econ-trade
     reliability: analysis-opinion
+    analysis_mode: headline_radar
     enrich:
       strategy: skip
       title_only_ok: true
       skip_reason: RSS teaser/title only; do not fetch hard paywall without separate
         subscription workflow
-  - url: https://www.reuters.com/markets/
-    name: Reuters Markets
-    cap: 5
+  - url: https://www.bis.org/doclist/all_pressrels.rss
+    name: BIS Press Releases
+    cap: 3
     category: econ-trade
     reliability: primary-reporting
-    mode: html_index
-    cooldown_on_error_seconds: 21600
-    enrich:
-      strategy: browser_fetch
-      browser_wait_for: css:article
+  - url: https://www.bis.org/doclist/cbspeeches.rss
+    name: BIS Central Bank Speeches
+    cap: 3
+    category: econ-trade
+    reliability: institutional-analysis
   - url: https://www.ipsnews.net/news/headlines/feed/
     name: Inter Press Service
     cap: 5
@@ -278,6 +300,7 @@ rss:
     cap: 5
     category: science-biotech
     reliability: primary-reporting
+    analysis_mode: headline_radar
     enrich:
       strategy: skip
       title_only_ok: true
@@ -288,11 +311,37 @@ rss:
     cap: 5
     category: science-biotech
     reliability: primary-reporting
+    analysis_mode: headline_radar
     enrich:
       strategy: skip
       title_only_ok: true
       skip_reason: RSS teaser/title only; avoid publisher access edge cases until
         source-specific policy is revisited
+  - url: https://www.sciencedaily.com/rss/top/science.xml
+    name: ScienceDaily Top Science
+    cap: 4
+    category: science-biotech
+    reliability: science-wire
+  - url: https://www.sciencedaily.com/rss/top/health.xml
+    name: ScienceDaily Health
+    cap: 4
+    category: science-biotech
+    reliability: science-wire
+  - url: https://www.sciencedaily.com/rss/plants_animals/biotechnology.xml
+    name: ScienceDaily Biotechnology
+    cap: 4
+    category: science-biotech
+    reliability: science-wire
+  - url: https://phys.org/rss-feed/nanotech-news/bio-medicine/
+    name: Phys.org Bio & Medicine
+    cap: 4
+    category: science-biotech
+    reliability: science-wire
+  - url: https://phys.org/rss-feed/biology-news/biotechnology/
+    name: Phys.org Biotechnology
+    cap: 4
+    category: science-biotech
+    reliability: science-wire
   - url: https://www.statnews.com/feed/
     name: STAT News
     cap: 5

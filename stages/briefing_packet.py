@@ -55,6 +55,7 @@ def _build_source_index(raw_sources: dict, domain_analysis: dict) -> list:
             "source": item.get("source", "") or item.get("name", ""),
             "category": item.get("category", ""),
             "reliability": item.get("reliability", ""),
+            "analysis_mode": item.get("analysis_mode", ""),
             "url": url,
             "summary": summary if is_referenced else _first_two_sentences(summary),
             "_referenced": is_referenced,

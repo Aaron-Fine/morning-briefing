@@ -357,6 +357,8 @@ class TestRssFeeds:
             "name": "HTML Feed",
             "url": "https://example.com/",
             "category": "test",
+            "reliability": "primary-reporting",
+            "analysis_mode": "headline_radar",
             "mode": "html_index",
             "cap": 5,
         }
@@ -368,6 +370,9 @@ class TestRssFeeds:
         assert items[1]["url"] == "https://example.com/p/second-post"
         assert items[0]["published"] == ""
         assert items[0]["freshness"] == "retrieved_at"
+        assert items[0]["category"] == "test"
+        assert items[0]["reliability"] == "primary-reporting"
+        assert items[0]["analysis_mode"] == "headline_radar"
         assert datetime.fromisoformat(items[0]["fetched_at"]).tzinfo is not None
 
     def test_items_from_parsed_feed_caps_after_age_filtering(self):
@@ -395,12 +400,22 @@ class TestRssFeeds:
         ]
 
         items = _items_from_parsed_feed(
-            {"name": "Feed", "url": "https://example.com/feed", "cap": 2},
+            {
+                "name": "Feed",
+                "url": "https://example.com/feed",
+                "cap": 2,
+                "category": "science-biotech",
+                "reliability": "primary-reporting",
+                "analysis_mode": "headline_radar",
+            },
             entries,
             now - timedelta(hours=36),
         )
 
         assert [item["title"] for item in items] == ["Fresh one", "Fresh two"]
+        assert items[0]["category"] == "science-biotech"
+        assert items[0]["reliability"] == "primary-reporting"
+        assert items[0]["analysis_mode"] == "headline_radar"
 
     def test_skip_due_to_cooldown_returns_skip_result(self):
         feed = {"name": "Cool Feed", "url": "https://example.com/feed.xml"}
