@@ -54,7 +54,7 @@ def test_dedup_by_url_preserves_first_occurrence():
 def test_rss_only_uses_native_text_without_fetch_or_llm(tmp_path):
     feeds = [{"name": "A", "url": "x", "enrich": {"strategy": "rss_only"}}]
     item = {"source": "A", "url": "https://x/1", "summary": "Native summary"}
-    with patch("stages.enrich_articles.fetch_article_html") as fetch:
+    with patch("stages.enrich_articles.fetch.fetch_article_html") as fetch:
         out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path, feeds=feeds))
     assert "raw_sources" not in out
     assert out["enriched_sources"]["rss"][0]["summary"] == "Native summary"
@@ -86,7 +86,7 @@ def test_long_native_text_is_distilled_like_fetched_text(tmp_path):
         "Canonical summary with enough concrete detail to pass length checks "
         "for a long source article."
     )
-    with patch("stages.enrich_articles.call_llm", return_value=canonical):
+    with patch("stages.enrich_articles.canonical.call_llm", return_value=canonical):
         out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path, feeds=feeds), model)
     assert out["enriched_sources"]["rss"][0]["summary"] == canonical
     assert out["enrich_articles"]["records"][0]["source_text_origin"] == "rss_body"
@@ -94,12 +94,12 @@ def test_long_native_text_is_distilled_like_fetched_text(tmp_path):
 
 def test_auto_fetches_when_native_text_is_too_short(tmp_path):
     item = {"source": "A", "url": "https://x/1", "summary": "short"}
-    with patch("stages.enrich_articles.fetch_article_html") as fetch:
+    with patch("stages.enrich_articles.fetch.fetch_article_html") as fetch:
         fetch.return_value.status = "ok"
         fetch.return_value.http_status = 200
         fetch.return_value.html = "<html></html>"
         fetch.return_value.error = ""
-        with patch("stages.enrich_articles.extract_article") as extract:
+        with patch("stages.enrich_articles.fetch.extract_article") as extract:
             extract.return_value.status = "ok"
             extract.return_value.text = "Fetched body. " * 30
             extract.return_value.raw_length = len(extract.return_value.text)
@@ -110,7 +110,7 @@ def test_auto_fetches_when_native_text_is_too_short(tmp_path):
 
 def test_fetch_failure_leaves_original_summary(tmp_path):
     item = {"source": "A", "url": "https://x/1", "summary": "short"}
-    with patch("stages.enrich_articles.fetch_article_html") as fetch:
+    with patch("stages.enrich_articles.fetch.fetch_article_html") as fetch:
         fetch.return_value.status = "http_error"
         fetch.return_value.http_status = 500
         fetch.return_value.html = ""
@@ -143,7 +143,7 @@ def test_duplicate_gets_canonical_summary(tmp_path):
         "Canonical summary with enough concrete detail to pass length checks "
         "for a long source article."
     )
-    with patch("stages.enrich_articles.call_llm", return_value=canonical):
+    with patch("stages.enrich_articles.canonical.call_llm", return_value=canonical):
         out = run({"raw_sources": {"rss": items}}, _config(tmp_path), model)
     assert out["enriched_sources"]["rss"][0]["summary"] == canonical
     assert out["enriched_sources"]["rss"][1]["summary"] == canonical
@@ -180,12 +180,12 @@ def test_fetch_cap_limits_network_fetches_not_native_normalization(tmp_path):
         "Native canonical summary with enough concrete detail to pass length "
         "checks for a long source article."
     )
-    with patch("stages.enrich_articles.fetch_article_html") as fetch:
+    with patch("stages.enrich_articles.fetch.fetch_article_html") as fetch:
         fetch.return_value.status = "http_error"
         fetch.return_value.http_status = 500
         fetch.return_value.html = ""
         fetch.return_value.error = "boom"
-        with patch("stages.enrich_articles.call_llm", return_value=canonical):
+        with patch("stages.enrich_articles.canonical.call_llm", return_value=canonical):
             out = run({"raw_sources": {"rss": items}}, cfg, {"provider": "fireworks"})
     assert fetch.call_count == 1
     statuses = [r["status"] for r in out["enrich_articles"]["records"]]
@@ -199,7 +199,7 @@ def test_fetch_cap_prioritizes_empty_native_text(tmp_path):
         {"source": "A", "url": "https://x/empty", "summary": ""},
     ]
     cfg = _config(tmp_path, enrich={"max_fetches_per_run": 1})
-    with patch("stages.enrich_articles.fetch_article_html") as fetch:
+    with patch("stages.enrich_articles.fetch.fetch_article_html") as fetch:
         fetch.return_value.status = "http_error"
         fetch.return_value.http_status = 500
         fetch.return_value.html = ""
@@ -234,7 +234,7 @@ def test_browser_fetch_strategy_uses_browser_markdown(tmp_path):
         raw_length=47,
         error="",
     )
-    with patch("stages.enrich_articles.fetch_article_browser_markdown", return_value=result):
+    with patch("stages.enrich_articles.fetch.fetch_article_browser_markdown", return_value=result):
         out = run({"raw_sources": {"rss": [item]}}, cfg)
     assert "Browser markdown body" in out["enriched_sources"]["rss"][0]["summary"]
     assert out["enrich_articles"]["records"][0]["source_text_origin"] == "browser_markdown"
@@ -254,7 +254,7 @@ def test_browser_fetch_has_separate_cap(tmp_path):
         feeds=feeds,
         enrich={"browser_fetch_enabled": True, "max_browser_fetches_per_run": 1},
     )
-    with patch("stages.enrich_articles.fetch_article_browser_markdown") as fetch:
+    with patch("stages.enrich_articles.fetch.fetch_article_browser_markdown") as fetch:
         fetch.return_value.status = "browser_failed"
         fetch.return_value.http_status = None
         fetch.return_value.markdown = ""
@@ -275,12 +275,12 @@ def test_auto_browser_fallback_only_candidates_empty_native_text(tmp_path):
         tmp_path,
         enrich={"browser_fetch_enabled": True, "max_browser_fetches_per_run": 1},
     )
-    with patch("stages.enrich_articles.fetch_article_html") as http_fetch:
+    with patch("stages.enrich_articles.fetch.fetch_article_html") as http_fetch:
         http_fetch.return_value.status = "http_error"
         http_fetch.return_value.http_status = 500
         http_fetch.return_value.html = ""
         http_fetch.return_value.error = "boom"
-        with patch("stages.enrich_articles.fetch_article_browser_markdown") as browser:
+        with patch("stages.enrich_articles.fetch.fetch_article_browser_markdown") as browser:
             browser.return_value.status = "browser_failed"
             browser.return_value.http_status = None
             browser.return_value.markdown = ""
@@ -302,7 +302,7 @@ def test_rejects_meta_llm_summary_for_long_source(tmp_path):
     }
     model = {"provider": "fireworks", "model": "x"}
     with patch(
-        "stages.enrich_articles.call_llm",
+        "stages.enrich_articles.canonical.call_llm",
         return_value="The user wants me to summarize this article.",
     ):
         out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path, feeds=feeds), model)
@@ -324,7 +324,7 @@ def test_short_llm_summary_records_rejection_reason(tmp_path):
         "_rss_body": "Full source sentence. " * 80,
     }
     model = {"provider": "fireworks", "model": "x"}
-    with patch("stages.enrich_articles.call_llm", return_value="Too short"):
+    with patch("stages.enrich_articles.canonical.call_llm", return_value="Too short"):
         out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path, feeds=feeds), model)
     record = out["enrich_articles"]["records"][0]
     assert out["enriched_sources"]["rss"][0]["summary"].startswith("Full source sentence.")
