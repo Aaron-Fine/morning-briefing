@@ -10,11 +10,13 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from stages.analyze_domain import (
+    _collect_research_requests,
     _filter_rss,
     _filter_transcripts,
     _fmt_rss_items,
     _fmt_transcripts,
     _fmt_markets,
+    _successful_research_by_domain,
     _empty_domain_result,
     _resolve_domain_configs,
     _run_domain_pass,
@@ -307,6 +309,58 @@ class TestRunDomainPass:
         assert result["items"][0]["headline"] == "Test headline"
 
     @patch("stages.analyze_domain.call_llm")
+    def test_research_requests_preserved_on_first_pass(self, mock_llm):
+        url = "https://example.com/ai-tech"
+        mock_llm.return_value = {
+            "items": [],
+            "research_requests": [
+                {
+                    "url": url,
+                    "claim": "Need fuller detail",
+                    "reason": "RSS summary is thin",
+                    "priority": "high",
+                    "expected_use": "Decide whether to include",
+                }
+            ],
+        }
+        cfg = _DOMAIN_CONFIGS["ai_tech"]
+        result = _run_domain_pass(
+            "ai_tech",
+            cfg,
+            self._make_rss_items(),
+            [],
+            [],
+            self._make_model_config(),
+            allow_research_requests=True,
+        )
+        assert result["research_requests"][0]["url"] == url
+        assert "research_requests" in mock_llm.call_args.args[0]
+
+    @patch("stages.analyze_domain.call_llm")
+    def test_research_results_included_on_second_pass(self, mock_llm):
+        mock_llm.return_value = {"items": []}
+        cfg = _DOMAIN_CONFIGS["ai_tech"]
+        _run_domain_pass(
+            "ai_tech",
+            cfg,
+            self._make_rss_items(),
+            [],
+            [],
+            self._make_model_config(),
+            research_results=[
+                {
+                    "status": "ok",
+                    "source": "Test",
+                    "title": "Article for ai-tech",
+                    "url": "https://example.com/ai-tech",
+                    "claim": "Need fuller detail",
+                    "summary": "Fetched article detail.",
+                }
+            ],
+        )
+        assert "REQUESTED ARTICLE FETCH RESULTS" in mock_llm.call_args.args[1]
+
+    @patch("stages.analyze_domain.call_llm")
     def test_llm_exception_returns_empty_result(self, mock_llm, caplog):
         mock_llm.side_effect = Exception("API error")
         cfg = _DOMAIN_CONFIGS["ai_tech"]
@@ -582,3 +636,99 @@ class TestAnalyzeDomainFailures:
                 "message": "items is not a list",
             }
         ]
+
+
+class TestDomainResearch:
+    def test_collect_research_requests_accepts_known_urls_and_rejects_radar(self):
+        rss_items = [
+            {
+                "category": "ai-tech",
+                "source": "Open",
+                "title": "Open article",
+                "url": "https://example.com/open",
+            },
+            {
+                "category": "ai-tech",
+                "source": "Radar",
+                "title": "Radar article",
+                "url": "https://example.com/radar",
+                "analysis_mode": "headline_radar",
+            },
+        ]
+        domain_analysis = {
+            "ai_tech": {
+                "items": [],
+                "research_requests": [
+                    {
+                        "url": "https://example.com/open",
+                        "claim": "Open claim",
+                        "reason": "thin",
+                        "priority": "high",
+                    },
+                    {
+                        "url": "https://example.com/radar",
+                        "claim": "Radar claim",
+                        "reason": "title only",
+                    },
+                ],
+            }
+        }
+
+        requests = _collect_research_requests(
+            domain_analysis,
+            {"ai_tech": _DOMAIN_CONFIGS["ai_tech"]},
+            rss_items,
+            {"max_requests_per_desk": 2, "max_requests_total": 10},
+        )
+
+        assert requests[0]["status"] == "selected"
+        assert requests[0]["source"] == "Open"
+        assert requests[1]["status"] == "rejected_unknown_url"
+        assert "research_requests" not in domain_analysis["ai_tech"]
+
+    def test_collect_research_requests_enforces_caps(self):
+        rss_items = [
+            {
+                "category": "ai-tech",
+                "source": "Open",
+                "title": f"Article {idx}",
+                "url": f"https://example.com/{idx}",
+            }
+            for idx in range(3)
+        ]
+        domain_analysis = {
+            "ai_tech": {
+                "items": [],
+                "research_requests": [
+                    {"url": item["url"], "claim": "claim", "reason": "thin"}
+                    for item in rss_items
+                ],
+            }
+        }
+
+        requests = _collect_research_requests(
+            domain_analysis,
+            {"ai_tech": _DOMAIN_CONFIGS["ai_tech"]},
+            rss_items,
+            {"max_requests_per_desk": 1, "max_requests_total": 10},
+        )
+
+        assert [request["status"] for request in requests] == [
+            "selected",
+            "rejected_per_desk_cap",
+            "rejected_per_desk_cap",
+        ]
+
+    def test_successful_research_grouping_filters_failures(self):
+        grouped = _successful_research_by_domain(
+            {
+                "results": [
+                    {"domain": "ai_tech", "status": "ok", "summary": "Useful"},
+                    {"domain": "ai_tech", "status": "http_error", "summary": ""},
+                    {"domain": "econ", "status": "cache_hit:ok", "summary": "Cached"},
+                ]
+            }
+        )
+
+        assert [item["summary"] for item in grouped["ai_tech"]] == ["Useful"]
+        assert [item["summary"] for item in grouped["econ"]] == ["Cached"]

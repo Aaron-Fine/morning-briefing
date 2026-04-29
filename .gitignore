@@ -6,7 +6,7 @@ output/
 .DS_Store
 .claude/
 .codex
-.remember/
+.remember
 CLAUDE.md
 cache/weather/*.json
 cache/rss_fetch_state.json

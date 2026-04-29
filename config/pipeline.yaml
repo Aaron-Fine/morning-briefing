@@ -125,10 +125,11 @@ enrich_articles:
   enabled: true
   min_usable_chars: 200
   summarize_above_chars: 800
+  summarize_native_above_chars: 1000000
   canonical_summary_max_chars: 700
-  max_fetches_per_run: 60
+  max_fetches_per_run: 10
   browser_fetch_enabled: true
-  max_browser_fetches_per_run: 15
+  max_browser_fetches_per_run: 3
   browser_timeout_seconds: 30
   cache_ttl_days: 30
   cache_failure_backoff_hours: 24
@@ -137,3 +138,8 @@ enrich_articles:
   min_body_chars: 300
   timeout_seconds: 15
   impersonate: chrome
+domain_research:
+  enabled: true
+  max_requests_per_desk: 1
+  max_requests_total: 3
+  allow_browser_fetch: false

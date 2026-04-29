@@ -92,6 +92,54 @@ def test_long_native_text_is_distilled_like_fetched_text(tmp_path):
     assert out["enrich_articles"]["records"][0]["source_text_origin"] == "rss_body"
 
 
+def test_native_text_can_use_higher_distillation_threshold(tmp_path):
+    feeds = [{"name": "A", "url": "x", "enrich": {"strategy": "rss_only"}}]
+    item = {
+        "source": "A",
+        "url": "https://x/1",
+        "summary": "teaser",
+        "_rss_body": "Native detail. " * 100,
+    }
+    model = {"provider": "fireworks", "model": "x"}
+    with patch("stages.enrich_articles.canonical.call_llm") as llm:
+        out = run(
+            {"raw_sources": {"rss": [item]}},
+            _config(tmp_path, feeds=feeds, enrich={"summarize_native_above_chars": 2000}),
+            model,
+        )
+
+    assert "Native detail" in out["enriched_sources"]["rss"][0]["summary"]
+    llm.assert_not_called()
+
+
+def test_higher_native_threshold_ignores_cached_native_normalization(tmp_path):
+    feeds = [{"name": "A", "url": "x", "enrich": {"strategy": "rss_only"}}]
+    item = {
+        "source": "A",
+        "url": "https://x/1",
+        "summary": "teaser",
+        "_rss_body": "Native detail. " * 100,
+    }
+    model = {"provider": "fireworks", "model": "x"}
+    cached_summary = (
+        "Cached normalized summary with enough concrete detail to pass length checks "
+        "for a long source article."
+    )
+    with patch("stages.enrich_articles.canonical.call_llm", return_value=cached_summary):
+        run({"raw_sources": {"rss": [dict(item)]}}, _config(tmp_path, feeds=feeds), model)
+
+    with patch("stages.enrich_articles.canonical.call_llm") as llm:
+        out = run(
+            {"raw_sources": {"rss": [dict(item)]}},
+            _config(tmp_path, feeds=feeds, enrich={"summarize_native_above_chars": 2000}),
+            model,
+        )
+
+    assert "Native detail" in out["enriched_sources"]["rss"][0]["summary"]
+    assert out["enrich_articles"]["records"][0]["status"] == "ok"
+    llm.assert_not_called()
+
+
 def test_auto_fetches_when_native_text_is_too_short(tmp_path):
     item = {"source": "A", "url": "https://x/1", "summary": "short"}
     with patch("stages.enrich_articles.fetch.fetch_article_html") as fetch:

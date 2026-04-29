@@ -218,26 +218,29 @@ def _normalize_one(
 
     cached = cache.get(url)
     if cached is not None:
-        record = _record(
-            item,
-            f"cache_hit:{cached.status}",
-            cached.error,
-            source_text_origin=cached.source_text_origin,
-            native_length=native_length,
-            fetched_length=(
-                cached.raw_length
-                if cached.source_text_origin in {"fetched_html", "browser_markdown"}
-                else 0
-            ),
-            summary_length=cached.summary_length,
-            http_status=cached.http_status,
-            fallback_reason=cached.fallback_reason,
-            rejected_summary_preview=cached.rejected_summary_preview,
-        )
-        cached_summary_statuses = {"ok", "normalizer_fallback", "llm_failed"}
-        if cached.status in cached_summary_statuses and cached.canonical_summary:
-            item["summary"] = cached.canonical_summary
-        return record
+        if _ignore_cached_native_entry(cached, native_text, enrich_cfg):
+            cached = None
+        else:
+            record = _record(
+                item,
+                f"cache_hit:{cached.status}",
+                cached.error,
+                source_text_origin=cached.source_text_origin,
+                native_length=native_length,
+                fetched_length=(
+                    cached.raw_length
+                    if cached.source_text_origin in {"fetched_html", "browser_markdown"}
+                    else 0
+                ),
+                summary_length=cached.summary_length,
+                http_status=cached.http_status,
+                fallback_reason=cached.fallback_reason,
+                rejected_summary_preview=cached.rejected_summary_preview,
+            )
+            cached_summary_statuses = {"ok", "normalizer_fallback", "llm_failed"}
+            if cached.status in cached_summary_statuses and cached.canonical_summary:
+                item["summary"] = cached.canonical_summary
+            return record
 
     attempt = resolve_source_text(
         url=url,
@@ -290,7 +293,7 @@ def _normalize_one(
 
     canonical = _canonical_summary(
         source_text,
-        enrich_cfg,
+        _canonical_cfg_for_origin(enrich_cfg, origin),
         system_prompt,
         model_config,
     )
@@ -336,6 +339,36 @@ def _normalize_one(
         fallback_reason=canonical.fallback_reason,
         rejected_summary_preview=canonical.rejected_summary_preview,
     )
+
+
+def _canonical_cfg_for_origin(enrich_cfg: dict, origin: str) -> dict:
+    """Let native RSS text pass through more often than fetched article bodies."""
+    native_threshold = enrich_cfg.get("summarize_native_above_chars")
+    if not native_threshold or origin not in {
+        "rss_body",
+        "content",
+        "content_encoded",
+        "summary",
+        "description",
+    }:
+        return enrich_cfg
+    cfg = dict(enrich_cfg)
+    cfg["summarize_above_chars"] = int(native_threshold)
+    return cfg
+
+
+def _ignore_cached_native_entry(cached, native_text: str, enrich_cfg: dict) -> bool:
+    """Ignore old native normalizations when the native threshold now passes through."""
+    native_threshold = enrich_cfg.get("summarize_native_above_chars")
+    if not native_threshold or cached.source_text_origin not in {
+        "rss_body",
+        "content",
+        "content_encoded",
+        "summary",
+        "description",
+    }:
+        return False
+    return len(native_text or "") < int(native_threshold)
 
 
 def _record(

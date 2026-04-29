@@ -316,6 +316,7 @@ _STAGE_METADATA = {
         "artifact_key": "domain_analysis",
         "context_keys": [
             "domain_analysis",
+            "domain_research",
             "domain_analysis_failures",
             "domain_analysis_contract_issues",
         ],

@@ -37,11 +37,20 @@ import hashlib
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
+from pathlib import Path
 from urllib.parse import urlparse
 
 from morning_digest.contracts import normalize_domain_result
 from morning_digest.llm import call_llm
 from morning_digest.sanitize import sanitize_source_content
+from sources.article_cache import ArticleCache
+from sources.article_content import best_native_text
+from stages.enrich_articles.run import (
+    _DEFAULT_CACHE_DIR,
+    _normalize_one,
+    _require_browser_runtime,
+)
+from stages.enrich_articles.scheduling import _HostLimiter
 from utils.prompts import load_prompt
 
 log = logging.getLogger(__name__)
@@ -379,6 +388,35 @@ _ECON_OUTPUT_SCHEMA = _OUTPUT_SCHEMA.replace(
     '"deep_dive_rationale": null\n    }\n  ],\n  "market_context": "2-3 sentences connecting today\'s market moves to the econ stories above. State the connection or explicitly state there is no clear connection. Do not force a narrative."\n}',
 )
 
+_RESEARCH_REQUEST_SCHEMA = """
+During the first pass only, you may also include:
+{
+  "research_requests": [
+    {
+      "url": "exact URL copied from RSS/WEB SOURCES; never invent or modify URLs",
+      "claim": "specific claim or question that needs better source text",
+      "reason": "why the current source text is too thin for confident analysis",
+      "priority": "high | medium | low",
+      "expected_use": "how the fetched article would affect inclusion, facts, or analysis"
+    }
+  ]
+}
+
+Request article fetches only for stories that could plausibly change the final
+desk output. Do not request routine articles, already-sufficient summaries, or
+paywall/title-radar items. The pipeline may reject requests because of caps or
+source policy, so your items must still be useful without research results.
+"""
+
+_RESEARCH_RESULT_INSTRUCTIONS = """
+REQUESTED ARTICLE FETCH RESULTS:
+- Treat these as supplemental evidence for the same RSS items, not new browsing.
+- If a fetch failed, say the source remained thin rather than inventing detail.
+- Use successful fetched summaries to revise facts, source_depth, links, and
+  deep_dive_candidate judgments.
+- Do not emit research_requests in this final pass.
+"""
+
 _SHARED_RULES = """
 ANALYTICAL VOICE:
 - Write in first person when offering analysis ("My read:" not "It can be seen that").
@@ -479,6 +517,26 @@ def _fmt_markets(markets: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _fmt_research_results(results: list[dict]) -> str:
+    if not results:
+        return "(no research results)"
+    parts = []
+    for result in results:
+        status = result.get("status", "")
+        summary = result.get("summary", "")
+        error = result.get("error", "")
+        parts.append(
+            f"STATUS: {status}\n"
+            f"SOURCE: {result.get('source', '')}\n"
+            f"TITLE: {result.get('title', '')}\n"
+            f"URL: {result.get('url', '')}\n"
+            f"REQUESTED CLAIM: {result.get('claim', '')}\n"
+            f"FETCHED SUMMARY: {sanitize_source_content(summary, max_chars=1200)}\n"
+            f"ERROR: {sanitize_source_content(error, max_chars=300)}\n"
+        )
+    return "\n---\n".join(parts)
+
+
 def _stable_item_id(domain_key: str, item: dict) -> str:
     """Return a stable content ID for a domain item.
 
@@ -525,6 +583,8 @@ def _run_domain_pass(
     transcripts: list[dict],
     markets: list[dict],
     model_config: dict,
+    research_results: list[dict] | None = None,
+    allow_research_requests: bool = False,
 ) -> dict:
     filtered_rss = _filter_rss(rss_items, cfg["categories"])
     filtered_transcripts = _filter_transcripts(transcripts, cfg["transcript_channels"])
@@ -536,6 +596,8 @@ def _run_domain_pass(
         return _empty_domain_result(domain_key, failed=False)
 
     schema = _ECON_OUTPUT_SCHEMA if domain_key == "econ" else _OUTPUT_SCHEMA
+    if allow_research_requests:
+        schema = f"{schema}\n{_RESEARCH_REQUEST_SCHEMA}"
 
     system_prompt = load_prompt(
         "analyze_domain_system.md",
@@ -559,6 +621,9 @@ def _run_domain_pass(
         source_block_parts.append(
             f"\nMARKET DATA (today's close):\n{_fmt_markets(markets)}"
         )
+    if research_results:
+        source_block_parts.append(f"\n{_RESEARCH_RESULT_INSTRUCTIONS}")
+        source_block_parts.append(_fmt_research_results(research_results))
 
     user_content = (
         "<untrusted_sources>\n"
@@ -567,6 +632,11 @@ def _run_domain_pass(
         "---\n" + "\n\n".join(source_block_parts) + "\n</untrusted_sources>\n\n"
         "Analyze the sources above and output your domain analysis JSON."
     )
+    if allow_research_requests:
+        user_content += (
+            " Include research_requests only when a bounded article fetch would "
+            "materially improve a high-value candidate story."
+        )
 
     try:
         result = call_llm(
@@ -654,9 +724,19 @@ def run(
     if not model_config:
         model_config = config.get("llm", {})
 
-    domain_analysis = _run_all_domains(
-        domain_configs, rss_items, compressed_transcripts, markets, model_config
+    run_result = _run_all_domains(
+        domain_configs,
+        rss_items,
+        compressed_transcripts,
+        markets,
+        model_config,
+        config,
     )
+    if isinstance(run_result, tuple):
+        domain_analysis, domain_research = run_result
+    else:
+        domain_analysis = run_result
+        domain_research = {}
 
     # Clean internal sentinels before returning
     still_failed = []
@@ -680,6 +760,7 @@ def run(
 
     return {
         "domain_analysis": domain_analysis,
+        "domain_research": domain_research,
         "domain_analysis_failures": still_failed,
         "domain_analysis_contract_issues": contract_issues,
     }
@@ -694,10 +775,18 @@ def _run_all_domains(
     compressed_transcripts: list[dict],
     markets: list[dict],
     model_config: dict,
-) -> dict:
+    config: dict | None = None,
+) -> tuple[dict, dict]:
     domain_analysis: dict = {}
+    config = config or {}
+    research_cfg = _domain_research_config(config)
 
-    def _run_one(domain_key: str) -> tuple[str, dict]:
+    def _run_one(
+        domain_key: str,
+        *,
+        research_results: list[dict] | None = None,
+        allow_research_requests: bool = False,
+    ) -> tuple[str, dict]:
         domain_cfg = domain_configs[domain_key]
         log.info(f"  Analyzing domain: {domain_key} ({domain_cfg['label']})")
         result = _run_domain_pass(
@@ -707,11 +796,20 @@ def _run_all_domains(
             compressed_transcripts,
             markets if domain_key == "econ" else [],
             model_config,
+            research_results=research_results,
+            allow_research_requests=allow_research_requests,
         )
         return domain_key, result
 
     with ThreadPoolExecutor(max_workers=_MAX_PARALLEL_DESKS) as pool:
-        futures = {pool.submit(_run_one, key): key for key in domain_configs}
+        futures = {
+            pool.submit(
+                _run_one,
+                key,
+                allow_research_requests=research_cfg["enabled"],
+            ): key
+            for key in domain_configs
+        }
         for future in as_completed(futures):
             domain_key = futures[future]
             try:
@@ -721,4 +819,242 @@ def _run_all_domains(
                 log.error(f"  analyze_domain[{domain_key}]: parallel execution failed: {e}")
                 domain_analysis[domain_key] = _empty_domain_result(domain_key, failed=True)
 
-    return domain_analysis
+    domain_research = _run_domain_research(
+        domain_analysis,
+        domain_configs,
+        rss_items,
+        config,
+        model_config,
+        research_cfg,
+    )
+    research_by_domain = _successful_research_by_domain(domain_research)
+    if not research_by_domain:
+        return domain_analysis, domain_research
+
+    with ThreadPoolExecutor(max_workers=_MAX_PARALLEL_DESKS) as pool:
+        futures = {
+            pool.submit(
+                _run_one,
+                key,
+                research_results=research_by_domain[key],
+                allow_research_requests=False,
+            ): key
+            for key in research_by_domain
+            if key in domain_configs
+        }
+        for future in as_completed(futures):
+            domain_key = futures[future]
+            try:
+                key, result = future.result()
+                domain_analysis[key] = result
+            except Exception as e:
+                log.error(
+                    f"  analyze_domain[{domain_key}]: research pass failed: {e}"
+                )
+                domain_analysis[domain_key]["_research_pass_failed"] = True
+
+    return domain_analysis, domain_research
+
+
+def _domain_research_config(config: dict) -> dict:
+    raw = config.get("domain_research", {}) or {}
+    return {
+        "enabled": bool(raw.get("enabled", True)),
+        "max_requests_per_desk": int(raw.get("max_requests_per_desk", 2)),
+        "max_requests_total": int(raw.get("max_requests_total", 10)),
+        "allow_browser_fetch": bool(raw.get("allow_browser_fetch", False)),
+    }
+
+
+def _run_domain_research(
+    domain_analysis: dict,
+    domain_configs: dict[str, dict],
+    rss_items: list[dict],
+    config: dict,
+    model_config: dict,
+    research_cfg: dict,
+) -> dict:
+    artifact = {
+        "enabled": research_cfg["enabled"],
+        "requests": [],
+        "results": [],
+    }
+    if not research_cfg["enabled"]:
+        return artifact
+
+    requests = _collect_research_requests(
+        domain_analysis,
+        domain_configs,
+        rss_items,
+        research_cfg,
+    )
+    artifact["requests"] = [
+        {key: value for key, value in request.items() if key != "_source_item"}
+        for request in requests
+    ]
+    selected = [request for request in requests if request["status"] == "selected"]
+    if not selected:
+        return artifact
+
+    enrich_cfg = config.get("enrich_articles", {}) or {}
+    feeds = config.get("rss", {}).get("feeds", []) or []
+    if research_cfg["allow_browser_fetch"]:
+        _require_browser_runtime(enrich_cfg, feeds)
+    cache = ArticleCache(
+        Path(config.get("_test_cache_dir") or _DEFAULT_CACHE_DIR),
+        ttl_days=enrich_cfg.get("cache_ttl_days", 30),
+        failure_backoff_hours=enrich_cfg.get("cache_failure_backoff_hours", 24),
+    )
+    limiter = _HostLimiter(
+        enrich_cfg.get("per_host_concurrency", 2),
+        enrich_cfg.get("per_host_min_interval_ms", 500),
+    )
+    system_prompt = load_prompt("enrich_article_system.md")
+    feeds_by_name = {feed.get("name"): feed for feed in feeds}
+    results = []
+
+    for request in selected:
+        item = deepcopy(request["_source_item"])
+        feed_conf = feeds_by_name.get(item.get("source"), {})
+        native_text, native_origin = best_native_text(item)
+        record = _normalize_one(
+            item,
+            feed_conf,
+            http_fetch_allowed=True,
+            browser_fetch_allowed=research_cfg["allow_browser_fetch"],
+            enrich_cfg=enrich_cfg,
+            cache=cache,
+            limiter=limiter,
+            system_prompt=system_prompt,
+            model_config=model_config,
+        )
+        results.append(
+            {
+                **{key: value for key, value in request.items() if key != "_source_item"},
+                "status": record.get("status", ""),
+                "error": record.get("error", ""),
+                "http_status": record.get("http_status"),
+                "source_text_origin": record.get("source_text_origin", native_origin),
+                "native_length": record.get("native_length", len(native_text)),
+                "fetched_length": record.get("fetched_length", 0),
+                "summary_length": len(item.get("summary", "") or ""),
+                "summary": item.get("summary", ""),
+            }
+        )
+
+    artifact["results"] = results
+    log.info(
+        "analyze_domain: fulfilled %d/%d selected research request(s)",
+        len(results),
+        len(selected),
+    )
+    return artifact
+
+
+def _collect_research_requests(
+    domain_analysis: dict,
+    domain_configs: dict[str, dict],
+    rss_items: list[dict],
+    research_cfg: dict,
+) -> list[dict]:
+    known_by_domain: dict[str, dict[str, dict]] = {}
+    for domain_key, cfg in domain_configs.items():
+        known_by_domain[domain_key] = {
+            item.get("url", ""): item
+            for item in _filter_rss(rss_items, cfg["categories"])
+            if item.get("url")
+        }
+
+    requests: list[dict] = []
+    selected_count = 0
+    per_desk_counts: dict[str, int] = {}
+    for domain_key in domain_configs:
+        result = domain_analysis.get(domain_key, {})
+        raw_requests = result.pop("research_requests", [])
+        if not isinstance(raw_requests, list):
+            raw_requests = []
+        for idx, raw_request in enumerate(raw_requests):
+            request = _normalize_research_request(
+                raw_request,
+                domain_key,
+                idx,
+                known_by_domain.get(domain_key, {}),
+            )
+            desk_count = per_desk_counts.get(domain_key, 0)
+            if request["status"] == "selected":
+                if desk_count >= research_cfg["max_requests_per_desk"]:
+                    request["status"] = "rejected_per_desk_cap"
+                elif selected_count >= research_cfg["max_requests_total"]:
+                    request["status"] = "rejected_total_cap"
+                else:
+                    per_desk_counts[domain_key] = desk_count + 1
+                    selected_count += 1
+            requests.append(request)
+    return requests
+
+
+def _normalize_research_request(
+    raw: object,
+    domain_key: str,
+    index: int,
+    known_by_url: dict[str, dict],
+) -> dict:
+    base = {
+        "domain": domain_key,
+        "index": index,
+        "url": "",
+        "source": "",
+        "title": "",
+        "claim": "",
+        "reason": "",
+        "priority": "medium",
+        "expected_use": "",
+        "status": "selected",
+    }
+    if not isinstance(raw, dict):
+        return {**base, "status": "rejected_malformed"}
+
+    url = str(raw.get("url", "")).strip()
+    source_item = known_by_url.get(url)
+    if not url or source_item is None:
+        return {
+            **base,
+            "url": url,
+            "claim": str(raw.get("claim", ""))[:300],
+            "reason": str(raw.get("reason", ""))[:300],
+            "status": "rejected_unknown_url",
+        }
+
+    priority = str(raw.get("priority", "medium")).strip().lower()
+    if priority not in {"high", "medium", "low"}:
+        priority = "medium"
+    return {
+        **base,
+        "url": url,
+        "source": source_item.get("source", ""),
+        "title": source_item.get("title", ""),
+        "claim": str(raw.get("claim", ""))[:300],
+        "reason": str(raw.get("reason", ""))[:300],
+        "priority": priority,
+        "expected_use": str(raw.get("expected_use", ""))[:300],
+        "_source_item": source_item,
+    }
+
+
+def _successful_research_by_domain(domain_research: dict) -> dict[str, list[dict]]:
+    successful_statuses = {
+        "ok",
+        "normalizer_fallback",
+        "llm_failed",
+        "cache_hit:ok",
+        "cache_hit:normalizer_fallback",
+        "cache_hit:llm_failed",
+    }
+    grouped: dict[str, list[dict]] = {}
+    for result in domain_research.get("results", []) or []:
+        if result.get("status") not in successful_statuses:
+            continue
+        if not result.get("summary"):
+            continue
+        grouped.setdefault(result.get("domain", ""), []).append(result)
+    return grouped
