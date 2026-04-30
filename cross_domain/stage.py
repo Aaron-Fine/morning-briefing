@@ -93,6 +93,8 @@ def run(
             domain_analysis,
             reason="no_domain_analysis_items",
             contract_issues=contract_issues,
+            raw_sources=raw_sources,
+            config=config,
         )
 
     cross_domain_plan = context.get("cross_domain_plan")
@@ -149,6 +151,8 @@ def run(
             reason="llm_call_failed",
             message=str(e),
             contract_issues=contract_issues,
+            raw_sources=raw_sources,
+            config=config,
         )
 
     if not isinstance(result, dict):
@@ -158,6 +162,8 @@ def run(
             cross_domain_plan,
             reason="non_dict_llm_output",
             contract_issues=contract_issues,
+            raw_sources=raw_sources,
+            config=config,
         )
 
     result, output_issues = normalize_cross_domain_output_artifact(result)

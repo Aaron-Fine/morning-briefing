@@ -451,6 +451,9 @@ DEEP DIVE CANDIDATES:
   a deep dive that they wouldn't get from the at-a-glance item alone.
 
 RULES:
+- Treat CATEGORY as routing context. When a desk receives multiple categories,
+  include at least one strong item from each represented category if it clears the
+  desk's editorial bar; do not pad with weak items just to satisfy category coverage.
 - For each item, make the today-specific selection reason explicit inside `analysis`: what specifically about today makes this included, or, if nothing specifically today, what cumulative state earned inclusion now. Do not manufacture a day-of hook when accumulated evidence is the honest reason.
 - Multiple sources covering the same event: merge into ONE item with all relevant links.
 - All URLs must come verbatim from the source data — never fabricate or modify a URL.
@@ -484,6 +487,7 @@ def _fmt_rss_items(items: list[dict]) -> str:
         rel_note = f" [{reliability}]" if reliability else ""
         parts.append(
             f"SOURCE: {item['source']}{rel_note} | {item.get('published', '')[:10]}\n"
+            f"CATEGORY: {item.get('category', '')}\n"
             f"TITLE: {item['title']}\n"
             f"URL: {item.get('url', '')}\n"
             f"SUMMARY: {sanitize_source_content(item.get('summary', ''), max_chars=600)}\n"

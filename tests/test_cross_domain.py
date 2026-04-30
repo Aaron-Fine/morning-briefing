@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from stages.cross_domain import (
     _normalize_tag,
     _build_input,
+    _cap_at_a_glance_items,
     _empty_output,
     _VALID_TAGS,
     _TAG_LABELS,
@@ -84,6 +85,58 @@ class TestNormalizeTag:
 
     def test_whitespace_stripped(self):
         assert _normalize_tag("  war  ") == "war"
+
+
+class TestAtAGlanceCap:
+    def _item(
+        self,
+        headline: str,
+        tag: str,
+        source: str,
+        source_depth: str = "single-source",
+        cross_domain_note: str | None = "note",
+    ) -> dict:
+        return {
+            "headline": headline,
+            "tag": tag,
+            "source_depth": source_depth,
+            "cross_domain_note": cross_domain_note,
+            "links": [{"label": source, "url": f"https://example.com/{headline}"}],
+        }
+
+    def test_cap_preserves_available_primary_tags(self):
+        items = [
+            self._item("war 1", "war", "A", "widely-reported"),
+            self._item("war 2", "war", "A", "widely-reported"),
+            self._item("war 3", "war", "B", "widely-reported"),
+            self._item("defense 1", "defense", "C", "single-source"),
+            self._item("ai 1", "ai", "D", "single-source"),
+            self._item("energy 1", "energy", "E", "single-source"),
+        ]
+
+        capped = _cap_at_a_glance_items(items, 4)
+
+        assert len(capped) == 4
+        assert {"war", "ai", "defense"} <= {item["tag"] for item in capped}
+
+    def test_cap_avoids_source_concentration_when_alternatives_exist(self):
+        items = [
+            self._item("war 1", "war", "A", "widely-reported"),
+            self._item("war 2", "war", "A", "widely-reported"),
+            self._item("war 3", "war", "A", "widely-reported"),
+            self._item("ai 1", "ai", "B", "single-source"),
+            self._item("defense 1", "defense", "C", "single-source"),
+            self._item("econ 1", "econ", "D", "single-source"),
+            self._item("energy 1", "energy", "E", "single-source"),
+        ]
+
+        capped = _cap_at_a_glance_items(items, 5)
+        source_a_count = sum(
+            1 for item in capped if item["links"][0]["label"] == "A"
+        )
+
+        assert len(capped) == 5
+        assert source_a_count <= 2
 
 
 class TestBuildInput:
@@ -470,6 +523,69 @@ class TestCrossDomainRun:
         }
         result = run(context, config)
         assert len(result["cross_domain_output"]["at_a_glance"]) == 7
+
+    @patch("stages.cross_domain.call_llm")
+    def test_primary_glance_coverage_added_when_execution_omits_ai(self, mock_llm):
+        mock_llm.side_effect = [
+            {
+                "schema_version": 1,
+                "cross_domain_connections": [],
+                "deep_dives": [],
+                "worth_reading": [],
+                "rejected_alternatives": [],
+            },
+            {
+                "at_a_glance": [
+                    {
+                        "item_id": "war-1",
+                        "tag": "war",
+                        "headline": "War item",
+                        "facts": "Facts",
+                        "analysis": "Analysis",
+                        "source_depth": "single-source",
+                        "links": [],
+                    }
+                ],
+                "deep_dives": [],
+                "cross_domain_connections": [],
+                "worth_reading": [],
+            },
+        ]
+        context = {
+            "domain_analysis": {
+                "geopolitics": {"items": [{"headline": "War item"}]},
+                "ai_tech": {
+                    "items": [
+                        {
+                            "item_id": "ai-1",
+                            "tag": "AI",
+                            "headline": "AI item",
+                            "facts": "AI facts",
+                            "analysis": "AI analysis",
+                            "source_depth": "single-source",
+                            "links": [
+                                {"url": "https://example.com/ai", "label": "Example"}
+                            ],
+                            "deep_dive_candidate": False,
+                        }
+                    ]
+                },
+            },
+            "seam_data": {},
+            "raw_sources": {
+                "rss": [{"url": "https://example.com/ai", "source": "Example"}]
+            },
+        }
+        config = {
+            "llm": {"provider": "fireworks"},
+            "digest": {"at_a_glance": {"max_items": 7}},
+        }
+
+        result = run(context, config)
+
+        glance = result["cross_domain_output"]["at_a_glance"]
+        assert {item["tag"] for item in glance} >= {"war", "ai"}
+        assert any(item["headline"] == "AI item" for item in glance)
 
     @patch("stages.cross_domain.call_llm")
     def test_url_validation_filters_unknown_domains(self, mock_llm):

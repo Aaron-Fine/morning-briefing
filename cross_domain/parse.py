@@ -146,6 +146,13 @@ _TAG_KEYWORDS: list[tuple[str, str]] = [
     ("gop", "domestic"),
 ]
 
+_PRIMARY_GLANCE_TAGS = ("war", "ai", "defense")
+_PRIMARY_DOMAIN_TAGS = {
+    "geopolitics": "war",
+    "ai_tech": "ai",
+    "defense_space": "defense",
+}
+
 
 def _normalize_tag(raw: str) -> str:
     """Map a raw LLM tag to the standard CSS vocabulary."""
@@ -157,6 +164,162 @@ def _normalize_tag(raw: str) -> str:
             return tag
     log.debug(f"cross_domain: unknown tag '{raw}' — defaulting to 'domestic'")
     return "domestic"
+
+
+def _source_names(item: dict) -> set[str]:
+    """Return normalized outlet labels used by source-distribution diagnostics."""
+    names = set()
+    for link in item.get("links") or []:
+        if not isinstance(link, dict):
+            continue
+        label = str(link.get("label", "")).strip()
+        if not label:
+            continue
+        names.add(label.split(":", 1)[0].strip() if ":" in label else label)
+    return names
+
+
+def _would_exceed_source_cap(
+    item: dict, source_counts: dict[str, int], max_per_source: int
+) -> bool:
+    return any(
+        source_counts.get(source, 0) >= max_per_source
+        for source in _source_names(item)
+    )
+
+
+def _add_selected_item(
+    selected: set[int],
+    source_counts: dict[str, int],
+    ranked_index: int,
+    item: dict,
+) -> None:
+    selected.add(ranked_index)
+    for source in _source_names(item):
+        source_counts[source] = source_counts.get(source, 0) + 1
+
+
+def _cap_at_a_glance_items(items: list[dict], max_items: int) -> list[dict]:
+    """Cap at-a-glance items while preserving topic and outlet diversity.
+
+    The LLM often returns more candidates than the email should show. A pure
+    source-depth sort can accidentally drop all AI coverage or keep too many
+    items from one outlet. This selector keeps the same ranking inputs but adds
+    deterministic diversity constraints before falling back to fill the cap.
+    """
+    if len(items) <= max_items:
+        return items
+
+    depth_priority = {"widely-reported": 0, "corroborated": 1, "single-source": 2}
+    ranked = sorted(
+        enumerate(items),
+        key=lambda pair: (
+            depth_priority.get(pair[1].get("source_depth", ""), 3),
+            0 if pair[1].get("cross_domain_note") else 1,
+            pair[0],
+        ),
+    )
+
+    selected: set[int] = set()
+    source_counts: dict[str, int] = {}
+    max_per_source = max(1, int(max_items * 0.4))
+    available_tags = {item.get("tag", "") for _, item in ranked}
+
+    for tag in _PRIMARY_GLANCE_TAGS:
+        if tag not in available_tags or len(selected) >= max_items:
+            continue
+
+        fallback: tuple[int, dict] | None = None
+        for ranked_index, item in ranked:
+            if ranked_index in selected or item.get("tag", "") != tag:
+                continue
+            if fallback is None:
+                fallback = (ranked_index, item)
+            if not _would_exceed_source_cap(item, source_counts, max_per_source):
+                _add_selected_item(selected, source_counts, ranked_index, item)
+                fallback = None
+                break
+        if fallback is not None:
+            _add_selected_item(selected, source_counts, fallback[0], fallback[1])
+
+    for ranked_index, item in ranked:
+        if len(selected) >= max_items:
+            break
+        if ranked_index in selected:
+            continue
+        if _would_exceed_source_cap(item, source_counts, max_per_source):
+            continue
+        _add_selected_item(selected, source_counts, ranked_index, item)
+
+    for ranked_index, item in ranked:
+        if len(selected) >= max_items:
+            break
+        if ranked_index not in selected:
+            _add_selected_item(selected, source_counts, ranked_index, item)
+
+    return [item for ranked_index, item in ranked if ranked_index in selected]
+
+
+def _item_signature(item: dict) -> tuple:
+    urls = tuple(
+        sorted(
+            str(link.get("url", "")).strip()
+            for link in item.get("links") or []
+            if isinstance(link, dict) and link.get("url")
+        )
+    )
+    return (item.get("item_id", ""), urls, item.get("headline", ""))
+
+
+def _fallback_glance_item(item: dict, tag: str) -> dict:
+    entry = dict(item)
+    entry["item_id"] = item.get("item_id", "")
+    entry["tag"] = tag
+    entry["tag_label"] = _TAG_LABELS[tag]
+    entry["headline"] = str(item.get("headline", "")).strip()
+    entry["facts"] = str(item.get("facts", ""))
+    entry["analysis"] = str(item.get("analysis", ""))
+    entry["source_depth"] = item.get("source_depth", "single-source")
+    entry["cross_domain_note"] = None
+    entry["links"] = list(item.get("links", []) or [])
+    entry["connection_hooks"] = list(item.get("connection_hooks", []) or [])
+    return entry
+
+
+def _ensure_primary_glance_coverage(
+    items: list[dict], domain_analysis: dict
+) -> list[dict]:
+    """Add the best available primary-desk item when execution omits a primary tag."""
+    present_tags = {item.get("tag", "") for item in items}
+    if all(tag in present_tags for tag in _PRIMARY_GLANCE_TAGS):
+        return items
+
+    existing_signatures = {_item_signature(item) for item in items}
+    additions = []
+    for domain_key, tag in _PRIMARY_DOMAIN_TAGS.items():
+        if tag in present_tags:
+            continue
+        domain_result = domain_analysis.get(domain_key, {})
+        if not isinstance(domain_result, dict):
+            continue
+        for candidate in domain_result.get("items", []) or []:
+            if not isinstance(candidate, dict) or candidate.get("deep_dive_candidate"):
+                continue
+            addition = _fallback_glance_item(candidate, tag)
+            signature = _item_signature(addition)
+            if signature in existing_signatures:
+                break
+            additions.append(addition)
+            existing_signatures.add(signature)
+            present_tags.add(tag)
+            break
+
+    if additions:
+        log.info(
+            "  cross_domain: added %s primary-coverage at-a-glance fallback item(s)",
+            len(additions),
+        )
+    return [*items, *additions]
 
 
 def _empty_cross_domain_plan() -> dict:
@@ -192,11 +355,17 @@ def _fallback_outputs(
     reason: str,
     message: str = "",
     contract_issues: list[dict] | None = None,
+    raw_sources: dict | None = None,
+    config: dict | None = None,
 ) -> dict:
     """Return the full cross-domain artifact contract for fallback paths."""
+    output = _empty_output(domain_analysis)
+    if config is not None:
+        output = _validated_output(output, domain_analysis, raw_sources or {}, config)
+
     return {
         "cross_domain_plan": cross_domain_plan or _empty_cross_domain_plan(),
-        "cross_domain_output": _empty_output(domain_analysis),
+        "cross_domain_output": output,
         "validation_diagnostics": _fallback_validation_diagnostics(reason, message),
         "cross_domain_contract_issues": contract_issues or [],
     }
@@ -258,6 +427,16 @@ def _validated_output(
             for lnk in item.get("links", [])
             if url_known(lnk.get("url", ""), known_urls)
         ]
+
+    result["at_a_glance"] = _ensure_primary_glance_coverage(
+        result["at_a_glance"], domain_analysis
+    )
+    for item in result["at_a_glance"]:
+        item["links"] = [
+            lnk
+            for lnk in item.get("links", [])
+            if url_known(lnk.get("url", ""), known_urls)
+        ]
     for dive in result["deep_dives"]:
         dive["further_reading"] = [
             lnk
@@ -272,18 +451,15 @@ def _validated_output(
     glance_cfg = digest_cfg.get("at_a_glance", {})
     max_items = glance_cfg.get("max_items", 7)
     if len(result["at_a_glance"]) > max_items:
-        depth_priority = {"widely-reported": 0, "corroborated": 1, "single-source": 2}
-        result["at_a_glance"].sort(
-            key=lambda i: (
-                depth_priority.get(i.get("source_depth", ""), 3),
-                0 if i.get("cross_domain_note") else 1,
-            )
+        original_count = len(result["at_a_glance"])
+        result["at_a_glance"] = _cap_at_a_glance_items(
+            result["at_a_glance"], max_items
         )
-        dropped = result["at_a_glance"][max_items:]
-        result["at_a_glance"] = result["at_a_glance"][:max_items]
         log.info(
-            f"  cross_domain: capped at_a_glance from {max_items + len(dropped)} "
-            f"to {max_items} items (dropped {len(dropped)} lower-priority items)"
+            f"  cross_domain: capped at_a_glance from {original_count} "
+            f"to {len(result['at_a_glance'])} items "
+            f"(dropped {original_count - len(result['at_a_glance'])} "
+            "lower-priority/diversity-constrained items)"
         )
 
     return result
