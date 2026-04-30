@@ -11,37 +11,21 @@ from stages.seams import run
 
 @patch("stages.seams.call_llm")
 def test_seams_returns_annotation_artifact(mock_llm):
-    mock_llm.side_effect = [
-        {
-            "schema_version": 1,
-            "candidates": [
-                {
-                    "item_id": "geo-1",
-                    "seam_type": "framing_divergence",
-                    "candidate_one_line": "The non-Western read: this is escalation.",
-                    "possible_evidence": [],
-                    "why_it_might_matter": "Cost-bearing frame",
-                    "drop_if_weak_reason": "",
-                }
-            ],
-            "cross_domain_candidates": [],
-        },
-        {
-            "per_item": [
-                {
-                    "item_id": "geo-1",
-                    "seam_type": "framing_divergence",
-                    "one_line": "The non-Western read: this is escalation.",
-                    "evidence": [
-                        {"source": "A", "excerpt": "escalation", "framing": "risk"},
-                        {"source": "B", "excerpt": "signal", "framing": "deterrence"},
-                    ],
-                    "confidence": "high",
-                }
-            ],
-            "cross_domain": [],
-        },
-    ]
+    mock_llm.return_value = {
+        "per_item": [
+            {
+                "item_id": "geo-1",
+                "seam_type": "framing_divergence",
+                "one_line": "The non-Western read: this is escalation.",
+                "evidence": [
+                    {"source": "A", "excerpt": "escalation", "framing": "risk"},
+                    {"source": "B", "excerpt": "signal", "framing": "deterrence"},
+                ],
+                "confidence": "high",
+            }
+        ],
+        "cross_domain": [],
+    }
 
     result = run(
         {
@@ -67,7 +51,6 @@ def test_seams_returns_annotation_artifact(mock_llm):
 @patch("stages.seams.call_llm")
 def test_seams_retries_annotation_call_without_stream(mock_llm):
     mock_llm.side_effect = [
-        {"schema_version": 1, "candidates": [], "cross_domain_candidates": []},
         Exception("bad json"),
         Exception("bad raw stream"),
         {"per_item": [], "cross_domain": []},
@@ -82,18 +65,15 @@ def test_seams_retries_annotation_call_without_stream(mock_llm):
         },
     )
 
-    assert mock_llm.call_args_list[1].kwargs["json_mode"] is True
-    assert mock_llm.call_args_list[1].kwargs["stream"] is False
-    assert mock_llm.call_args_list[2].kwargs["stream"] is True
-    assert mock_llm.call_args_list[3].kwargs["stream"] is False
+    assert mock_llm.call_args_list[0].kwargs["json_mode"] is True
+    assert mock_llm.call_args_list[0].kwargs["stream"] is False
+    assert mock_llm.call_args_list[1].kwargs["stream"] is True
+    assert mock_llm.call_args_list[2].kwargs["stream"] is False
 
 
 @patch("stages.seams.call_llm")
 def test_seams_applies_turn_overrides(mock_llm):
-    mock_llm.side_effect = [
-        {"schema_version": 1, "candidates": [], "cross_domain_candidates": []},
-        {"per_item": [], "cross_domain": []},
-    ]
+    mock_llm.return_value = {"per_item": [], "cross_domain": []}
     stage_cfg = {
         "turns": {
             "candidates": {"max_tokens": 6000, "temperature": 0.4},
@@ -109,7 +89,5 @@ def test_seams_applies_turn_overrides(mock_llm):
         stage_cfg=stage_cfg,
     )
 
-    assert mock_llm.call_args_list[0].args[2]["max_tokens"] == 6000
-    assert mock_llm.call_args_list[0].args[2]["temperature"] == 0.4
-    assert mock_llm.call_args_list[1].args[2]["max_tokens"] == 8192
-    assert mock_llm.call_args_list[1].args[2]["temperature"] == 0.3
+    assert mock_llm.call_args_list[0].args[2]["max_tokens"] == 8192
+    assert mock_llm.call_args_list[0].args[2]["temperature"] == 0.3

@@ -1,11 +1,10 @@
 """Stage: seams — Produce per-item perspective annotations.
 
 Seam detection operates on domain analysis artifacts and raw source data, then
-first emits a broad diagnostic candidate scan. A second pass prunes those
-candidate seams into item-level annotations keyed by stable domain-analysis item
-IDs. A legacy `seam_data` projection is still returned so older downstream
-consumers continue to receive a safe shape while rendering moves to inline
-annotations.
+emits item-level annotations keyed by stable domain-analysis item IDs. A derived
+candidate artifact and legacy `seam_data` projection are still returned so older
+downstream consumers continue to receive safe shapes while rendering moves to
+inline annotations.
 
 Inputs:  domain_analysis (dict), raw_sources (dict), compressed_transcripts (list)
 Outputs: seam_candidates (dict), seam_annotations (dict), seam_data (dict)
@@ -20,7 +19,6 @@ from json import JSONDecodeError
 from morning_digest.contracts import (
     normalize_domain_analysis,
     normalize_seam_annotations_artifact,
-    normalize_seam_candidates_artifact,
 )
 from morning_digest.llm import call_llm
 from morning_digest.sanitize import sanitize_source_content
@@ -28,7 +26,6 @@ from utils.prompts import load_prompt
 
 log = logging.getLogger(__name__)
 
-_CANDIDATE_PROMPT = load_prompt("seam_candidates.md")
 _ANNOTATION_PROMPT = load_prompt("seam_annotations.md")
 _JSON_REPAIR_PROMPT = """You repair malformed JSON emitted by another model.
 
@@ -47,6 +44,7 @@ _VALID_SEAM_TYPES = {
 _VALID_CONFIDENCE = {"high", "medium", "low"}
 _MAX_CANDIDATES = 5
 _MAX_CROSS_DOMAIN_CANDIDATES = 2
+_MAX_PER_ITEM_ANNOTATIONS = 6
 _MAX_EVIDENCE_PER_CANDIDATE = 2
 _MAX_CANDIDATE_TEXT_CHARS = 220
 _MAX_EVIDENCE_TEXT_CHARS = 140
@@ -152,9 +150,8 @@ def _annotation_user_content(
     domain_summary: str,
     raw_summary: str,
     transcript_summary: str,
-    seam_candidates: dict,
 ) -> str:
-    return f"""Use the broad candidate scan to produce the final per-item seam annotation artifact.
+    return f"""Produce the final per-item seam annotation artifact.
 
 === DOMAIN ANALYSES ===
 {domain_summary}
@@ -164,28 +161,8 @@ def _annotation_user_content(
 
 === COMPRESSED TRANSCRIPTS ===
 {transcript_summary}
-
-=== TURN 1 SEAM CANDIDATES ===
-{json.dumps(seam_candidates, indent=2)}
 
 Produce the final per-item seam annotation artifact. Output ONLY valid JSON."""
-
-
-def _candidate_user_content(
-    domain_summary: str, raw_summary: str, transcript_summary: str
-) -> str:
-    return f"""Review the following analytical products and source material.
-
-=== DOMAIN ANALYSES ===
-{domain_summary}
-
-=== RAW SOURCE DATA ===
-{raw_summary}
-
-=== COMPRESSED TRANSCRIPTS ===
-{transcript_summary}
-
-Scan broadly for possible per-item and cross-domain seam candidates. Output ONLY valid JSON."""
 
 
 def _empty_candidates() -> dict:
@@ -363,6 +340,10 @@ def _validate_seam_annotations(result: dict | None, domain_analysis: dict) -> di
         return _empty_annotations()
 
     ids = _valid_item_ids(domain_analysis)
+    if not ids:
+        log.warning("seams: no valid domain item IDs available; dropping annotations")
+        return _empty_annotations()
+
     links_by_item_id = _links_by_item_id(domain_analysis)
     cleaned_per_item: list[dict] = []
     for raw_item in result.get("per_item", []) or []:
@@ -427,6 +408,15 @@ def _validate_seam_annotations(result: dict | None, domain_analysis: dict) -> di
             }
         )
 
+    if len(cleaned_per_item) > _MAX_PER_ITEM_ANNOTATIONS:
+        confidence_rank = {"high": 0, "medium": 1, "low": 2}
+        cleaned_per_item.sort(
+            key=lambda item: confidence_rank.get(item.get("confidence", ""), 3)
+        )
+        dropped = len(cleaned_per_item) - _MAX_PER_ITEM_ANNOTATIONS
+        cleaned_per_item = cleaned_per_item[:_MAX_PER_ITEM_ANNOTATIONS]
+        log.info("seams: capped per-item annotations, dropped %s lower-ranked", dropped)
+
     return {"per_item": cleaned_per_item, "cross_domain": cleaned_cross_domain}
 
 
@@ -463,6 +453,60 @@ def _legacy_seam_data(seam_annotations: dict) -> dict:
         "key_assumptions": [],
         "seam_count": total,
         "quiet_day": total <= 1,
+    }
+
+
+def _candidate_artifact_from_annotations(seam_annotations: dict) -> dict:
+    """Build a diagnostic candidate artifact from accepted final annotations."""
+    candidates = []
+    for annotation in seam_annotations.get("per_item", []):
+        evidence = annotation.get("evidence", []) or []
+        candidates.append(
+            {
+                "item_id": annotation.get("item_id", ""),
+                "seam_type": annotation.get("seam_type", ""),
+                "candidate_one_line": _clip_text(
+                    annotation.get("one_line", ""),
+                    _MAX_CANDIDATE_TEXT_CHARS,
+                ),
+                "why_it_might_matter": "",
+                "possible_evidence": [
+                    {
+                        "source": _clip_text(
+                            entry.get("source", ""), _MAX_EVIDENCE_TEXT_CHARS
+                        ),
+                        "excerpt": _clip_text(
+                            entry.get("excerpt", ""), _MAX_EVIDENCE_TEXT_CHARS
+                        ),
+                        "framing": _clip_text(
+                            entry.get("framing", ""), _MAX_EVIDENCE_TEXT_CHARS
+                        ),
+                    }
+                    for entry in evidence[:_MAX_EVIDENCE_PER_CANDIDATE]
+                    if isinstance(entry, dict)
+                ],
+                "drop_if_weak_reason": "",
+            }
+        )
+
+    cross_domain_candidates = []
+    for annotation in seam_annotations.get("cross_domain", []) or []:
+        cross_domain_candidates.append(
+            {
+                "candidate_one_line": _clip_text(
+                    annotation.get("one_line", ""), _MAX_CANDIDATE_TEXT_CHARS
+                ),
+                "linked_item_ids": list(annotation.get("linked_item_ids", []) or []),
+                "why_it_might_matter": "",
+            }
+        )
+
+    return {
+        "schema_version": 1,
+        "candidates": candidates[:_MAX_CANDIDATES],
+        "cross_domain_candidates": cross_domain_candidates[
+            :_MAX_CROSS_DOMAIN_CANDIDATES
+        ],
     }
 
 
@@ -603,9 +647,6 @@ def run(
             "(expected pipeline.stages[seams].model or top-level llm)"
         )
     stage_cfg = kwargs.get("stage_cfg") or {}
-    candidate_config = _resolve_turn_model_config(
-        effective_config, stage_cfg, "candidates"
-    )
     annotation_config = _resolve_turn_model_config(
         effective_config, stage_cfg, "annotations"
     )
@@ -615,32 +656,13 @@ def run(
     transcript_summary = _build_transcript_summary(compressed_transcripts)
 
     try:
-        log.info("Stage: seams — scanning broad seam candidates...")
-        seam_candidates_raw = _call_turn_json(
-            _CANDIDATE_PROMPT,
-            _candidate_user_content(domain_summary, raw_summary, transcript_summary),
-            candidate_config,
-            "candidates",
-            _empty_candidates(),
-        )
-        seam_candidates_raw, candidate_issues = normalize_seam_candidates_artifact(
-            seam_candidates_raw, domain_analysis
-        )
-        seam_contract_issues.extend(
-            {"artifact": "seam_candidates", **issue} for issue in candidate_issues
-        )
-        seam_candidates = _normalize_seam_candidates(
-            seam_candidates_raw, domain_analysis
-        )
-
-        log.info("Stage: seams — pruning candidates into per-item annotations...")
+        log.info("Stage: seams — detecting per-item annotations...")
         result = _call_turn_json(
             _ANNOTATION_PROMPT,
             _annotation_user_content(
                 domain_summary,
                 raw_summary,
                 transcript_summary,
-                seam_candidates,
             ),
             annotation_config,
             "annotations",
@@ -654,6 +676,7 @@ def run(
             for issue in annotation_issues
         )
         seam_annotations = _validate_seam_annotations(result, domain_analysis)
+        seam_candidates = _candidate_artifact_from_annotations(seam_annotations)
         seam_data = _legacy_seam_data(seam_annotations)
 
         log.info(

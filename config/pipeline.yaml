@@ -59,9 +59,6 @@ pipeline:
       max_tokens: 4000
       temperature: 0.3
     turns:
-      candidates:
-        max_tokens: 3000
-        temperature: 0.4
       annotations:
         max_tokens: 4000
         temperature: 0.3

@@ -367,39 +367,7 @@ class TestNormalizeSeamCandidates:
 class TestSeamsRun:
     @patch("stages.seams.call_llm")
     def test_successful_run(self, mock_llm):
-        mock_llm.side_effect = [
-            json.dumps({
-                "schema_version": 1,
-                "candidates": [
-                    {
-                        "item_id": "geopolitics-abc",
-                        "seam_type": "framing_divergence",
-                        "candidate_one_line": "The non-Western read: this is escalation.",
-                        "why_it_might_matter": "Cost-bearing frame",
-                        "possible_evidence": [
-                            {
-                                "source": "A",
-                                "excerpt": "escalation",
-                                "framing": "risk",
-                            },
-                            {
-                                "source": "B",
-                                "excerpt": "signaling",
-                                "framing": "signal",
-                            },
-                        ],
-                        "drop_if_weak_reason": "",
-                    }
-                ],
-                "cross_domain_candidates": [
-                    {
-                        "candidate_one_line": "AI reads this as demand; geopolitics reads chokepoint.",
-                        "linked_item_ids": ["geopolitics-abc", "ai-abc"],
-                        "why_it_might_matter": "Same input has opposite implications.",
-                    }
-                ],
-            }),
-            json.dumps({
+        mock_llm.return_value = json.dumps({
                 "per_item": [
                     {
                         "item_id": "geopolitics-abc",
@@ -419,8 +387,7 @@ class TestSeamsRun:
                         "linked_item_ids": ["geopolitics-abc", "ai-abc"],
                     }
                 ],
-            }),
-        ]
+            })
         context = {
             "domain_analysis": {
                 "geopolitics": {
@@ -492,14 +459,11 @@ class TestSeamsRun:
         assert len(seam_data["coverage_gaps"]) == 0
         assert seam_data["seam_count"] == 1
         assert seam_data["quiet_day"] is True
-        assert mock_llm.call_count == 2
+        assert mock_llm.call_count == 1
 
     @patch("stages.seams.call_llm")
     def test_quiet_day_detection(self, mock_llm):
-        mock_llm.side_effect = [
-            json.dumps({"schema_version": 1, "candidates": [], "cross_domain_candidates": []}),
-            json.dumps({"per_item": [], "cross_domain": []}),
-        ]
+        mock_llm.return_value = json.dumps({"per_item": [], "cross_domain": []})
         context = {
             "domain_analysis": {"geopolitics": {"items": []}},
             "raw_sources": {"rss": []},
@@ -541,7 +505,7 @@ class TestSeamsRun:
 
     @patch("stages.seams.call_llm")
     def test_missing_fields_get_defaults(self, mock_llm):
-        mock_llm.side_effect = [json.dumps({}), json.dumps({})]
+        mock_llm.return_value = json.dumps({})
         context = {
             "domain_analysis": {"geopolitics": {"items": []}},
             "raw_sources": {"rss": []},
@@ -562,9 +526,7 @@ class TestSeamsRun:
 
     @patch("stages.seams.call_llm")
     def test_evidence_gate_applied(self, mock_llm):
-        mock_llm.side_effect = [
-            json.dumps({"schema_version": 1, "candidates": [], "cross_domain_candidates": []}),
-            json.dumps({
+        mock_llm.return_value = json.dumps({
                 "per_item": [
                     {
                         "item_id": "item-1",
@@ -575,8 +537,7 @@ class TestSeamsRun:
                     }
                 ],
                 "cross_domain": [],
-            }),
-        ]
+            })
         context = {
             "domain_analysis": {
                 "geopolitics": {"items": [{"item_id": "item-1", "headline": "T"}]}
@@ -605,9 +566,50 @@ class TestSeamsRun:
         assert result["seam_data"]["seam_count"] == 0
 
     @patch("stages.seams.call_llm")
+    def test_per_item_annotations_are_capped(self, mock_llm):
+        mock_llm.return_value = {
+            "per_item": [
+                {
+                    "item_id": f"item-{i}",
+                    "seam_type": "framing_divergence",
+                    "one_line": f"The non-Western read: contested frame {i}.",
+                    "evidence": [
+                        {"source": "A", "excerpt": "one", "framing": "one"},
+                        {"source": "B", "excerpt": "two", "framing": "two"},
+                    ],
+                    "confidence": "medium",
+                }
+                for i in range(10)
+            ],
+            "cross_domain": [],
+        }
+        context = {
+            "domain_analysis": {
+                "geopolitics": {
+                    "items": [
+                        {"item_id": f"item-{i}", "headline": f"T{i}"}
+                        for i in range(10)
+                    ]
+                }
+            },
+            "raw_sources": {"rss": []},
+            "compressed_transcripts": [],
+        }
+        config = {
+            "llm": {
+                "provider": "fireworks",
+                "model": "accounts/fireworks/models/kimi-k2p6",
+            }
+        }
+
+        result = run(context, config)
+
+        assert len(result["seam_annotations"]["per_item"]) == 6
+        assert result["seam_data"]["seam_count"] == 6
+
+    @patch("stages.seams.call_llm")
     def test_repair_path_salvages_truncated_annotations(self, mock_llm):
         mock_llm.side_effect = [
-            {"schema_version": 1, "candidates": [], "cross_domain_candidates": []},
             '{"per_item": [',
             '{"per_item": [',
             {"per_item": [], "cross_domain": []},
@@ -632,33 +634,18 @@ class TestSeamsRun:
 
     @patch("stages.seams.call_llm")
     def test_contract_issues_are_returned_as_sidecar(self, mock_llm):
-        mock_llm.side_effect = [
-            {
-                "schema_version": 1,
-                "candidates": [
-                    {
-                        "item_id": "item-1",
-                        "seam_type": "framing_divergence",
-                        "candidate_one_line": "Candidate",
-                        "possible_evidence": "not a list",
-                        "why_it_might_matter": "Reason",
-                    }
-                ],
-                "cross_domain_candidates": [],
-            },
-            {
-                "per_item": [
-                    {
-                        "item_id": "item-1",
-                        "seam_type": "framing_divergence",
-                        "one_line": "Annotation",
-                        "evidence": "not a list",
-                        "confidence": "high",
-                    }
-                ],
-                "cross_domain": [],
-            },
-        ]
+        mock_llm.return_value = {
+            "per_item": [
+                {
+                    "item_id": "item-1",
+                    "seam_type": "framing_divergence",
+                    "one_line": "Annotation",
+                    "evidence": "not a list",
+                    "confidence": "high",
+                }
+            ],
+            "cross_domain": [],
+        }
         context = {
             "domain_analysis": {
                 "geopolitics": {
@@ -690,11 +677,6 @@ class TestSeamsRun:
             {
                 "path": "domain_analysis.geopolitics.items[0].links",
                 "message": "links is not a list",
-            },
-            {
-                "artifact": "seam_candidates",
-                "path": "seam_candidates.candidates[0].possible_evidence",
-                "message": "possible_evidence is not a list",
             },
             {
                 "artifact": "seam_annotations",
