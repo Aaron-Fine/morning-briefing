@@ -65,9 +65,7 @@ _DOMAIN_CONFIGS = {
         "categories": {
             "non-western",
             "western-analysis",
-            "substack-independent",
             "global-south",
-            "perspective-diversity",
         },
         "transcript_channels": {"Beau of the Fifth Column", "Perun"},
         "tags": "war|domestic|econ",
@@ -85,9 +83,6 @@ _DOMAIN_CONFIGS = {
             "useful for interpretive frameworks. Label as 'analysis' not 'reporting'. "
             "Their value is the analytical lens, not the facts — distinguish what they "
             "observed from what they concluded.\n"
-            "- Perspective-diversity sources (Slow Boring, The Diff): include ONLY when "
-            "they contradict the mainstream framing. That contradiction is the signal — "
-            "if they agree with everyone else, they add nothing.\n"
             "- Note explicitly when non-western and western sources frame the same event "
             "differently. Do NOT resolve the disagreement — present both framings. This "
             "divergence is often more important than either framing alone.\n"
@@ -103,6 +98,36 @@ _DOMAIN_CONFIGS = {
             "alliance, a domestic election that constrains foreign policy options.\n"
             "- When multiple crises intersect (e.g., a regional conflict during an economic "
             "downturn), note the interaction explicitly — the compound effect matters."
+        ),
+    },
+    "perspective": {
+        "label": "Perspective & Framing",
+        "categories": {
+            "substack-independent",
+            "perspective-diversity",
+        },
+        "transcript_channels": set(),
+        "tags": "domestic",
+        "tag_labels": "Politics",
+        "normal_items": 3,
+        "max_items": 5,
+        "min_items": 0,
+        "domain_instructions": (
+            "You are the Perspective Desk — a specialist in detecting contested framing, "
+            "interpretive disagreements, and contrarian takes across commentary and opinion sources.\n\n"
+            "Your sources are independent Substack writers, contrarian commentators, and "
+            "perspective-diversity feeds. These are NOT primary news reporters — they are analysts "
+            "who often disagree with mainstream framing.\n\n"
+            "Your job is to identify specific framing disagreements and reframings that are "
+            "relevant to today's news landscape. Do NOT produce standard at-a-glance or deep-dive "
+            "analysis. Instead, produce items that capture genuine disagreements.\n\n"
+            "IMPORTANT RULES:\n"
+            "- Only include items where there is a GENUINE framing disagreement or contrarian take. "
+            "If all sources agree with the mainstream, return an empty items list.\n"
+            "- Focus on disagreements that have real-world stakes: policy decisions, resource allocations, "
+            "alliance structures, or risk assessments.\n"
+            "- Label every claim with its source. A contrarian take from one Substack is single-source — say so explicitly.\n"
+            "- Do not pad with weak items. Three sharp disagreements beat six meh ones."
         ),
     },
     "defense_space": {
@@ -715,6 +740,79 @@ def _resolve_domain_configs(config: dict) -> dict[str, dict]:
     return resolved or deepcopy(_DOMAIN_CONFIGS)
 
 
+def _rebalance_categories(
+    desk_key: str,
+    desk_result: dict,
+    desk_cfg: dict,
+    rss_items: list[dict],
+    rebalance_log: list[dict],
+) -> tuple[dict, list[dict]]:
+    """Ensure each category mapped to a desk contributes at least one item when raw items exist.
+
+    Post-LLM rebalance: if any category has raw items but zero selected items,
+    prepend the highest-priority raw item from that category to the desk output.
+    """
+    categories = desk_cfg.get("categories", set())
+    if not categories:
+        return desk_result, rebalance_log
+
+    items = desk_result.get("items", [])
+    selected_categories = {item.get("category", "") for item in items}
+
+    # Count raw items per category for this desk
+    raw_by_category: dict[str, list[dict]] = {}
+    for item in rss_items:
+        cat = item.get("category", "")
+        if cat in categories:
+            raw_by_category.setdefault(cat, []).append(item)
+
+    for cat, raw_items in raw_by_category.items():
+        if cat in selected_categories:
+            continue
+        if not raw_items:
+            continue
+        # Pick the highest-priority raw item (shortest native text first,
+        # then most recent). We don't have native text here, so use title
+        # length as a rough heuristic and prefer items with URLs.
+        candidate = max(
+            raw_items,
+            key=lambda ri: (
+                bool(ri.get("url")),
+                len(ri.get("title", "")),
+            ),
+        )
+        synthetic_item = {
+            "item_id": f"{desk_key}-{cat}-rebalanced",
+            "tag": "domestic",
+            "tag_label": "Politics",
+            "headline": candidate.get("title", "Untitled"),
+            "facts": f"Rebalanced from {cat}: {candidate.get('summary', '')[:200]}",
+            "analysis": f"Category rebalance: {cat} had {len(raw_items)} raw item(s) but was not represented in the desk output.",
+            "source_depth": "single-source",
+            "connection_hooks": [],
+            "links": [{"url": candidate.get("url", ""), "label": candidate.get("source", "")}],
+            "deep_dive_candidate": False,
+            "deep_dive_rationale": None,
+            "category": cat,
+        }
+        items.insert(0, synthetic_item)
+        rebalance_log.append(
+            {
+                "desk": desk_key,
+                "category": cat,
+                "action": "prepended_rebalanced_item",
+                "item_id": synthetic_item["item_id"],
+                "raw_count": len(raw_items),
+            }
+        )
+        log.warning(
+            f"analyze_domain[{desk_key}]: category rebalance prepended item from {cat}"
+        )
+
+    desk_result["items"] = items
+    return desk_result, rebalance_log
+
+
 def run(
     context: dict, config: dict, model_config: dict | None = None, **kwargs
 ) -> dict:
@@ -753,6 +851,25 @@ def run(
             contract_issues.append({"domain": key, **issue})
         total_items += len(val.get("items", []))
 
+    # Category rebalance: ensure low-volume categories get representation
+    rebalance_log = []
+    for desk_key in ("geopolitics", "culture_structural"):
+        if desk_key in domain_analysis:
+            domain_analysis[desk_key], rebalance_log = _rebalance_categories(
+                desk_key,
+                domain_analysis[desk_key],
+                domain_configs.get(desk_key, {}),
+                rss_items,
+                rebalance_log,
+            )
+
+    # Extract perspective desk output into its own key
+    perspective_output = domain_analysis.pop("perspective", {})
+    if perspective_output:
+        log.info(
+            f"analyze_domain: perspective desk produced {len(perspective_output.get('items', []))} framing candidate(s)"
+        )
+
     log.info(
         f"analyze_domain: {total_items} total items across {len(domain_configs)} domains"
     )
@@ -764,9 +881,11 @@ def run(
 
     return {
         "domain_analysis": domain_analysis,
+        "perspective_framing": perspective_output,
         "domain_research": domain_research,
         "domain_analysis_failures": still_failed,
         "domain_analysis_contract_issues": contract_issues,
+        "category_rebalance_log": rebalance_log,
     }
 
 

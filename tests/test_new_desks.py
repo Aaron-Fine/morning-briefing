@@ -201,9 +201,9 @@ class TestNewDeskRunPass:
 
 
 class TestDeskCount:
-    def test_seven_desks_total(self):
-        assert len(_DOMAIN_CONFIGS) == 7, (
-            f"Expected 7 desks, got {len(_DOMAIN_CONFIGS)}: {list(_DOMAIN_CONFIGS.keys())}"
+    def test_eight_desks_total(self):
+        assert len(_DOMAIN_CONFIGS) == 8, (
+            f"Expected 8 desks, got {len(_DOMAIN_CONFIGS)}: {list(_DOMAIN_CONFIGS.keys())}"
         )
 
     def test_no_category_overlap_between_desks(self):

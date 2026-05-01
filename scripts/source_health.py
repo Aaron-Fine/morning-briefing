@@ -17,9 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import statistics
-from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from morning_digest.config import load_config
@@ -27,11 +25,8 @@ from scripts.audit_rss_quality import (
     _latest_artifact_dir,
     load_artifacts,
     merge_enrich_metrics,
-    render_markdown_report,
     compute_feed_metrics,
     _pct,
-    _rate,
-    _percentile,
 )
 
 _ROOT = Path(__file__).resolve().parent.parent

@@ -19,7 +19,6 @@ from utils.prompts import load_prompt
 from .canonical import _canonical_summary
 from .fetch import resolve_source_text
 from .scheduling import (
-    _allocate_budget,
     _allocate_tiered_budget,
     _browser_fetch_candidate,
     _Candidate,

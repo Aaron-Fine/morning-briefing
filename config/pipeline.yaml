@@ -100,8 +100,10 @@ desks:
   categories:
   - non-western
   - western-analysis
-  - substack-independent
   - global-south
+- name: perspective
+  categories:
+  - substack-independent
   - perspective-diversity
 - name: defense_space
   categories:

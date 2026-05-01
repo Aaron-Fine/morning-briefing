@@ -82,10 +82,35 @@ def _clip_text(value: object, max_chars: int) -> str:
     return text[: max_chars - 3].rstrip() + "..."
 
 
-def _build_domain_summary(domain_analysis: dict, seams_cfg: dict | None = None) -> str:
+def _build_domain_summary(
+    domain_analysis: dict,
+    seams_cfg: dict | None = None,
+    perspective_framing: dict | None = None,
+) -> str:
     """Format domain analysis artifacts for the seam detection prompt."""
     seams_cfg = seams_cfg or _seams_cfg(None)
     parts = []
+
+    # Include perspective framing candidates first if available
+    pf = perspective_framing or {}
+    pf_items = pf.get("items", []) if isinstance(pf, dict) else []
+    if pf_items:
+        parts.append(f"\n--- PERSPECTIVE FRAMING ({len(pf_items)} candidates) ---")
+        for item in pf_items[:_cfg_int(seams_cfg, "max_candidates")]:
+            parts.append(
+                f"\nItem ID: {item.get('item_id', '')}\n"
+                f"Headline: {item.get('headline', '')}\n"
+                f"Tag: {item.get('tag', '')} | Depth: {item.get('source_depth', '')}\n"
+                f"Facts: {_clip_text(item.get('facts', ''), _budget_int(seams_cfg, 'domain_field_chars'))}\n"
+                f"Analysis: {_clip_text(item.get('analysis', ''), _budget_int(seams_cfg, 'domain_field_chars'))}"
+            )
+            links = item.get("links", [])
+            if links:
+                link_strs = [
+                    f"{l.get('label', '?')}: {l.get('url', '')}" for l in links[:3]
+                ]
+                parts.append(f"Links: {', '.join(link_strs)}")
+
     for domain_key, domain_result in domain_analysis.items():
         if not isinstance(domain_result, dict):
             continue
@@ -695,7 +720,8 @@ def run(
         effective_config, stage_cfg, "annotations"
     )
 
-    domain_summary = _build_domain_summary(domain_analysis, seams_cfg)
+    perspective_framing = context.get("perspective_framing", {})
+    domain_summary = _build_domain_summary(domain_analysis, seams_cfg, perspective_framing)
     raw_summary = _build_raw_source_summary(raw_sources, seams_cfg)
     transcript_summary = _build_transcript_summary(compressed_transcripts, seams_cfg)
 

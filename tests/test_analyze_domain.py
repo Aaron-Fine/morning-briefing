@@ -732,3 +732,65 @@ class TestDomainResearch:
 
         assert [item["summary"] for item in grouped["ai_tech"]] == ["Useful"]
         assert [item["summary"] for item in grouped["econ"]] == ["Cached"]
+
+
+class TestCategoryRebalance:
+    def test_prepends_item_for_missing_category(self):
+        from stages.analyze_domain import _rebalance_categories
+
+        desk_result = {"items": [{"item_id": "x", "category": "non-western"}]}
+        desk_cfg = {"categories": {"non-western", "western-analysis"}}
+        rss_items = [
+            {"category": "non-western", "title": "A", "url": "https://a.com", "source": "A"},
+            {"category": "western-analysis", "title": "B", "url": "https://b.com", "source": "B"},
+        ]
+        result, log = _rebalance_categories("geopolitics", desk_result, desk_cfg, rss_items, [])
+        assert len(result["items"]) == 2
+        assert result["items"][0]["item_id"] == "geopolitics-western-analysis-rebalanced"
+        assert len(log) == 1
+
+    def test_noop_when_all_categories_represented(self):
+        from stages.analyze_domain import _rebalance_categories
+
+        desk_result = {
+            "items": [
+                {"item_id": "x", "category": "non-western"},
+                {"item_id": "y", "category": "western-analysis"},
+            ]
+        }
+        desk_cfg = {"categories": {"non-western", "western-analysis"}}
+        rss_items = [
+            {"category": "non-western", "title": "A", "url": "https://a.com"},
+            {"category": "western-analysis", "title": "B", "url": "https://b.com"},
+        ]
+        result, log = _rebalance_categories("geopolitics", desk_result, desk_cfg, rss_items, [])
+        assert len(result["items"]) == 2
+        assert len(log) == 0
+
+
+class TestPerspectiveDesk:
+    def test_perspective_in_domain_configs(self):
+        assert "perspective" in _DOMAIN_CONFIGS
+        cfg = _DOMAIN_CONFIGS["perspective"]
+        assert cfg["categories"] == {"substack-independent", "perspective-diversity"}
+        assert cfg["min_items"] == 0
+
+    def test_run_extracts_perspective_framing(self):
+        with patch("stages.analyze_domain.call_llm") as mock_llm:
+            mock_llm.return_value = {
+                "items": [{"headline": "Test framing", "facts": "F", "analysis": "A"}]
+            }
+            context = {
+                "raw_sources": {
+                    "rss": [
+                        {"category": "substack-independent", "title": "T", "url": "https://t.com", "source": "S"}
+                    ]
+                },
+                "compressed_transcripts": [],
+            }
+            config = {"llm": {"provider": "fireworks"}, "desks": [{"name": "perspective", "categories": ["substack-independent"]}]}
+            result = run(context, config)
+            assert "perspective_framing" in result
+            assert len(result["perspective_framing"]["items"]) == 1
+            assert "domain_analysis" not in result["perspective_framing"]
+            assert "domain_analysis" in result
