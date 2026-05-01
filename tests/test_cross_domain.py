@@ -819,3 +819,64 @@ class TestCrossDomainRun:
             config = {"llm": {"provider": "fireworks"}}
             result = run(context, config)
             assert result["cross_domain_output"]["market_context"] == "Fallback context"
+
+
+class TestSourceDepthRecomputation:
+    def test_downgrades_widely_reported_to_single_source(self):
+        from cross_domain.parse import _downgrade_same_outlet_depth
+
+        result = {
+            "at_a_glance": [
+                {
+                    "item_id": "x",
+                    "source_depth": "widely-reported",
+                    "links": [{"url": "https://aljazeera.com/a"}],
+                }
+            ],
+            "deep_dives": [],
+        }
+        out = _downgrade_same_outlet_depth(result)
+        assert out["at_a_glance"][0]["source_depth"] == "single-source"
+        assert len(out["_source_depth_downgrades"]) == 1
+
+    def test_corroborated_requires_two_distinct_domains(self):
+        from cross_domain.parse import _downgrade_same_outlet_depth
+
+        result = {
+            "at_a_glance": [
+                {
+                    "item_id": "y",
+                    "source_depth": "corroborated",
+                    "links": [
+                        {"url": "https://aljazeera.com/a"},
+                        {"url": "https://scmp.com/b"},
+                    ],
+                }
+            ],
+            "deep_dives": [],
+        }
+        out = _downgrade_same_outlet_depth(result)
+        assert out["at_a_glance"][0]["source_depth"] == "corroborated"
+        assert len(out["_source_depth_downgrades"]) == 0
+
+    def test_widely_reported_requires_four_domains(self):
+        from cross_domain.parse import _downgrade_same_outlet_depth
+
+        result = {
+            "at_a_glance": [
+                {
+                    "item_id": "z",
+                    "source_depth": "widely-reported",
+                    "links": [
+                        {"url": "https://a.com/1"},
+                        {"url": "https://b.com/2"},
+                        {"url": "https://c.com/3"},
+                        {"url": "https://d.com/4"},
+                    ],
+                }
+            ],
+            "deep_dives": [],
+        }
+        out = _downgrade_same_outlet_depth(result)
+        assert out["at_a_glance"][0]["source_depth"] == "widely-reported"
+        assert len(out["_source_depth_downgrades"]) == 0

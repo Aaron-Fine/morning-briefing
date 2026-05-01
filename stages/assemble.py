@@ -29,6 +29,7 @@ from morning_digest.contracts import (
 )
 from templates.email_template import render_email
 from utils.time import format_display_date, format_display_time, now_local, tz_abbrev
+from utils.urls import registered_domain
 
 log = logging.getLogger(__name__)
 
@@ -94,6 +95,43 @@ def _truncate_one_line(text: str, limit: int = 220) -> str:
         if idx >= 80:
             return truncated[: idx + 1].rstrip()
     return truncated.rstrip(" ,;:") + "..."
+
+
+def _outlet_from_links(links: list[dict]) -> str:
+    """Return the most common registered domain from a list of links."""
+    from collections import Counter
+
+    domains = [registered_domain(lnk.get("url", "")) for lnk in links if lnk.get("url")]
+    if not domains:
+        return ""
+    return Counter(domains).most_common(1)[0][0]
+
+
+def _enforce_source_caps(
+    items: list[dict],
+    max_per_outlet: int,
+    section_name: str,
+) -> list[dict]:
+    """Drop items that exceed the per-outlet cap, preserving priority order."""
+    counts: dict[str, int] = {}
+    kept: list[dict] = []
+    dropped: list[dict] = []
+    for item in items:
+        outlet = _outlet_from_links(item.get("links", []) or item.get("further_reading", []))
+        if not outlet:
+            kept.append(item)
+            continue
+        if counts.get(outlet, 0) >= max_per_outlet:
+            dropped.append(item)
+            continue
+        counts[outlet] = counts.get(outlet, 0) + 1
+        kept.append(item)
+    if dropped:
+        log.info(
+            f"assemble: dropped {len(dropped)} {section_name} item(s) for "
+            f"per-outlet cap (max {max_per_outlet} per outlet)"
+        )
+    return kept
 
 
 def _select_inline_seam_annotations(
@@ -294,6 +332,21 @@ def run(
         deep_dives_raw = []
         market_context = ""
         worth_reading = []
+
+    # Enforce per-outlet source caps to prevent false corroboration
+    digest_cfg = config.get("digest", {})
+    glance_cfg = digest_cfg.get("at_a_glance", {})
+    dive_cfg = digest_cfg.get("deep_dives", {})
+    at_a_glance = _enforce_source_caps(
+        at_a_glance,
+        max_per_outlet=glance_cfg.get("max_per_outlet", 2),
+        section_name="at-a-glance",
+    )
+    deep_dives_raw = _enforce_source_caps(
+        deep_dives_raw,
+        max_per_outlet=dive_cfg.get("max_per_outlet", 1),
+        section_name="deep-dive",
+    )
 
     peripheral = _extract_peripheral_data(context, raw_sources)
     spiritual = peripheral["spiritual"]

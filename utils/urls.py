@@ -13,6 +13,21 @@ _TRACKING_QUERY_KEYS = {
 }
 
 
+def registered_domain(url: str) -> str:
+    """Return the registered domain (e.g. 'example.com') for a URL."""
+    if not url:
+        return ""
+    parsed = urlparse(str(url).strip())
+    netloc = parsed.netloc or ""
+    # Remove port if present
+    if ":" in netloc:
+        netloc = netloc.split(":")[0]
+    # Remove www. prefix for normalization
+    if netloc.lower().startswith("www."):
+        netloc = netloc[4:]
+    return netloc.lower()
+
+
 def canonicalize_url(url: str) -> str:
     """Return a stable comparison form for a publisher URL.
 

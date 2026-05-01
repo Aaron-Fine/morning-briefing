@@ -2,7 +2,7 @@
 
 import logging
 
-from utils.urls import collect_known_urls, url_known
+from utils.urls import collect_known_urls, registered_domain, url_known
 
 log = logging.getLogger(__name__)
 
@@ -429,6 +429,73 @@ def _normalize_cross_domain_plan(
     return plan
 
 
+def _distinct_domains(links: list[dict]) -> set[str]:
+    domains = set()
+    for lnk in links:
+        domain = registered_domain(lnk.get("url", ""))
+        if domain:
+            domains.add(domain)
+    return domains
+
+
+def _recompute_source_depth(item: dict) -> str:
+    """Recompute source_depth from distinct registered domains in links.
+
+    Overrides LLM-provided depth labels when same-outlet evidence dominates.
+    """
+    links = item.get("links", [])
+    if not links:
+        return "single-source"
+    domains = _distinct_domains(links)
+    if len(domains) >= 4:
+        return "widely-reported"
+    if len(domains) >= 2:
+        return "corroborated"
+    return "single-source"
+
+
+def _downgrade_same_outlet_depth(result: dict) -> dict:
+    """Recompute source_depth for all items; record downgrades in metadata."""
+    downgrades = []
+    for item in result.get("at_a_glance", []):
+        original = item.get("source_depth", "")
+        recomputed = _recompute_source_depth(item)
+        if original and original != recomputed:
+            downgrades.append(
+                {
+                    "item_id": item.get("item_id", ""),
+                    "section": "at_a_glance",
+                    "original_depth": original,
+                    "recomputed_depth": recomputed,
+                    "domains": sorted(_distinct_domains(item.get("links", []))),
+                }
+            )
+        item["source_depth"] = recomputed
+
+    for dive in result.get("deep_dives", []):
+        original = dive.get("source_depth", "")
+        recomputed = _recompute_source_depth(dive)
+        if original and original != recomputed:
+            downgrades.append(
+                {
+                    "item_id": dive.get("headline", "")[:40],
+                    "section": "deep_dives",
+                    "original_depth": original,
+                    "recomputed_depth": recomputed,
+                    "domains": sorted(_distinct_domains(dive.get("further_reading", []))),
+                }
+            )
+        dive["source_depth"] = recomputed
+
+    if downgrades:
+        log.warning(
+            f"cross_domain: downgraded {len(downgrades)} source_depth label(s) "
+            f"due to same-outlet concentration"
+        )
+    result["_source_depth_downgrades"] = downgrades
+    return result
+
+
 def _validated_output(
     result: dict,
     domain_analysis: dict,
@@ -474,6 +541,9 @@ def _validated_output(
     for read in result["worth_reading"]:
         if not url_known(read.get("url", ""), known_urls):
             read["url"] = ""
+
+    # Recompute source_depth from distinct domains before enforcing caps
+    result = _downgrade_same_outlet_depth(result)
 
     digest_cfg = config.get("digest", {})
     glance_cfg = digest_cfg.get("at_a_glance", {})

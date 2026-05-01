@@ -845,3 +845,30 @@ class TestAssembleRun:
         assert result["template_data"]["stage_failures"] == [
             {"stage": "prepare_weather", "error": "timeout"}
         ]
+
+
+class TestSourceCaps:
+    def test_enforces_at_a_glance_per_outlet_cap(self):
+        from stages.assemble import _enforce_source_caps
+
+        items = [
+            {"links": [{"url": "https://example.com/1"}]},
+            {"links": [{"url": "https://example.com/2"}]},
+            {"links": [{"url": "https://example.com/3"}]},
+            {"links": [{"url": "https://other.com/1"}]},
+        ]
+        result = _enforce_source_caps(items, max_per_outlet=2, section_name="test")
+        assert len(result) == 3
+        assert result[0]["links"][0]["url"] == "https://example.com/1"
+        assert result[1]["links"][0]["url"] == "https://example.com/2"
+        assert result[2]["links"][0]["url"] == "https://other.com/1"
+
+    def test_enforces_deep_dive_per_outlet_cap(self):
+        from stages.assemble import _enforce_source_caps
+
+        items = [
+            {"further_reading": [{"url": "https://example.com/1"}]},
+            {"further_reading": [{"url": "https://example.com/2"}]},
+        ]
+        result = _enforce_source_caps(items, max_per_outlet=1, section_name="test")
+        assert len(result) == 1
