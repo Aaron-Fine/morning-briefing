@@ -52,7 +52,7 @@ Definition of done:
 
 **Status:** Completed 2026-05-01. Source modules now emit `_diagnostic` keys; `collect.py` propagates them as `ok_empty`/`degraded`/`failed` in `collect_diagnostics`. Tests verify all three statuses. The date-staleness issue was addressed by logging the local date used for the Wikimedia API call.
 
-#### 2. Add source health classifications and reporting
+#### 2. Add source health classifications and reporting ✅
 
 Problem: Empty feeds currently require manual interpretation. Some are probably broken or stale; others are valuable but naturally low-frequency. There is also no ongoing visibility into which `headline_radar`/`enrichment_required` feeds are quietly degrading.
 
@@ -74,7 +74,9 @@ Definition of done:
 - Health classification is monitorable: a single CLI/script invocation prints a roll-up of all feeds' current status, the last date each was non-empty, and any status transitions.
 - Tests cover config parsing, audit classification, and the per-run health artifact.
 
-#### 3. Empirically audit and curate stale / low-yield feeds
+**Status:** Completed 2026-05-01. `scripts/source_health.py` provides the CLI and per-run artifact; `config/sources.yaml` carries health on every feed; `audit_rss_quality.py` includes the health column; pipeline writes `source_health.json` after collect.
+
+#### 3. Empirically audit and curate stale / low-yield feeds ✅
 
 Problem: Several feeds are suspected stale or low-yield but lack data-driven decisions.
 
@@ -103,6 +105,12 @@ Definition of done:
 - Decision rationale (one line per feed) is captured in a commit message or a short note in `config/sources.yaml`.
 - Clearly broken feeds are removed or marked `broken`.
 - `scripts/validate_new_feeds.py` and `scripts/audit_rss_quality.py --latest` complete successfully in Docker.
+
+**Status:** Completed 2026-05-01. Empirical audit ran over 26 days of artifacts. Dispositions applied:
+- `broken`: Lawfare, Phys.org Bio & Medicine, ScienceDaily Biotechnology (zero items, should be active)
+- `low_frequency`: Defense Tech and Acquisition, MenaTrack, One Useful Thing, The Overshoot, The Diff, The New Atlantis, BIS Press Releases, BIS Central Bank Speeches, Brad Setser, Comment Magazine, Salt Lake Tribune Culture
+- `enrichment_required`: Sinification, Import AI, China Talk, Daniel Drezner, Venture in Security, The American Conservative, Deseret News (Utah), Just Security, Inter Press Service, Carbon Brief, Air & Space Forces
+- `headline_radar`: Financial Times, The Economist, Nature, Science Magazine
 
 #### 4. Add targeted sources for recurring coverage gaps
 

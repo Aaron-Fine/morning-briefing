@@ -20,9 +20,10 @@ from .canonical import _canonical_summary
 from .fetch import resolve_source_text
 from .scheduling import (
     _allocate_budget,
+    _allocate_tiered_budget,
     _browser_fetch_candidate,
-    _candidate_priority,
     _Candidate,
+    _candidate_priority,
     _dedup_by_url,
     _HostLimiter,
 )
@@ -103,20 +104,44 @@ def run(
             )
         )
 
-    _allocate_budget(
+    tier_caps = enrich_cfg.get("tier_caps", {})
+    default_tier_caps = {
+        "active": {"max_fetches": max_fetches, "max_browser_fetches": max_browser_fetches},
+        "low_frequency": {"max_fetches": max_fetches, "max_browser_fetches": max_browser_fetches},
+        "enrichment_required": {"max_fetches": max_fetches, "max_browser_fetches": max_browser_fetches},
+        "headline_radar": {"max_fetches": 0, "max_browser_fetches": 0},
+        "degraded": {"max_fetches": 0, "max_browser_fetches": 0},
+        "broken": {"max_fetches": 0, "max_browser_fetches": 0},
+    }
+    # Merge defaults with any explicit tier_caps from config
+    for tier, defaults in default_tier_caps.items():
+        explicit = tier_caps.get(tier, {})
+        defaults["max_fetches"] = explicit.get("max_fetches", defaults["max_fetches"])
+        defaults["max_browser_fetches"] = explicit.get("max_browser_fetches", defaults["max_browser_fetches"])
+
+    http_tier_caps = {
+        tier: caps["max_fetches"]
+        for tier, caps in default_tier_caps.items()
+    }
+    browser_tier_caps = {
+        tier: caps["max_browser_fetches"]
+        for tier, caps in default_tier_caps.items()
+    }
+
+    http_tier_stats = _allocate_tiered_budget(
         candidates,
         attr_needed="http_fetch_needed",
         attr_allowed="http_fetch_allowed",
-        cap=max_fetches,
+        tier_caps=http_tier_caps,
         skipped_status="skipped_fetch_cap",
         skipped_records=skipped_records,
         make_record=_record,
     )
-    _allocate_budget(
+    browser_tier_stats = _allocate_tiered_budget(
         candidates,
         attr_needed="browser_fetch_candidate",
         attr_allowed="browser_fetch_allowed",
-        cap=max_browser_fetches,
+        tier_caps=browser_tier_caps,
         skipped_status="skipped_browser_fetch_cap",
         skipped_records=skipped_records,
         make_record=_record,
@@ -167,7 +192,13 @@ def run(
     enriched_sources["rss"] = items
     return {
         "enriched_sources": enriched_sources,
-        "enrich_articles": {"records": status_records},
+        "enrich_articles": {
+            "records": status_records,
+            "tier_summary": {
+                "http_fetch": http_tier_stats,
+                "browser_fetch": browser_tier_stats,
+            },
+        },
     }
 
 

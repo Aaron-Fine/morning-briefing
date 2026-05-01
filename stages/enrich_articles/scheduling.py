@@ -103,6 +103,10 @@ def _candidate_priority(
     return (3, priority, len(native_text), index), "short_native_text"
 
 
+def _health_tier(feed_conf: dict) -> str:
+    return (feed_conf or {}).get("health", "active")
+
+
 def _allocate_budget(
     candidates: list[_Candidate],
     *,
@@ -130,3 +134,58 @@ def _allocate_budget(
                 native_length=len(candidate.native_text or ""),
             )
         )
+
+
+def _allocate_tiered_budget(
+    candidates: list[_Candidate],
+    *,
+    attr_needed: str,
+    attr_allowed: str,
+    tier_caps: dict[str, int],
+    skipped_status: str,
+    skipped_records: list[dict],
+    make_record,
+) -> dict[str, dict]:
+    """Allocate budget per health tier, returning per-tier usage stats."""
+    # Group candidates by tier that need this fetch type
+    by_tier: dict[str, list[_Candidate]] = {}
+    for candidate in candidates:
+        if not getattr(candidate, attr_needed):
+            continue
+        tier = _health_tier(candidate.feed_conf)
+        by_tier.setdefault(tier, []).append(candidate)
+
+    # Sort within each tier by priority
+    for tier in by_tier:
+        by_tier[tier].sort(key=lambda c: c.priority)
+
+    stats: dict[str, dict] = {}
+    for tier, tier_candidates in by_tier.items():
+        cap = tier_caps.get(tier, 0)
+        budget = max(0, int(cap or 0))
+        allowed = 0
+        skipped = 0
+        for idx, candidate in enumerate(tier_candidates):
+            if idx < budget:
+                setattr(candidate, attr_allowed, True)
+                allowed += 1
+            else:
+                skipped += 1
+                skipped_records.append(
+                    make_record(
+                        candidate.item,
+                        skipped_status,
+                        f"{skipped_status.replace('_', ' ')} hit; "
+                        f"tier={tier}; rank_reason={candidate.priority_reason}; "
+                        f"candidates={len(tier_candidates)}; cap={budget}",
+                        source_text_origin="",
+                        native_length=len(candidate.native_text or ""),
+                    )
+                )
+        stats[tier] = {
+            "needed": len(tier_candidates),
+            "allowed": allowed,
+            "skipped_by_cap": skipped,
+            "cap": budget,
+        }
+    return stats

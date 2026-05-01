@@ -340,6 +340,48 @@ def test_auto_browser_fallback_only_candidates_empty_native_text(tmp_path):
     assert browser.call_count == 1
 
 
+def test_tiered_budget_skips_headline_radar_and_broken(tmp_path):
+    feeds = [
+        {"name": "Active", "url": "x", "health": "active"},
+        {"name": "Headline", "url": "x", "health": "headline_radar"},
+        {"name": "Broken", "url": "x", "health": "broken"},
+    ]
+    items = [
+        {"source": "Active", "url": "https://x/1", "summary": ""},
+        {"source": "Headline", "url": "https://x/2", "summary": ""},
+        {"source": "Broken", "url": "https://x/3", "summary": ""},
+    ]
+    cfg = _config(
+        tmp_path,
+        feeds=feeds,
+        enrich={"browser_fetch_enabled": True},
+    )
+    with patch("stages.enrich_articles.fetch.fetch_article_html") as http_fetch:
+        http_fetch.return_value.status = "http_error"
+        http_fetch.return_value.http_status = 500
+        http_fetch.return_value.html = ""
+        http_fetch.return_value.error = "boom"
+        with patch("stages.enrich_articles.fetch.fetch_article_browser_markdown") as browser:
+            browser.return_value.status = "browser_failed"
+            browser.return_value.http_status = None
+            browser.return_value.markdown = ""
+            browser.return_value.raw_length = 0
+            browser.return_value.error = "blocked"
+            out = run({"raw_sources": {"rss": items}}, cfg)
+    statuses = [record["status"] for record in out["enrich_articles"]["records"]]
+    # Headline and broken should never be fetched (cap=0) — 2 skipped by HTTP cap
+    assert statuses.count("skipped_fetch_cap") == 2
+    # Active should be allowed HTTP fetch (1 allowed), but browser capped at 0
+    assert statuses.count("skipped_browser_fetch_cap") == 3
+    tier_summary = out["enrich_articles"]["tier_summary"]
+    assert tier_summary["http_fetch"]["headline_radar"]["allowed"] == 0
+    assert tier_summary["http_fetch"]["broken"]["allowed"] == 0
+    assert tier_summary["http_fetch"]["active"]["allowed"] == 1
+    assert tier_summary["browser_fetch"]["headline_radar"]["allowed"] == 0
+    assert tier_summary["browser_fetch"]["broken"]["allowed"] == 0
+    assert tier_summary["browser_fetch"]["active"]["allowed"] == 0
+
+
 def test_rejects_meta_llm_summary_for_long_source(tmp_path):
     feeds = [{"name": "A", "url": "x", "enrich": {"strategy": "rss_only"}}]
     item = {

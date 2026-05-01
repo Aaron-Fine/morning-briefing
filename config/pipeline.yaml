@@ -141,6 +141,25 @@ enrich_articles:
   min_body_chars: 300
   timeout_seconds: 15
   impersonate: chrome
+  tier_caps:
+    active:
+      max_fetches: 10
+      max_browser_fetches: 3
+    low_frequency:
+      max_fetches: 10
+      max_browser_fetches: 3
+    enrichment_required:
+      max_fetches: 9999
+      max_browser_fetches: 30
+    headline_radar:
+      max_fetches: 0
+      max_browser_fetches: 0
+    degraded:
+      max_fetches: 0
+      max_browser_fetches: 0
+    broken:
+      max_fetches: 0
+      max_browser_fetches: 0
 domain_research:
   enabled: true
   max_requests_per_desk: 1

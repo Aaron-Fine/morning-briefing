@@ -198,6 +198,12 @@ def _fetch_direct(
         batch_results = _fetch_feed_batch(batch, fetch_state, config)
 
         for feed_conf, fetch_result in zip(batch, batch_results):
+            if feed_conf.get("health") == "broken":
+                diagnostics.append(
+                    _feed_diagnostic(feed_conf, fetch_result, "skipped_broken", 0)
+                )
+                continue
+
             if consecutive_failures >= 5:
                 remaining = len(feeds) - feeds.index(feed_conf)
                 log.warning(
