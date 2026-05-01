@@ -1,6 +1,6 @@
 # Morning Digest — TODO
 
-Last updated: 2026-05-01
+Last updated: 2026-05-01 (revised after empirical artifact review)
 
 > **Design-intent note.** When triaging items marked "stale" or "unused,"
 > first ask whether the feature was *intentional but silently broken* (e.g.
@@ -15,46 +15,68 @@ Last updated: 2026-05-01
 
 These tasks are intended as implementation-ready work items. The immediate goal is to determine whether the digest has enough reliable source material to produce a strong report, then prevent downstream selection from overusing weak or redundant evidence.
 
-Recommended implementation order:
+Recommended implementation order (not rigid; #2+#3 in particular are best done together since the audit informs the classifications):
 
 1. Fix collect-stage hidden failures.
-2. Add source health classifications.
-3. Curate stale and low-yield feeds.
-4. Harden distinct-source selection downstream.
-5. Make enrichment budget selective by source need.
-6. Add targeted sources for recurring coverage gaps.
-7. Tune source-absence and repeated-phrase diagnostics.
-8. Run and evaluate a full dry run.
-9. Close out the branch.
+2. Add source health classifications and reporting.
+3. Empirically audit and curate stale / low-yield feeds.
+4. Add targeted sources for recurring coverage gaps.
+5. Make enrichment budget tiered by source health.
+6. Harden distinct-source selection downstream.
+7a. Add per-category quotas inside multi-category desks.
+7b. Introduce a `perspective` mini-desk feeding seams.
+8. Tune source-absence and repeated-phrase diagnostics.
+9. One-time validation for newly added sources.
+10. Run and evaluate a full dry run.
+11. Update README and contributor docs.
+12. Close out the branch.
 
 #### 1. Fix collect-stage hidden failures
 
-Problem: Some collectors return empty results while hiding real upstream failures. The clearest current example is the `On This Day` Wikimedia request returning 404 while the collect diagnostics still report the task as successful with zero items.
+Problem: Several collectors return empty results while hiding real upstream failures. Survey of the last 5 dated runs (`output/artifacts/2026-04-22..2026-04-29`) shows persistent zero-output collectors that should not be silently zero:
+
+- `on_this_day` (Wikimedia): always 0 events; the 2026-04-29 artifact even shows `day=28`, indicating a date-handling bug *and* an HTTP/API failure.
+- `holidays`: always 0 across all 5 runs — almost certainly broken.
+- `astronomy.iss_passes`: always 0 — Cache Valley should see ISS passes most weeks; the upstream API call or location handling is suspect.
+- `church_events`: always 0 — may be valid (off general-conference) but unverified; needs a positive-test path.
+
+Plausibly valid empty: `astronomy.events` (0–1, intermittently populated).
 
 Definition of done:
 
-- `sources/history.py` either uses a working Wikimedia endpoint or emits an explicit degraded/failure diagnostic when the endpoint fails.
-- Collect diagnostics distinguish "valid empty result" from "HTTP/API failure with no usable fallback."
-- A test covers the failing HTTP path and verifies that it is visible in diagnostics.
-- A Dockerized focused test run passes for the changed collector/diagnostic code.
+- `sources/history.py`, `sources/holidays.py`, `sources/astronomy.py`, `sources/come_follow_me.py` each either return a non-empty result for a known-good fixture date or emit an explicit degraded/failure diagnostic.
+- `on_this_day` date-staleness bug fixed: the artifact's `month`/`day` must match the run date.
+- Collect diagnostics distinguish `ok_empty` (valid empty result), `degraded` (partial result with fallback), and `failed` (HTTP/API failure with no usable output).
+- Tests cover each fixed collector's failing-HTTP path and verify the diagnostic appears in `run_meta` and/or a `collect_diagnostics` artifact.
+- Dockerized focused test run passes.
 
-#### 2. Add source health classifications
+#### 2. Add source health classifications and reporting
 
-Problem: Empty feeds currently require manual interpretation. Some are probably broken or stale; others are valuable but naturally low-frequency.
+Problem: Empty feeds currently require manual interpretation. Some are probably broken or stale; others are valuable but naturally low-frequency. There is also no ongoing visibility into which `headline_radar`/`enrichment_required` feeds are quietly degrading.
 
-Add an explicit source health/status concept for RSS and HTML-index sources. Suggested statuses: `active`, `headline_radar`, `low_frequency`, `enrichment_required`, `degraded`, `broken`.
+Add an explicit source-health concept for RSS and HTML-index sources. Statuses with concrete behavioral semantics:
+
+- `active` (default if unset): standard handling; empty for >7 days raises a warning.
+- `headline_radar`: headlines are sufficient — used for awareness only; fetch/browser enrichment is *not* attempted; not eligible for deep dives.
+- `low_frequency`: empty results over 24–48h windows are expected and do not raise warnings; fewer items per run is normal.
+- `enrichment_required`: RSS body is unreliable; fetch (and browser-fetch on failure) is preferred whenever budget allows.
+- `degraded`: feed currently failing or partially working; included with reduced severity warnings until a window of recovery is observed.
+- `broken`: skipped at fetch time; logged once per run; auto-promote to `degraded` when items reappear.
 
 Definition of done:
 
-- Source health can be represented in `config/sources.yaml` without breaking existing source loading.
-- The RSS quality audit reports each source's status, item count, median body length, enrichment behavior, and degraded/fallback rate.
+- Source health is representable in `config/sources.yaml` (per-feed `health:` field) without breaking existing source loading; absent value = `active`.
+- The RSS quality audit (`scripts/audit_rss_quality.py`) reports per-feed status, item count, median body length, enrichment behavior (rss_body / fetched_html / browser_markdown / normalizer_fallback / none), and degraded/fallback rate.
 - Normalizer fallback no longer counts as clean success in source-quality reporting.
-- Sparse high-value feeds can be marked `low_frequency` so they do not create the same warning severity as broken feeds.
-- Tests cover config parsing and audit classification behavior.
+- A new `source_health.json` artifact (or section of an existing diagnostics artifact) is written each run summarizing every feed's status and the per-run observations that contributed to it.
+- Health classification is monitorable: a single CLI/script invocation prints a roll-up of all feeds' current status, the last date each was non-empty, and any status transitions.
+- Tests cover config parsing, audit classification, and the per-run health artifact.
 
-#### 3. Curate stale and low-yield feeds
+#### 3. Empirically audit and curate stale / low-yield feeds
 
-Problem: The latest full collect showed several empty or low-yield sources. Some should be repaired, some downgraded, and some removed.
+Problem: Several feeds are suspected stale or low-yield but lack data-driven decisions.
+
+Approach: run an empirical audit using all available dated runs (currently 21 runs, 2026-04-04 → 2026-04-29, ~26-day window). For each candidate feed, compute item count, median body length, enrichment behavior, and degraded-fallback rate; propose disposition; apply after review.
 
 Current feeds needing review:
 
@@ -74,80 +96,170 @@ Current feeds needing review:
 
 Definition of done:
 
-- Each listed feed has an explicit decision recorded in `config/sources.yaml` or a nearby source-health comment: keep, fix URL/parser, mark `low_frequency`, mark `headline_radar`, replace, or remove.
-- Clearly broken feeds are removed or disabled.
-- Valuable but sparse feeds are preserved with lower-severity expectations.
-- Redundant low-value feeds are removed when overlapping sources already provide better coverage.
+- Audit script outputs a per-feed table of empirical metrics over the available run window.
+- Each listed feed has an explicit recorded decision in `config/sources.yaml` (via the new `health:` field or removal): keep `active`, mark `low_frequency`, mark `headline_radar`, mark `enrichment_required`, mark `broken`, or remove entirely.
+- Decision rationale (one line per feed) is captured in a commit message or a short note in `config/sources.yaml`.
+- Clearly broken feeds are removed or marked `broken`.
 - `scripts/validate_new_feeds.py` and `scripts/audit_rss_quality.py --latest` complete successfully in Docker.
 
 #### 4. Add targeted sources for recurring coverage gaps
 
 Problem: Coverage-gap history repeatedly identifies missing or weak coverage in a few domains. These are input gaps, not just selection issues.
 
-Target expansion areas:
+Target expansion areas (drawn from `coverage_gaps.json` over recent runs):
 
-- Maritime/shipping/insurance risk.
+- Maritime/shipping/insurance risk (Lloyd's-style).
 - Arms control, NPT, nuclear governance, IAEA/UN institutions.
 - DPRK and Taiwan Strait security.
 - European LNG, gas, and energy-market coverage.
 - AI governance, compute governance, frontier model regulation.
 
+Source discovery: review feeds catalogued at <https://github.com/kagisearch/kite-public> and similar curated lists for candidates in each gap area.
+
 Definition of done:
 
-- Add a small, curated set of sources for the target areas rather than a broad dump of feeds.
-- Each new source has category routing, analysis mode, enrichment strategy, and source-health status.
-- New feeds pass validation.
+- 1–3 new feeds per gap area, total ≤15 added; favors quality over breadth.
+- Each new source has category routing, analysis mode, enrichment strategy, and source-health status set explicitly.
+- New feeds pass validation (#9) before being merged.
 - A dry run shows the new sources entering `raw_sources` or produces clear diagnostics explaining why they did not.
-- The source additions reduce at least one recurring coverage-gap class or make the remaining gap visibly a selection issue rather than a collection issue.
+- The next dry run's `coverage_gaps.json` reduces at least one recurring gap class or makes the remaining gap visibly a selection issue rather than a collection issue.
 
-#### 5. Make enrichment budget selective by source need
+#### 5. Make enrichment budget tiered by source health
 
-Problem: Many thin feeds need fetch/browser enrichment, but global fetch caps skip many candidates. Raising caps globally would increase latency and cost without guaranteeing better analysis.
+Problem: Current enrichment caps in `config/pipeline.yaml` are global and tight: `max_fetches_per_run: 10`, `max_browser_fetches_per_run: 3`. The 2026-04-29 run had 249 enrich candidates with 46 skipped by fetch cap and 5 by browser cap; only 13 fetches across 249 items. Items that genuinely need fetched bodies (`enrichment_required` sources) are being starved.
+
+Approach: tiered caps keyed off the source-health field added in #2.
+
+- `enrichment_required` sources: no per-run cap on fetch; browser-fetch on fetch failure (still subject to a generous safety ceiling, e.g. 30/run, to bound runaway).
+- `headline_radar` sources: never fetched; never browser-fetched.
+- `active` and `low_frequency` sources: standard cap (current 10 fetch / 3 browser).
+- `degraded`/`broken` sources: never fetched.
+- Within each tier, prioritization considers body length (shortest first), category importance, and recent coverage-gap matches.
 
 Definition of done:
 
-- Enrichment prioritization considers source health, category importance, body length, and recent coverage gaps.
-- High-value thin sources can receive reserved enrichment budget.
-- Low-value duplicates are skipped before scarce fetch/browser slots are consumed.
-- Enrichment diagnostics report why each candidate was fetched, browser-fetched, skipped by cap, skipped by policy, or degraded by fallback.
-- Tests cover prioritization order and cap behavior.
+- `pipeline.yaml` enrichment config supports per-tier caps.
+- `enrich_articles` consults source health when deciding fetch eligibility and ordering.
+- Enrichment diagnostics (`enrich_articles.json`) record per-record `tier`, `cap_tier`, and the reason code for skipped / fetched / browser-fetched / fallback / no_source_text outcomes.
+- A dashboard-style summary of per-tier fetch usage is emitted per run (counts of attempted, succeeded, skipped-by-cap, fallback).
+- Tests cover tier-based cap behavior, prioritization order within a tier, and the no-fetch guarantee for `headline_radar`/`broken`/`degraded`.
 
 #### 6. Harden distinct-source selection downstream
 
 Problem: Downstream output can look corroborated when multiple links come from the same outlet. At-a-glance and deep dives can also overuse a few sources such as SCMP, Al Jazeera, or OilPrice.
 
+Concrete concentration limits to enforce (subject to per-section override in `pipeline.yaml`):
+
+- At-a-glance: ≤2 items per outlet per section.
+- Deep dives: ≤1 item per outlet per section.
+- "Corroborated" or "widely-reported" depth labels require ≥2 distinct registered domains across the supporting links.
+
 Definition of done:
 
 - Cross-domain validation recomputes source depth from distinct outlets/domains instead of trusting the LLM label.
-- Same-outlet multi-link evidence cannot be labeled as independently corroborated.
-- At-a-glance and deep-dive selection enforce source concentration limits at both item and link/evidence level.
-- Validation diagnostics report when source-depth labels are downgraded or when source concentration caps alter output.
-- Tests cover same-outlet duplicates, distinct-outlet corroboration, and source-cap behavior.
+- Same-outlet multi-link evidence cannot be labeled as independently corroborated; depth labels are auto-downgraded.
+- At-a-glance and deep-dive selection enforce the per-outlet caps above; overflow items are dropped or swapped per a documented tiebreaker.
+- Validation diagnostics report when source-depth labels are downgraded or when source-cap enforcement altered the output (which item dropped, why).
+- Tests cover same-outlet duplicates, distinct-outlet corroboration, and per-section cap behavior.
 
-#### 7. Tune source-absence and repeated-phrase diagnostics
+#### 7a. Add per-category quotas inside multi-category desks
 
-Problem: Some source-absence warnings are useful, but others mean "the desk ignored this category" rather than "collect failed." Repeated-phrase warnings also reveal downstream reuse between at-a-glance, deep dives, and seams.
+Problem: The 2026-04-29 anomaly report flagged four categories (`global-south`, `western-analysis`, `culture-structural`, `perspective-diversity`) as having raw items but contributing zero items to domain analysis. Investigation showed this is *not* a routing failure: those categories share desks with higher-volume siblings (e.g. `geopolitics` desk receives 40 `non-western` items vs 8 `western-analysis` and 8 `global-south`; `culture_structural` desk receives `culture-structural` (6), `legal-institutional` (6), `demographics` (4)). The desk LLM picks ~8 from the combined pool and high-volume categories crowd out the smaller ones.
+
+Approach: enforce category diversity inside `analyze_domain` itself. Pre-LLM per-category quotas (each mapped category gets a minimum candidate slot if it has items, with a maximum cap on dominant categories), or a post-LLM rebalance step that swaps in the best item from any zero-contribution category.
+
+This task applies to the post-7b `geopolitics_events` desk (covering `non-western`, `western-analysis`, `global-south`) and to `culture_structural`. Other desks can opt in if needed.
+
+Definition of done:
+
+- A documented mechanism (pre-LLM quotas or post-LLM rebalance) ensures each category mapped to a desk contributes at least one item when raw items are present, up to a configurable cap on any single category's share.
+- The mechanism is configurable per desk in `pipeline.yaml`.
+- Diagnostics record when category rebalance ran and which items were swapped.
+- A focused test confirms a synthetic high-volume + low-volume category mix produces output with both represented.
+- After this lands, the `source_absence` warnings for `western-analysis`, `global-south`, and `culture-structural` either disappear or convert into intentional `low_frequency`-marked exceptions.
+
+#### 7b. Introduce a `perspective` mini-desk feeding seams
+
+Problem: The categories `substack-independent` and `perspective-diversity` are content-type mismatches inside the geopolitics desk. They are framing, commentary, and contrarian takes — not event reporting. Mixing 9–12 opinion items with 40 news items in one LLM call invites the model to either ignore them (the current failure) or weight them inappropriately. Today the seams stage has to *extract* contested framing from news items written for a different purpose.
+
+Approach: stand up a small `perspective` desk that produces *contested-framing candidates* directly, not a full at-a-glance/deep-dive output. Its output flows into the existing seams stage as purpose-built input.
+
+- Routing: remove `substack-independent` and `perspective-diversity` from the `geopolitics` desk; route them to a new `perspective` desk.
+- Output schema: small — a list of framing candidates each with a `claim`, `framing_axis` (e.g. "US vs. multipolar interpretation"), `representative_items` (item IDs), and short rationale. No deep dives, no at-a-glance contributions.
+- Prompt: focused on identifying *disagreements and reframings* rather than producing analysis.
+- Downstream: seams stage consumes `perspective` desk output alongside the events-desk outputs as input to its candidate generation.
+
+Definition of done:
+
+- New `perspective` desk defined in `config/pipeline.yaml` with its own categories, prompt, and output schema.
+- `geopolitics` desk renamed to `geopolitics_events` and its category list reduced to `non-western`, `western-analysis`, `global-south` (and `substack-independent` only if any non-perspective subset remains; otherwise removed).
+- New prompt file `prompts/perspective_system.md` defining the framing-candidate task.
+- Seams stage accepts `perspective` desk output as a first-class input source and uses it preferentially when generating candidates.
+- The perspective desk does NOT produce an at-a-glance section, deep dive, or worth-reading entries.
+- Tests cover routing changes, the new desk's output contract, and seams consumption of perspective input.
+- A dry run shows perspective desk output materially shaping at least one seam candidate that previously had to be inferred from news items.
+
+#### 8. Tune source-absence and repeated-phrase diagnostics
+
+Problem: Some `source_absence` warnings are useful, but others are noise (low-frequency categories, intentionally headline-only sources). The 2026-04-29 anomaly report also showed 5/9 anomalies were repeated-phrase overlaps between at-a-glance and deep dives, indicating the cross-domain prompt's "must add distinct value" instruction is not being enforced.
 
 Definition of done:
 
 - Source-absence diagnostics distinguish at least three cases: no raw input, raw input present but not selected by desk, and desk selected input but cross-domain omitted it.
-- Diagnostic severity is lower for categories intentionally marked low-frequency or headline-radar.
-- Repeated-phrase checks identify overlapping report sections and include enough context to debug the selection cause.
-- Tests cover each diagnostic class.
+- Severity is lowered for categories whose feeds are mostly `low_frequency` or `headline_radar`.
+- Repeated-phrase checks identify overlapping report sections and include enough context (item IDs, section names, span) to debug the selection cause.
+- Add either (a) a post-cross-domain dedup pass that regenerates or shortens deep-dive paragraphs reusing ≥10-word spans from at-a-glance, or (b) a stronger constraint in `prompts/cross_domain_execute.md` and a validation gate that downgrades `source_depth` when overlap is detected.
+- Tests cover each diagnostic class and the dedup behavior.
 
-#### 8. Run and evaluate a full dry run
+#### 9. One-time validation for newly added sources
+
+Problem: New sources added under #4 (and any future additions) need a sanity check before being committed: feed reachable, parses, has recent items, category routes to an active desk, source-health field present and valid. This is a *one-shot, on-add* check — not a per-run pipeline cost.
+
+Definition of done:
+
+- `scripts/validate_new_feeds.py` (or a sibling script) accepts a `--new-only` mode that audits only feeds added since the last commit and reports per-feed pass/fail.
+- The script checks: HTTP reachability, feed parses, ≥1 item in the last 7 days (or the feed is marked `low_frequency`/`headline_radar`), category present in `desks` routing, `health` field valid.
+- The validator is invoked manually (or via a developer-facing `make` / pre-commit hook on staged `config/sources.yaml` changes), NOT from the daily pipeline. Per-run health visibility is the responsibility of #2's `source_health` artifact, not this validator.
+- Tests cover each validation rule.
+
+#### 10. Run and evaluate a full dry run
 
 Problem: The above changes should be judged by actual pipeline artifacts, not just unit tests.
 
 Definition of done:
 
 - Run the full Dockerized dry run after implementation.
-- Inspect `collect_diagnostics`, `raw_sources`, `enriched_sources`, `domain_analysis`, `cross_domain_output`, `anomaly_report`, and `coverage_gaps` artifacts.
+- Inspect `collect_diagnostics`, `raw_sources`, `enriched_sources`, `domain_analysis`, `cross_domain_output`, `anomaly_report`, `coverage_gaps`, and the new `source_health` artifacts.
 - The final report has reasonable source diversity, no hidden collect failures, and no obvious same-outlet false corroboration.
+- After 7a+7b, the previously-dropped news categories (`western-analysis`, `global-south`, `culture-structural`) contribute items when raw input is present, and `substack-independent`/`perspective-diversity` items shape at least one seam candidate.
+- Repeated-phrase anomalies drop to ≤1 per run (down from 5+ on 2026-04-29).
 - Remaining warnings are documented as either accepted tradeoffs or follow-up TODOs.
 - Full Dockerized test suite passes before committing.
 
-#### 9. Close out the branch
+#### 11. Update README and contributor docs
+
+Problem: This branch changes user-visible structure (a new `perspective` desk, renamed `geopolitics_events`, a `health:` field on every source, a new `source_health` artifact, tiered enrichment caps, new diagnostic enums). The current README (542 lines) and CLAUDE.md will go stale in several specific places if not updated alongside the code.
+
+Specific spots known to need updating:
+
+- README desk count and parallelism description (currently "Seven specialist desks", line ~25 and line ~62; will become events desks + a perspective mini-desk).
+- README desk-routing example block (line ~294) showing `geopolitics` with all four categories.
+- README RSS categories table (line ~367) entry for `substack-independent` and `perspective-diversity` — both move to the perspective desk.
+- README per-stage token cost table (line ~453) referencing "×7 desks".
+- README `sources.yaml` configuration section — add the `health:` field semantics and defaults.
+- README prompts listing (line ~500) — add `perspective_system.md`.
+- README artifacts listing — add `source_health.json` (and any new collect-diagnostics artifact from #1).
+- CLAUDE.md `Article Enrichment` section — note the new tiered cap behavior and where to inspect tier diagnostics.
+
+Definition of done:
+
+- All listed README sections reflect the new desk topology, source health field, tiered enrichment, and new artifacts.
+- CLAUDE.md updated where guidance has changed (artifact paths, enrichment behavior, audit script flags).
+- A grep for the strings `seven specialist desks`, `7 desks`, `×7 desks`, `geopolitics", categories: ["non-western"`, and bare `geopolitics` (in routing context) returns no stale matches.
+- Any new prompt files added under #7b are listed in the README prompts section.
+- Documentation changes are committed in the same PR that lands the corresponding code change, not deferred.
+
+#### 12. Close out the branch
 
 Problem: This branch rewrites enough of the source, enrichment, seams, and cross-domain path that "tests pass" is necessary but not sufficient. The branch should be closed only after the report is operationally usable.
 
