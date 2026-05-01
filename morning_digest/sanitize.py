@@ -54,8 +54,22 @@ _JSON_ESCAPE_MAP = {
     "}}": "\ufffd\ufffd",  # double closing brace → replaced
 }
 
-_MAX_RSS_SUMMARY_CHARS = 500
-_MAX_TRANSCRIPT_CHARS = 8000  # ~1500 words; compress stage will further reduce
+_DEFAULT_MAX_RSS_SUMMARY_CHARS = 500
+_DEFAULT_MAX_TRANSCRIPT_CHARS = 8000  # ~1500 words; compress stage will further reduce
+_MAX_RSS_SUMMARY_CHARS = _DEFAULT_MAX_RSS_SUMMARY_CHARS
+_MAX_TRANSCRIPT_CHARS = _DEFAULT_MAX_TRANSCRIPT_CHARS
+
+
+def _sanitize_cfg(config: dict | None) -> dict:
+    return (config or {}).get("sanitize", {}) or {}
+
+
+def _rss_summary_chars(config: dict | None) -> int:
+    return int(_sanitize_cfg(config).get("rss_summary_chars", _DEFAULT_MAX_RSS_SUMMARY_CHARS))
+
+
+def _transcript_chars(config: dict | None) -> int:
+    return int(_sanitize_cfg(config).get("transcript_chars", _DEFAULT_MAX_TRANSCRIPT_CHARS))
 
 
 class _StripTags(HTMLParser):
@@ -105,7 +119,7 @@ def sanitize_source_content(text: str, max_chars: int | None = None) -> str:
 
     Args:
         text:      Raw text from an RSS summary or transcript chunk.
-        max_chars: Character cap. If None, uses _MAX_RSS_SUMMARY_CHARS.
+        max_chars: Character cap. If None, uses the configured RSS summary cap.
 
     Returns:
         Sanitized text, truncated to max_chars.
@@ -113,7 +127,7 @@ def sanitize_source_content(text: str, max_chars: int | None = None) -> str:
     if not text:
         return text
 
-    cap = max_chars if max_chars is not None else _MAX_RSS_SUMMARY_CHARS
+    cap = max_chars if max_chars is not None else _DEFAULT_MAX_RSS_SUMMARY_CHARS
 
     # 1. Strip HTML tags
     text = _strip_html(text)
@@ -136,12 +150,12 @@ def sanitize_source_content(text: str, max_chars: int | None = None) -> str:
     return text.strip()
 
 
-def sanitize_rss_item(item: dict) -> dict:
+def sanitize_rss_item(item: dict, config: dict | None = None) -> dict:
     """Sanitize the summary field of a single RSS item dict (in place copy)."""
     result = dict(item)
     if "summary" in result:
         result["summary"] = sanitize_source_content(
-            result["summary"], _MAX_RSS_SUMMARY_CHARS
+            result["summary"], _rss_summary_chars(config)
         )
     if "title" in result:
         # Titles are short — strip injection patterns but don't truncate aggressively
@@ -149,12 +163,12 @@ def sanitize_rss_item(item: dict) -> dict:
     return result
 
 
-def sanitize_transcript(text: str) -> str:
+def sanitize_transcript(text: str, config: dict | None = None) -> str:
     """Sanitize a raw transcript before compression."""
-    return sanitize_source_content(text, _MAX_TRANSCRIPT_CHARS)
+    return sanitize_source_content(text, _transcript_chars(config))
 
 
-def sanitize_all_sources(source_data: dict) -> dict:
+def sanitize_all_sources(source_data: dict, config: dict | None = None) -> dict:
     """Run sanitization over all source collections in raw_sources.
 
     Returns a new dict with sanitized content. Does not mutate input.
@@ -162,11 +176,11 @@ def sanitize_all_sources(source_data: dict) -> dict:
     result = dict(source_data)
 
     if "rss" in result:
-        result["rss"] = [sanitize_rss_item(item) for item in result["rss"]]
+        result["rss"] = [sanitize_rss_item(item, config) for item in result["rss"]]
 
     if "local_news" in result:
         result["local_news"] = [
-            sanitize_rss_item(item) for item in result["local_news"]
+            sanitize_rss_item(item, config) for item in result["local_news"]
         ]
 
     if "analysis_transcripts" in result:
@@ -174,7 +188,9 @@ def sanitize_all_sources(source_data: dict) -> dict:
         for t in result["analysis_transcripts"]:
             t_copy = dict(t)
             if "transcript" in t_copy:
-                t_copy["transcript"] = sanitize_transcript(t_copy["transcript"])
+                t_copy["transcript"] = sanitize_transcript(
+                    t_copy["transcript"], config
+                )
             sanitized_transcripts.append(t_copy)
         result["analysis_transcripts"] = sanitized_transcripts
 

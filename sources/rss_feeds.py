@@ -17,9 +17,11 @@ from dateutil import parser as dateparser
 
 log = logging.getLogger(__name__)
 
-_MAX_PARALLEL_FEED_FETCHES = 6
+_DEFAULT_MAX_PARALLEL_FEED_FETCHES = 6
 _FETCH_STATE_PATH = Path(__file__).parent.parent / "cache" / "rss_fetch_state.json"
-_USER_AGENT = "MorningDigest/1.0 (morningDigest@lurkers.us)"
+_DEFAULT_USER_AGENT = "MorningDigest/1.0 (morningDigest@lurkers.us)"
+_DEFAULT_TIMEOUT_SECONDS = 15
+_DEFAULT_PARSE_TIMEOUT_SECONDS = 10
 _DEFAULT_429_COOLDOWN_SECONDS = 6 * 60 * 60
 _DEFAULT_BROKEN_FEED_COOLDOWN_SECONDS = 24 * 60 * 60
 _PERSISTENT_ERROR_STATUSES = {400, 401, 404, 410}
@@ -50,6 +52,40 @@ _HTML_INDEX_IGNORE_PATH_PARTS = (
 )
 
 
+def _rss_fetch_cfg(config: dict | None) -> dict:
+    return (config or {}).get("rss_fetch", {}) or {}
+
+
+def _rss_fetch_int(config: dict | None, key: str, default: int) -> int:
+    if key == "rss_feed_fetches":
+        value = (
+            (config or {})
+            .get("pipeline", {})
+            .get("concurrency", {})
+            .get("rss_feed_fetches")
+        )
+        if value is not None:
+            return int(value)
+    return int(_rss_fetch_cfg(config).get(key, default))
+
+
+def _http_user_agent(config: dict | None) -> str:
+    return str(
+        (config or {})
+        .get("http", {})
+        .get("user_agent", _DEFAULT_USER_AGENT)
+    )
+
+
+def _as_full_config(config: dict | None) -> dict:
+    """Accept either full app config or the legacy rss_config helper shape."""
+    if not isinstance(config, dict):
+        return {}
+    if "rss" in config:
+        return config
+    return {"rss": config}
+
+
 def fetch_rss(config: dict) -> list[dict]:
     """Return recent RSS items from configured feeds.
     
@@ -66,7 +102,7 @@ def fetch_rss_with_diagnostics(config: dict) -> tuple[list[dict], list[dict]]:
 
     if provider == "freshrss" and rss_config.get("freshrss_url"):
         # FreshRSS is aggregate-oriented; direct per-feed diagnostics are unavailable.
-        items = _fetch_from_freshrss(rss_config)
+        items = _fetch_from_freshrss(config)
         return items, [
             {
                 "source": "FreshRSS",
@@ -77,7 +113,7 @@ def fetch_rss_with_diagnostics(config: dict) -> tuple[list[dict], list[dict]]:
                 "error": "",
             }
         ]
-    result = _fetch_direct(rss_config, include_diagnostics=True)
+    result = _fetch_direct(config, include_diagnostics=True)
     if isinstance(result, tuple):
         return result
     return result, []
@@ -139,10 +175,12 @@ def _parse_feed_with_timeout(content: bytes, feed_name: str, timeout_secs: int =
 
 
 def _fetch_direct(
-    rss_config: dict,
+    config: dict,
     include_diagnostics: bool = False,
 ) -> list[dict] | tuple[list[dict], list[dict]]:
     """Fetch from individual RSS feed URLs."""
+    config = _as_full_config(config)
+    rss_config = config.get("rss", {})
     feeds = rss_config.get("feeds", [])
     cutoff = datetime.now(timezone.utc) - timedelta(hours=36)
     all_items = []
@@ -151,9 +189,13 @@ def _fetch_direct(
     fetch_state = _load_fetch_state()
     state_changed = False
 
-    for start in range(0, len(feeds), _MAX_PARALLEL_FEED_FETCHES):
-        batch = feeds[start:start + _MAX_PARALLEL_FEED_FETCHES]
-        batch_results = _fetch_feed_batch(batch, fetch_state)
+    max_parallel = _rss_fetch_int(
+        config, "rss_feed_fetches", _DEFAULT_MAX_PARALLEL_FEED_FETCHES
+    )
+
+    for start in range(0, len(feeds), max_parallel):
+        batch = feeds[start:start + max_parallel]
+        batch_results = _fetch_feed_batch(batch, fetch_state, config)
 
         for feed_conf, fetch_result in zip(batch, batch_results):
             if consecutive_failures >= 5:
@@ -170,7 +212,7 @@ def _fetch_direct(
                 )
                 continue
 
-            _apply_fetch_state(feed_conf, fetch_result, fetch_state)
+            _apply_fetch_state(feed_conf, fetch_result, fetch_state, config)
             state_changed = True
 
             feed_content = fetch_result.get("content")
@@ -188,6 +230,7 @@ def _fetch_direct(
                     feed_content,
                     fetch_result.get("content_type", ""),
                     cutoff,
+                    config,
                 )
                 all_items.extend(items)
                 diagnostics.append(
@@ -242,7 +285,9 @@ def _feed_diagnostic(
     }
 
 
-def _fetch_feed_batch(feeds: list[dict], fetch_state: dict) -> list[dict]:
+def _fetch_feed_batch(
+    feeds: list[dict], fetch_state: dict, config: dict | None = None
+) -> list[dict]:
     """Fetch one batch of feed bytes in parallel, preserving input order."""
     active_feeds: list[dict] = []
     results_by_key: dict[str, dict] = {}
@@ -254,9 +299,12 @@ def _fetch_feed_batch(feeds: list[dict], fetch_state: dict) -> list[dict]:
         else:
             active_feeds.append(feed_conf)
 
-    max_workers = min(_MAX_PARALLEL_FEED_FETCHES, len(active_feeds) or 1)
+    max_parallel = _rss_fetch_int(
+        config, "rss_feed_fetches", _DEFAULT_MAX_PARALLEL_FEED_FETCHES
+    )
+    max_workers = min(max_parallel, len(active_feeds) or 1)
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        fetched = list(pool.map(_fetch_feed_content, active_feeds))
+        fetched = list(pool.map(lambda feed: _fetch_feed_content(feed, config), active_feeds))
 
     for feed_conf, result in zip(active_feeds, fetched):
         results_by_key[_state_key(feed_conf)] = result
@@ -264,13 +312,13 @@ def _fetch_feed_batch(feeds: list[dict], fetch_state: dict) -> list[dict]:
     return [results_by_key[_state_key(feed_conf)] for feed_conf in feeds]
 
 
-def _fetch_feed_content(feed_conf: dict) -> dict:
+def _fetch_feed_content(feed_conf: dict, config: dict | None = None) -> dict:
     """Fetch raw feed bytes or HTML index content for one configured source."""
     try:
         resp = requests.get(
             feed_conf["url"],
-            headers=_request_headers(feed_conf),
-            timeout=15,
+            headers=_request_headers(feed_conf, config),
+            timeout=_rss_fetch_int(config, "timeout_seconds", _DEFAULT_TIMEOUT_SECONDS),
         )
         resp.raise_for_status()
         return {
@@ -301,8 +349,8 @@ def _fetch_feed_content(feed_conf: dict) -> dict:
     }
 
 
-def _request_headers(feed_conf: dict) -> dict:
-    headers = {"User-Agent": _USER_AGENT}
+def _request_headers(feed_conf: dict, config: dict | None = None) -> dict:
+    headers = {"User-Agent": _http_user_agent(config)}
     if feed_conf.get("mode") == "html_index":
         headers.update(
             {
@@ -359,7 +407,12 @@ def _skip_due_to_cooldown(feed_conf: dict, fetch_state: dict) -> dict | None:
     }
 
 
-def _apply_fetch_state(feed_conf: dict, fetch_result: dict, fetch_state: dict) -> None:
+def _apply_fetch_state(
+    feed_conf: dict,
+    fetch_result: dict,
+    fetch_state: dict,
+    config: dict | None = None,
+) -> None:
     key = _state_key(feed_conf)
     state = dict(fetch_state.get(key, {}))
     state["last_checked"] = datetime.now(timezone.utc).isoformat()
@@ -372,14 +425,24 @@ def _apply_fetch_state(feed_conf: dict, fetch_result: dict, fetch_state: dict) -
         state["last_success"] = state["last_checked"]
     elif status_code == 429:
         cooldown = feed_conf.get(
-            "cooldown_on_429_seconds", _DEFAULT_429_COOLDOWN_SECONDS
+            "cooldown_on_429_seconds",
+            _rss_fetch_int(
+                config,
+                "cooldown_on_429_seconds",
+                _DEFAULT_429_COOLDOWN_SECONDS,
+            ),
         )
         state["cooldown_until"] = (
             datetime.now(timezone.utc).timestamp() + cooldown
         )
     elif status_code in _PERSISTENT_ERROR_STATUSES:
         cooldown = feed_conf.get(
-            "cooldown_on_error_seconds", _DEFAULT_BROKEN_FEED_COOLDOWN_SECONDS
+            "cooldown_on_error_seconds",
+            _rss_fetch_int(
+                config,
+                "cooldown_on_error_seconds",
+                _DEFAULT_BROKEN_FEED_COOLDOWN_SECONDS,
+            ),
         )
         state["cooldown_until"] = (
             datetime.now(timezone.utc).timestamp() + cooldown
@@ -395,9 +458,18 @@ def _extract_feed_items(
     content: bytes,
     content_type: str,
     cutoff: datetime,
+    config: dict | None = None,
 ) -> list[dict]:
     if feed_conf.get("mode") != "html_index":
-        parsed = _parse_feed_with_timeout(content, feed_conf["name"])
+        parsed = _parse_feed_with_timeout(
+            content,
+            feed_conf["name"],
+            _rss_fetch_int(
+                config,
+                "parse_timeout_seconds",
+                _DEFAULT_PARSE_TIMEOUT_SECONDS,
+            ),
+        )
         if parsed.entries:
             return _items_from_parsed_feed(feed_conf, parsed.entries, cutoff)
 
@@ -547,8 +619,9 @@ def _looks_like_article_link(base_netloc: str, href: str, title: str) -> bool:
     return True
 
 
-def _fetch_from_freshrss(rss_config: dict) -> list[dict]:
+def _fetch_from_freshrss(config: dict) -> list[dict]:
     """Fetch unread items from FreshRSS Google Reader-compatible API."""
+    rss_config = config.get("rss", {})
     base = rss_config["freshrss_url"].rstrip("/")
     user = rss_config.get("freshrss_user", "")
     password = rss_config.get("freshrss_password", "")
@@ -604,7 +677,7 @@ def _fetch_from_freshrss(rss_config: dict) -> list[dict]:
 
     except Exception as e:
         log.error(f"FreshRSS fetch failed: {e}")
-        return _fetch_direct(rss_config)  # fallback to direct
+        return _fetch_direct(config)  # fallback to direct
 
 
 def _parse_feed_date(entry) -> Optional[datetime]:

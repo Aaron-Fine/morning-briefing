@@ -30,7 +30,7 @@ from .scheduling import (
 log = logging.getLogger(__name__)
 
 _DEFAULT_CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "cache" / "article_bodies"
-_MAX_PARALLEL = 4
+_DEFAULT_MAX_PARALLEL = 4
 
 
 def run(
@@ -129,8 +129,13 @@ def run(
     )
     system_prompt = load_prompt("enrich_article_system.md")
     status_records = list(skipped_records)
+    max_parallel = int(
+        config.get("pipeline", {})
+        .get("concurrency", {})
+        .get("enrich_articles", _DEFAULT_MAX_PARALLEL)
+    )
 
-    with ThreadPoolExecutor(max_workers=min(_MAX_PARALLEL, len(jobs) or 1)) as pool:
+    with ThreadPoolExecutor(max_workers=min(max_parallel, len(jobs) or 1)) as pool:
         futures = {
             pool.submit(
                 _normalize_one,

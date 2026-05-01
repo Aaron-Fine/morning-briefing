@@ -42,16 +42,37 @@ _VALID_SEAM_TYPES = {
     "credible_dissent",
 }
 _VALID_CONFIDENCE = {"high", "medium", "low"}
-_MAX_CANDIDATES = 5
-_MAX_CROSS_DOMAIN_CANDIDATES = 2
-_MAX_PER_ITEM_ANNOTATIONS = 6
-_MAX_EVIDENCE_PER_CANDIDATE = 2
-_MAX_CANDIDATE_TEXT_CHARS = 220
-_MAX_EVIDENCE_TEXT_CHARS = 140
-_MAX_RAW_ITEMS_PER_CATEGORY = 8
-_MAX_RAW_SUMMARY_CHARS = 320
-_MAX_DOMAIN_FIELD_CHARS = 650
-_MAX_TRANSCRIPT_CHARS = 350
+_DEFAULT_SEAMS_CFG = {
+    "max_candidates": 5,
+    "max_cross_domain_candidates": 2,
+    "max_per_item_annotations": 6,
+    "max_evidence_per_candidate": 2,
+    "prompt_budget": {
+        "candidate_text_chars": 220,
+        "evidence_text_chars": 140,
+        "raw_items_per_category": 8,
+        "raw_summary_chars": 320,
+        "domain_field_chars": 650,
+        "transcript_chars": 350,
+    },
+}
+
+
+def _seams_cfg(config: dict | None) -> dict:
+    raw = (config or {}).get("seams", {}) or {}
+    prompt_budget = {
+        **_DEFAULT_SEAMS_CFG["prompt_budget"],
+        **(raw.get("prompt_budget", {}) or {}),
+    }
+    return {**_DEFAULT_SEAMS_CFG, **raw, "prompt_budget": prompt_budget}
+
+
+def _cfg_int(cfg: dict, key: str) -> int:
+    return int(cfg.get(key, _DEFAULT_SEAMS_CFG[key]))
+
+
+def _budget_int(cfg: dict, key: str) -> int:
+    return int(cfg.get("prompt_budget", {}).get(key, _DEFAULT_SEAMS_CFG["prompt_budget"][key]))
 
 
 def _clip_text(value: object, max_chars: int) -> str:
@@ -61,8 +82,9 @@ def _clip_text(value: object, max_chars: int) -> str:
     return text[: max_chars - 3].rstrip() + "..."
 
 
-def _build_domain_summary(domain_analysis: dict) -> str:
+def _build_domain_summary(domain_analysis: dict, seams_cfg: dict | None = None) -> str:
     """Format domain analysis artifacts for the seam detection prompt."""
+    seams_cfg = seams_cfg or _seams_cfg(None)
     parts = []
     for domain_key, domain_result in domain_analysis.items():
         if not isinstance(domain_result, dict):
@@ -79,13 +101,13 @@ def _build_domain_summary(domain_analysis: dict) -> str:
                 f"\nItem ID: {item.get('item_id', '')}\n"
                 f"Headline: {item.get('headline', '')}{dive_flag}\n"
                 f"Tag: {item.get('tag', '')} | Depth: {item.get('source_depth', '')}\n"
-                f"Facts: {_clip_text(item.get('facts', ''), _MAX_DOMAIN_FIELD_CHARS)}\n"
-                f"Analysis: {_clip_text(item.get('analysis', ''), _MAX_DOMAIN_FIELD_CHARS)}"
+                f"Facts: {_clip_text(item.get('facts', ''), _budget_int(seams_cfg, 'domain_field_chars'))}\n"
+                f"Analysis: {_clip_text(item.get('analysis', ''), _budget_int(seams_cfg, 'domain_field_chars'))}"
             )
             if item.get("deep_dive_rationale"):
                 parts.append(
                     "Dive rationale: "
-                    f"{_clip_text(item['deep_dive_rationale'], _MAX_DOMAIN_FIELD_CHARS)}"
+                    f"{_clip_text(item['deep_dive_rationale'], _budget_int(seams_cfg, 'domain_field_chars'))}"
                 )
             hooks = item.get("connection_hooks", [])
             if hooks:
@@ -106,8 +128,9 @@ def _build_domain_summary(domain_analysis: dict) -> str:
     return "\n".join(parts) if parts else "(no domain analyses available)"
 
 
-def _build_raw_source_summary(raw_sources: dict) -> str:
+def _build_raw_source_summary(raw_sources: dict, seams_cfg: dict | None = None) -> str:
     """Format raw source data so seam detection can see what analysts had access to."""
+    seams_cfg = seams_cfg or _seams_cfg(None)
     rss = raw_sources.get("rss", [])
     if not rss:
         return "(no raw source data)"
@@ -121,27 +144,30 @@ def _build_raw_source_summary(raw_sources: dict) -> str:
     parts = []
     for cat, items in sorted(by_cat.items()):
         parts.append(f"\n--- {cat.upper()} ({len(items)} items) ---")
-        for item in items[:_MAX_RAW_ITEMS_PER_CATEGORY]:
+        for item in items[:_budget_int(seams_cfg, "raw_items_per_category")]:
             reliability = item.get("reliability", "")
             rel_note = f" [{reliability}]" if reliability else ""
             parts.append(
                 f"  {item.get('source', '?')}{rel_note}: "
                 f"{item.get('title', '?')} — "
-                f"{sanitize_source_content(item.get('summary', ''), max_chars=_MAX_RAW_SUMMARY_CHARS)}"
+                f"{sanitize_source_content(item.get('summary', ''), max_chars=_budget_int(seams_cfg, 'raw_summary_chars'))}"
             )
             if item.get("url"):
                 parts.append(f"    URL: {item['url']}")
     return "\n".join(parts)
 
 
-def _build_transcript_summary(compressed_transcripts: list) -> str:
+def _build_transcript_summary(
+    compressed_transcripts: list, seams_cfg: dict | None = None
+) -> str:
     """Format compressed transcripts for the seam detection prompt."""
+    seams_cfg = seams_cfg or _seams_cfg(None)
     if not compressed_transcripts:
         return "(no transcripts)"
     parts = []
     for t in compressed_transcripts:
         text = t.get("compressed_transcript") or t.get("transcript", "")
-        text = _clip_text(text, _MAX_TRANSCRIPT_CHARS)
+        text = _clip_text(text, _budget_int(seams_cfg, "transcript_chars"))
         parts.append(f"{t.get('channel', '?')}: {t.get('title', '?')}\n  {text}")
     return "\n".join(parts)
 
@@ -182,14 +208,17 @@ def _empty_annotations() -> dict:
     return {"per_item": [], "cross_domain": []}
 
 
-def _normalize_seam_candidates(result: dict | None, domain_analysis: dict) -> dict:
+def _normalize_seam_candidates(
+    result: dict | None, domain_analysis: dict, seams_cfg: dict | None = None
+) -> dict:
+    seams_cfg = seams_cfg or _seams_cfg(None)
     if not isinstance(result, dict):
         return _empty_candidates()
 
     ids = _valid_item_ids(domain_analysis)
     candidates = []
     for raw_item in result.get("candidates", []) or []:
-        if len(candidates) >= _MAX_CANDIDATES:
+        if len(candidates) >= _cfg_int(seams_cfg, "max_candidates"):
             break
         if not isinstance(raw_item, dict):
             continue
@@ -206,39 +235,42 @@ def _normalize_seam_candidates(result: dict | None, domain_analysis: dict) -> di
                 "seam_type": seam_type,
                 "candidate_one_line": _clip_text(
                     raw_item.get("candidate_one_line", ""),
-                    _MAX_CANDIDATE_TEXT_CHARS,
+                    _budget_int(seams_cfg, "candidate_text_chars"),
                 ),
                 "why_it_might_matter": _clip_text(
                     raw_item.get("why_it_might_matter", ""),
-                    _MAX_CANDIDATE_TEXT_CHARS,
+                    _budget_int(seams_cfg, "candidate_text_chars"),
                 ),
                 "possible_evidence": [
                     {
                         "source": _clip_text(
-                            entry.get("source", ""), _MAX_EVIDENCE_TEXT_CHARS
+                            entry.get("source", ""),
+                            _budget_int(seams_cfg, "evidence_text_chars"),
                         ),
                         "excerpt": _clip_text(
-                            entry.get("excerpt", ""), _MAX_EVIDENCE_TEXT_CHARS
+                            entry.get("excerpt", ""),
+                            _budget_int(seams_cfg, "evidence_text_chars"),
                         ),
                         "framing": _clip_text(
-                            entry.get("framing", ""), _MAX_EVIDENCE_TEXT_CHARS
+                            entry.get("framing", ""),
+                            _budget_int(seams_cfg, "evidence_text_chars"),
                         ),
                     }
                     for entry in (raw_item.get("possible_evidence", []) or [])[
-                        :_MAX_EVIDENCE_PER_CANDIDATE
+                        :_cfg_int(seams_cfg, "max_evidence_per_candidate")
                     ]
                     if isinstance(entry, dict)
                 ],
                 "drop_if_weak_reason": _clip_text(
                     raw_item.get("drop_if_weak_reason", ""),
-                    _MAX_CANDIDATE_TEXT_CHARS,
+                    _budget_int(seams_cfg, "candidate_text_chars"),
                 ),
             }
         )
 
     cross_domain_candidates = []
     for raw_item in result.get("cross_domain_candidates", []) or []:
-        if len(cross_domain_candidates) >= _MAX_CROSS_DOMAIN_CANDIDATES:
+        if len(cross_domain_candidates) >= _cfg_int(seams_cfg, "max_cross_domain_candidates"):
             break
         if not isinstance(raw_item, dict):
             continue
@@ -255,12 +287,12 @@ def _normalize_seam_candidates(result: dict | None, domain_analysis: dict) -> di
             {
                 "candidate_one_line": _clip_text(
                     raw_item.get("candidate_one_line", ""),
-                    _MAX_CANDIDATE_TEXT_CHARS,
+                    _budget_int(seams_cfg, "candidate_text_chars"),
                 ),
                 "linked_item_ids": linked_ids,
                 "why_it_might_matter": _clip_text(
                     raw_item.get("why_it_might_matter", ""),
-                    _MAX_CANDIDATE_TEXT_CHARS,
+                    _budget_int(seams_cfg, "candidate_text_chars"),
                 ),
             }
         )
@@ -330,12 +362,15 @@ def _evidence_passes_gate(evidence: object) -> bool:
     return len(distinct_sources) >= 2 and useful_excerpts >= 2
 
 
-def _validate_seam_annotations(result: dict | None, domain_analysis: dict) -> dict:
+def _validate_seam_annotations(
+    result: dict | None, domain_analysis: dict, seams_cfg: dict | None = None
+) -> dict:
     """Validate the load-bearing seam annotation schema.
 
     The evidence gate is intentionally structural: if two distinct sourced
     excerpts are not present, the item annotation is dropped.
     """
+    seams_cfg = seams_cfg or _seams_cfg(None)
     if not isinstance(result, dict):
         return _empty_annotations()
 
@@ -408,13 +443,14 @@ def _validate_seam_annotations(result: dict | None, domain_analysis: dict) -> di
             }
         )
 
-    if len(cleaned_per_item) > _MAX_PER_ITEM_ANNOTATIONS:
+    max_annotations = _cfg_int(seams_cfg, "max_per_item_annotations")
+    if len(cleaned_per_item) > max_annotations:
         confidence_rank = {"high": 0, "medium": 1, "low": 2}
         cleaned_per_item.sort(
             key=lambda item: confidence_rank.get(item.get("confidence", ""), 3)
         )
-        dropped = len(cleaned_per_item) - _MAX_PER_ITEM_ANNOTATIONS
-        cleaned_per_item = cleaned_per_item[:_MAX_PER_ITEM_ANNOTATIONS]
+        dropped = len(cleaned_per_item) - max_annotations
+        cleaned_per_item = cleaned_per_item[:max_annotations]
         log.info("seams: capped per-item annotations, dropped %s lower-ranked", dropped)
 
     return {"per_item": cleaned_per_item, "cross_domain": cleaned_cross_domain}
@@ -456,8 +492,11 @@ def _legacy_seam_data(seam_annotations: dict) -> dict:
     }
 
 
-def _candidate_artifact_from_annotations(seam_annotations: dict) -> dict:
+def _candidate_artifact_from_annotations(
+    seam_annotations: dict, seams_cfg: dict | None = None
+) -> dict:
     """Build a diagnostic candidate artifact from accepted final annotations."""
+    seams_cfg = seams_cfg or _seams_cfg(None)
     candidates = []
     for annotation in seam_annotations.get("per_item", []):
         evidence = annotation.get("evidence", []) or []
@@ -467,22 +506,25 @@ def _candidate_artifact_from_annotations(seam_annotations: dict) -> dict:
                 "seam_type": annotation.get("seam_type", ""),
                 "candidate_one_line": _clip_text(
                     annotation.get("one_line", ""),
-                    _MAX_CANDIDATE_TEXT_CHARS,
+                    _budget_int(seams_cfg, "candidate_text_chars"),
                 ),
                 "why_it_might_matter": "",
                 "possible_evidence": [
                     {
                         "source": _clip_text(
-                            entry.get("source", ""), _MAX_EVIDENCE_TEXT_CHARS
+                            entry.get("source", ""),
+                            _budget_int(seams_cfg, "evidence_text_chars"),
                         ),
                         "excerpt": _clip_text(
-                            entry.get("excerpt", ""), _MAX_EVIDENCE_TEXT_CHARS
+                            entry.get("excerpt", ""),
+                            _budget_int(seams_cfg, "evidence_text_chars"),
                         ),
                         "framing": _clip_text(
-                            entry.get("framing", ""), _MAX_EVIDENCE_TEXT_CHARS
+                            entry.get("framing", ""),
+                            _budget_int(seams_cfg, "evidence_text_chars"),
                         ),
                     }
-                    for entry in evidence[:_MAX_EVIDENCE_PER_CANDIDATE]
+                    for entry in evidence[:_cfg_int(seams_cfg, "max_evidence_per_candidate")]
                     if isinstance(entry, dict)
                 ],
                 "drop_if_weak_reason": "",
@@ -494,7 +536,8 @@ def _candidate_artifact_from_annotations(seam_annotations: dict) -> dict:
         cross_domain_candidates.append(
             {
                 "candidate_one_line": _clip_text(
-                    annotation.get("one_line", ""), _MAX_CANDIDATE_TEXT_CHARS
+                    annotation.get("one_line", ""),
+                    _budget_int(seams_cfg, "candidate_text_chars"),
                 ),
                 "linked_item_ids": list(annotation.get("linked_item_ids", []) or []),
                 "why_it_might_matter": "",
@@ -503,9 +546,9 @@ def _candidate_artifact_from_annotations(seam_annotations: dict) -> dict:
 
     return {
         "schema_version": 1,
-        "candidates": candidates[:_MAX_CANDIDATES],
+        "candidates": candidates[:_cfg_int(seams_cfg, "max_candidates")],
         "cross_domain_candidates": cross_domain_candidates[
-            :_MAX_CROSS_DOMAIN_CANDIDATES
+            :_cfg_int(seams_cfg, "max_cross_domain_candidates")
         ],
     }
 
@@ -647,13 +690,14 @@ def run(
             "(expected pipeline.stages[seams].model or top-level llm)"
         )
     stage_cfg = kwargs.get("stage_cfg") or {}
+    seams_cfg = _seams_cfg(config)
     annotation_config = _resolve_turn_model_config(
         effective_config, stage_cfg, "annotations"
     )
 
-    domain_summary = _build_domain_summary(domain_analysis)
-    raw_summary = _build_raw_source_summary(raw_sources)
-    transcript_summary = _build_transcript_summary(compressed_transcripts)
+    domain_summary = _build_domain_summary(domain_analysis, seams_cfg)
+    raw_summary = _build_raw_source_summary(raw_sources, seams_cfg)
+    transcript_summary = _build_transcript_summary(compressed_transcripts, seams_cfg)
 
     try:
         log.info("Stage: seams — detecting per-item annotations...")
@@ -675,8 +719,12 @@ def run(
             {"artifact": "seam_annotations", **issue}
             for issue in annotation_issues
         )
-        seam_annotations = _validate_seam_annotations(result, domain_analysis)
-        seam_candidates = _candidate_artifact_from_annotations(seam_annotations)
+        seam_annotations = _validate_seam_annotations(
+            result, domain_analysis, seams_cfg
+        )
+        seam_candidates = _candidate_artifact_from_annotations(
+            seam_annotations, seams_cfg
+        )
         seam_data = _legacy_seam_data(seam_annotations)
 
         log.info(

@@ -7,6 +7,12 @@ pipeline:
   retry:
     max_retries: 1
     backoff_base_seconds: 5
+  concurrency:
+    collect_fetches: 6
+    rss_feed_fetches: 6
+    analyze_desks: 4
+    compressions: 4
+    enrich_articles: 4
   stages:
   - name: collect
     retry:
@@ -140,3 +146,82 @@ domain_research:
   max_requests_per_desk: 1
   max_requests_total: 3
   allow_browser_fetch: false
+seams:
+  max_candidates: 5
+  max_cross_domain_candidates: 2
+  max_per_item_annotations: 6
+  max_evidence_per_candidate: 2
+  prompt_budget:
+    candidate_text_chars: 220
+    evidence_text_chars: 140
+    raw_items_per_category: 8
+    raw_summary_chars: 320
+    domain_field_chars: 650
+    transcript_chars: 350
+cross_domain:
+  connection_count: 3
+  at_a_glance:
+    primary_tags:
+    - war
+    - ai
+    - defense
+    primary_domain_tags:
+      geopolitics: war
+      ai_tech: ai
+      defense_space: defense
+    max_source_share: 0.4
+    depth_priority:
+      widely-reported: 0
+      corroborated: 1
+      single-source: 2
+anomaly:
+  primary_tags:
+  - war
+  - ai
+  - defense
+  tertiary_tags:
+  - local
+  - science
+  - tech
+  primary_domains:
+  - geopolitics
+  - defense_space
+  - ai_tech
+  max_source_absence_anomalies: 4
+  max_repeated_phrase_anomalies: 6
+  primary_headline_keywords:
+  - war
+  - iran
+  - israel
+  - ukraine
+  - russia
+  - conflict
+  - combat
+  - attack
+  - military
+  - missile
+  - defense
+  - pentagon
+  - nato
+  - hormuz
+  - ai
+  - artificial intelligence
+  - llm
+  - openai
+  - anthropic
+  - space
+  - satellite
+  - launch
+  - cislunar
+  - orbit
+sanitize:
+  rss_summary_chars: 500
+  transcript_chars: 8000
+http:
+  user_agent: MorningDigest/1.0 (morningDigest@lurkers.us)
+  timeout_seconds: 15
+rss_fetch:
+  timeout_seconds: 15
+  parse_timeout_seconds: 10
+  cooldown_on_429_seconds: 21600
+  cooldown_on_error_seconds: 86400

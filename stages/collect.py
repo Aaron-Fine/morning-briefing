@@ -9,6 +9,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from morning_digest.sanitize import sanitize_all_sources
+from sources._http import configure_http_defaults
 from sources.youtube import fetch_analysis_transcripts
 from sources.weather import fetch_weather
 from sources.markets import fetch_markets
@@ -24,7 +25,7 @@ from sources.economic_calendar import fetch_economic_calendar
 
 log = logging.getLogger(__name__)
 
-_MAX_PARALLEL_FETCHES = 6
+_DEFAULT_MAX_PARALLEL_FETCHES = 6
 
 
 def _fetch_weather(config):
@@ -154,6 +155,7 @@ def _run_collect_task(fn, cfg):
 def run(context: dict, config: dict, model_config: dict | None = None, **kwargs) -> dict:
     """Collect all sources and return raw_sources artifact."""
     log.info("Collecting from sources (parallel)...")
+    configure_http_defaults(config)
     data: dict = {}
     diagnostics: dict = {"sources": [], "rss_feeds": [], "local_news_feeds": []}
 
@@ -182,7 +184,12 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
     if config.get("digest", {}).get("spiritual", {}).get("enabled", True):
         tasks.append((_fetch_come_follow_me, config))
 
-    with ThreadPoolExecutor(max_workers=_MAX_PARALLEL_FETCHES) as pool:
+    max_workers = int(
+        config.get("pipeline", {})
+        .get("concurrency", {})
+        .get("collect_fetches", _DEFAULT_MAX_PARALLEL_FETCHES)
+    )
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {pool.submit(_run_collect_task, fn, cfg): fn.__name__ for fn, cfg in tasks}
         for future in as_completed(futures):
             name = futures[future]
@@ -243,7 +250,7 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
 
     # Security Layer 1: sanitize all source content before it touches any prompt
     log.info("  → Sanitizing source content (Layer 1)")
-    data = sanitize_all_sources(data)
+    data = sanitize_all_sources(data, config)
     data.setdefault("source_counts", source_counts)
 
     diagnostics["source_counts"] = source_counts

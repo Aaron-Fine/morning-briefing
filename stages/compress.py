@@ -17,7 +17,7 @@ from utils.prompts import load_prompt
 log = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = load_prompt("compress_system.md")
-_MAX_PARALLEL_COMPRESSIONS = 4
+_DEFAULT_MAX_PARALLEL_COMPRESSIONS = 4
 
 
 def _target_words(word_count: int) -> int:
@@ -88,8 +88,13 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
 
     log.info(f"Compressing {len(transcripts)} transcript(s) in parallel...")
     results = [None] * len(transcripts)
+    max_workers = int(
+        config.get("pipeline", {})
+        .get("concurrency", {})
+        .get("compressions", _DEFAULT_MAX_PARALLEL_COMPRESSIONS)
+    )
 
-    with ThreadPoolExecutor(max_workers=_MAX_PARALLEL_COMPRESSIONS) as pool:
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
         future_to_idx = {
             pool.submit(_compress_one, video, effective_config): i
             for i, video in enumerate(transcripts)

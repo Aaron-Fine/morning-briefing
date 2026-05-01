@@ -146,12 +146,33 @@ _TAG_KEYWORDS: list[tuple[str, str]] = [
     ("gop", "domestic"),
 ]
 
-_PRIMARY_GLANCE_TAGS = ("war", "ai", "defense")
-_PRIMARY_DOMAIN_TAGS = {
+_DEFAULT_PRIMARY_GLANCE_TAGS = ("war", "ai", "defense")
+_DEFAULT_PRIMARY_DOMAIN_TAGS = {
     "geopolitics": "war",
     "ai_tech": "ai",
     "defense_space": "defense",
 }
+_DEFAULT_DEPTH_PRIORITY = {"widely-reported": 0, "corroborated": 1, "single-source": 2}
+
+
+def _cross_domain_cfg(config: dict | None) -> dict:
+    return (config or {}).get("cross_domain", {}) or {}
+
+
+def _glance_cfg(config: dict | None) -> dict:
+    return _cross_domain_cfg(config).get("at_a_glance", {}) or {}
+
+
+def _primary_glance_tags(config: dict | None) -> tuple[str, ...]:
+    raw = _glance_cfg(config).get("primary_tags", _DEFAULT_PRIMARY_GLANCE_TAGS)
+    return tuple(str(tag).strip() for tag in raw if str(tag).strip())
+
+
+def _primary_domain_tags(config: dict | None) -> dict[str, str]:
+    raw = _glance_cfg(config).get("primary_domain_tags", _DEFAULT_PRIMARY_DOMAIN_TAGS)
+    if not isinstance(raw, dict):
+        return dict(_DEFAULT_PRIMARY_DOMAIN_TAGS)
+    return {str(k): str(v) for k, v in raw.items()}
 
 
 def _normalize_tag(raw: str) -> str:
@@ -199,7 +220,9 @@ def _add_selected_item(
         source_counts[source] = source_counts.get(source, 0) + 1
 
 
-def _cap_at_a_glance_items(items: list[dict], max_items: int) -> list[dict]:
+def _cap_at_a_glance_items(
+    items: list[dict], max_items: int, config: dict | None = None
+) -> list[dict]:
     """Cap at-a-glance items while preserving topic and outlet diversity.
 
     The LLM often returns more candidates than the email should show. A pure
@@ -210,7 +233,10 @@ def _cap_at_a_glance_items(items: list[dict], max_items: int) -> list[dict]:
     if len(items) <= max_items:
         return items
 
-    depth_priority = {"widely-reported": 0, "corroborated": 1, "single-source": 2}
+    glance_cfg = _glance_cfg(config)
+    depth_priority = glance_cfg.get("depth_priority", _DEFAULT_DEPTH_PRIORITY)
+    if not isinstance(depth_priority, dict):
+        depth_priority = _DEFAULT_DEPTH_PRIORITY
     ranked = sorted(
         enumerate(items),
         key=lambda pair: (
@@ -222,10 +248,11 @@ def _cap_at_a_glance_items(items: list[dict], max_items: int) -> list[dict]:
 
     selected: set[int] = set()
     source_counts: dict[str, int] = {}
-    max_per_source = max(1, int(max_items * 0.4))
+    max_source_share = float(glance_cfg.get("max_source_share", 0.4))
+    max_per_source = max(1, int(max_items * max_source_share))
     available_tags = {item.get("tag", "") for _, item in ranked}
 
-    for tag in _PRIMARY_GLANCE_TAGS:
+    for tag in _primary_glance_tags(config):
         if tag not in available_tags or len(selected) >= max_items:
             continue
 
@@ -287,16 +314,17 @@ def _fallback_glance_item(item: dict, tag: str) -> dict:
 
 
 def _ensure_primary_glance_coverage(
-    items: list[dict], domain_analysis: dict
+    items: list[dict], domain_analysis: dict, config: dict | None = None
 ) -> list[dict]:
     """Add the best available primary-desk item when execution omits a primary tag."""
+    primary_tags = _primary_glance_tags(config)
     present_tags = {item.get("tag", "") for item in items}
-    if all(tag in present_tags for tag in _PRIMARY_GLANCE_TAGS):
+    if all(tag in present_tags for tag in primary_tags):
         return items
 
     existing_signatures = {_item_signature(item) for item in items}
     additions = []
-    for domain_key, tag in _PRIMARY_DOMAIN_TAGS.items():
+    for domain_key, tag in _primary_domain_tags(config).items():
         if tag in present_tags:
             continue
         domain_result = domain_analysis.get(domain_key, {})
@@ -429,7 +457,7 @@ def _validated_output(
         ]
 
     result["at_a_glance"] = _ensure_primary_glance_coverage(
-        result["at_a_glance"], domain_analysis
+        result["at_a_glance"], domain_analysis, config
     )
     for item in result["at_a_glance"]:
         item["links"] = [
@@ -453,7 +481,7 @@ def _validated_output(
     if len(result["at_a_glance"]) > max_items:
         original_count = len(result["at_a_glance"])
         result["at_a_glance"] = _cap_at_a_glance_items(
-            result["at_a_glance"], max_items
+            result["at_a_glance"], max_items, config
         )
         log.info(
             f"  cross_domain: capped at_a_glance from {original_count} "

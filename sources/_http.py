@@ -17,10 +17,21 @@ log = logging.getLogger(__name__)
 
 _DEFAULT_UA = "MorningDigest/1.0 (morningDigest@lurkers.us)"
 _DEFAULT_TIMEOUT = 15
+_user_agent = _DEFAULT_UA
+_timeout_seconds = _DEFAULT_TIMEOUT
+
+
+def configure_http_defaults(config: dict | None) -> None:
+    """Apply shared HTTP defaults from runtime config."""
+    global _user_agent, _timeout_seconds
+
+    http_cfg = (config or {}).get("http", {}) or {}
+    _user_agent = str(http_cfg.get("user_agent") or _DEFAULT_UA)
+    _timeout_seconds = int(http_cfg.get("timeout_seconds", _DEFAULT_TIMEOUT))
 
 
 def _headers(extra: dict | None) -> dict:
-    merged = {"User-Agent": _DEFAULT_UA}
+    merged = {"User-Agent": _user_agent}
     if extra:
         merged.update(extra)
     return merged
@@ -50,11 +61,17 @@ def http_get_json(
     *,
     params: dict | None = None,
     headers: dict | None = None,
-    timeout: int = _DEFAULT_TIMEOUT,
+    timeout: int | None = None,
     label: str = "",
 ) -> Any | None:
     """GET url and return parsed JSON, or None on any failure."""
-    resp = _get(url, params=params, headers=headers, timeout=timeout, label=label)
+    resp = _get(
+        url,
+        params=params,
+        headers=headers,
+        timeout=_timeout_seconds if timeout is None else timeout,
+        label=label,
+    )
     if resp is None:
         return None
     try:
@@ -69,11 +86,17 @@ def http_get_text(
     *,
     params: dict | None = None,
     headers: dict | None = None,
-    timeout: int = _DEFAULT_TIMEOUT,
+    timeout: int | None = None,
     label: str = "",
 ) -> str | None:
     """GET url and return response text, or None on any failure."""
-    resp = _get(url, params=params, headers=headers, timeout=timeout, label=label)
+    resp = _get(
+        url,
+        params=params,
+        headers=headers,
+        timeout=_timeout_seconds if timeout is None else timeout,
+        label=label,
+    )
     return resp.text if resp is not None else None
 
 
@@ -82,9 +105,15 @@ def http_get_bytes(
     *,
     params: dict | None = None,
     headers: dict | None = None,
-    timeout: int = _DEFAULT_TIMEOUT,
+    timeout: int | None = None,
     label: str = "",
 ) -> bytes | None:
     """GET url and return response bytes, or None on any failure."""
-    resp = _get(url, params=params, headers=headers, timeout=timeout, label=label)
+    resp = _get(
+        url,
+        params=params,
+        headers=headers,
+        timeout=_timeout_seconds if timeout is None else timeout,
+        label=label,
+    )
     return resp.content if resp is not None else None

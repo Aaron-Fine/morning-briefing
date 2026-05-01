@@ -82,7 +82,7 @@ def run(
     digest_cfg = config.get("digest", {})
     deep_dive_count = digest_cfg.get("deep_dives", {}).get("count", 2)
     worth_reading_count = digest_cfg.get("worth_reading", {}).get("count", 3)
-    connection_count = 3
+    connection_count = int(config.get("cross_domain", {}).get("connection_count", 3))
 
     has_items = any(
         isinstance(v, dict) and v.get("items") for v in domain_analysis.values()

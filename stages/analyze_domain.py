@@ -770,7 +770,7 @@ def run(
     }
 
 
-_MAX_PARALLEL_DESKS = 4  # bound concurrency to avoid rate limits
+_DEFAULT_MAX_PARALLEL_DESKS = 4  # bound concurrency to avoid rate limits
 
 
 def _run_all_domains(
@@ -784,6 +784,11 @@ def _run_all_domains(
     domain_analysis: dict = {}
     config = config or {}
     research_cfg = _domain_research_config(config)
+    max_workers = int(
+        config.get("pipeline", {})
+        .get("concurrency", {})
+        .get("analyze_desks", _DEFAULT_MAX_PARALLEL_DESKS)
+    )
 
     def _run_one(
         domain_key: str,
@@ -805,7 +810,7 @@ def _run_all_domains(
         )
         return domain_key, result
 
-    with ThreadPoolExecutor(max_workers=_MAX_PARALLEL_DESKS) as pool:
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
             pool.submit(
                 _run_one,
@@ -835,7 +840,7 @@ def _run_all_domains(
     if not research_by_domain:
         return domain_analysis, domain_research
 
-    with ThreadPoolExecutor(max_workers=_MAX_PARALLEL_DESKS) as pool:
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
             pool.submit(
                 _run_one,

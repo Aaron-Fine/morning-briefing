@@ -23,17 +23,19 @@ log = logging.getLogger(__name__)
 _ROOT = Path(__file__).parent.parent
 _ARTIFACTS_BASE = _ROOT / "output" / "artifacts"
 
-_PRIMARY_TAGS = {"war", "ai", "defense"}
-_TERTIARY_TAGS = {"local", "science", "tech"}
+_DEFAULT_PRIMARY_TAGS = {"war", "ai", "defense"}
+_DEFAULT_TERTIARY_TAGS = {"local", "science", "tech"}
+_PRIMARY_TAGS = _DEFAULT_PRIMARY_TAGS
+_TERTIARY_TAGS = _DEFAULT_TERTIARY_TAGS
 
 # Domain names produced by cross_domain that map to primary interests
-_PRIMARY_DOMAINS = {"geopolitics", "defense_space", "ai_tech"}
-_MAX_SOURCE_ABSENCE_ANOMALIES = 4
-_MAX_REPEATED_PHRASE_ANOMALIES = 6
+_DEFAULT_PRIMARY_DOMAINS = {"geopolitics", "defense_space", "ai_tech"}
+_DEFAULT_MAX_SOURCE_ABSENCE_ANOMALIES = 4
+_DEFAULT_MAX_REPEATED_PHRASE_ANOMALIES = 6
 
 # Keywords used to infer whether a deep dive headline covers a primary topic
 # when tag / domains_bridged are absent (Phase 1 fallback)
-_PRIMARY_HEADLINE_KEYWORDS = {
+_DEFAULT_PRIMARY_HEADLINE_KEYWORDS = {
     "war", "iran", "israel", "ukraine", "russia", "conflict", "combat",
     "attack", "military", "missile", "defense", "pentagon", "nato", "hormuz",
     "ai", "artificial intelligence", "llm", "openai", "anthropic",
@@ -41,13 +43,26 @@ _PRIMARY_HEADLINE_KEYWORDS = {
 }
 
 
-def _check_category_skew(at_a_glance: list) -> list:
+def _anomaly_cfg(config: dict | None) -> dict:
+    return (config or {}).get("anomaly", {}) or {}
+
+
+def _cfg_set(config: dict | None, key: str, default: set[str]) -> set[str]:
+    raw = _anomaly_cfg(config).get(key, default)
+    return {str(item).strip() for item in raw if str(item).strip()}
+
+
+def _cfg_int(config: dict | None, key: str, default: int) -> int:
+    return int(_anomaly_cfg(config).get(key, default))
+
+
+def _check_category_skew(at_a_glance: list, config: dict | None = None) -> list:
     """Warn if any primary tag has zero items when total > 5."""
     anomalies = []
     if len(at_a_glance) <= 5:
         return anomalies
     present_tags = {item.get("tag", "") for item in at_a_glance}
-    for tag in _PRIMARY_TAGS:
+    for tag in _cfg_set(config, "primary_tags", _DEFAULT_PRIMARY_TAGS):
         if tag not in present_tags:
             anomalies.append({
                 "check": "category_skew",
@@ -103,6 +118,11 @@ def _check_source_absence(
             raw_domains_by_category.setdefault(cat, set()).add(netloc)
 
     missing_categories = []
+    max_anomalies = _cfg_int(
+        config,
+        "max_source_absence_anomalies",
+        _DEFAULT_MAX_SOURCE_ABSENCE_ANOMALIES,
+    )
     for cat, count in raw_by_category.items():
         if cat not in analysis_categories:
             continue
@@ -113,7 +133,7 @@ def _check_source_absence(
             missing_categories.append((cat, count))
 
     missing_categories.sort(key=lambda item: (-item[1], item[0]))
-    for cat, count in missing_categories[:_MAX_SOURCE_ABSENCE_ANOMALIES]:
+    for cat, count in missing_categories[:max_anomalies]:
         anomalies.append({
             "check": "source_absence",
             "severity": "warning",
@@ -123,7 +143,7 @@ def _check_source_absence(
             ),
         })
 
-    remaining = missing_categories[_MAX_SOURCE_ABSENCE_ANOMALIES:]
+    remaining = missing_categories[max_anomalies:]
     if remaining:
         summary = ", ".join(f"{cat} ({count})" for cat, count in remaining[:5])
         anomalies.append({
@@ -138,7 +158,7 @@ def _check_source_absence(
     return anomalies
 
 
-def _dive_is_primary(dive: dict) -> bool:
+def _dive_is_primary(dive: dict, config: dict | None = None) -> bool:
     """Return True if a deep dive covers a primary topic (war, defense, AI, space).
 
     Checks in priority order:
@@ -147,16 +167,25 @@ def _dive_is_primary(dive: dict) -> bool:
     3. Keyword scan of headline (fallback)
     """
     domains = set(dive.get("domains_bridged") or [])
-    if domains & _PRIMARY_DOMAINS:
+    if domains & _cfg_set(config, "primary_domains", _DEFAULT_PRIMARY_DOMAINS):
         return True
     tag = dive.get("tag", "") or ""
-    if tag in _PRIMARY_TAGS:
+    if tag in _cfg_set(config, "primary_tags", _DEFAULT_PRIMARY_TAGS):
         return True
     hl = dive.get("headline", "").lower()
-    return any(kw in hl for kw in _PRIMARY_HEADLINE_KEYWORDS)
+    return any(
+        kw in hl
+        for kw in _cfg_set(
+            config,
+            "primary_headline_keywords",
+            _DEFAULT_PRIMARY_HEADLINE_KEYWORDS,
+        )
+    )
 
 
-def _check_unusual_deep_dives(deep_dives: list, domain_analysis: dict) -> list:
+def _check_unusual_deep_dives(
+    deep_dives: list, domain_analysis: dict, config: dict | None = None
+) -> list:
     """Warn if deep dives don't cover any primary topic while primary candidates existed."""
     anomalies = []
 
@@ -166,14 +195,18 @@ def _check_unusual_deep_dives(deep_dives: list, domain_analysis: dict) -> list:
         if not isinstance(domain_result, dict):
             continue
         for item in domain_result.get("items", []):
-            if item.get("deep_dive_candidate") and item.get("tag", "") in _PRIMARY_TAGS:
+            if item.get("deep_dive_candidate") and item.get("tag", "") in _cfg_set(
+                config,
+                "primary_tags",
+                _DEFAULT_PRIMARY_TAGS,
+            ):
                 primary_candidates.append(item.get("headline", "?"))
 
     if not primary_candidates:
         return anomalies
 
     for dive in deep_dives:
-        if not _dive_is_primary(dive):
+        if not _dive_is_primary(dive, config):
             anomalies.append({
                 "check": "unusual_deep_dive",
                 "severity": "warning",
@@ -229,7 +262,9 @@ def _check_digest_length(total_items: int) -> list:
     return anomalies
 
 
-def _check_repeated_phrases(cross_domain_output: dict, seam_data: dict) -> list:
+def _check_repeated_phrases(
+    cross_domain_output: dict, seam_data: dict, config: dict | None = None
+) -> list:
     """Find 10+ word sequences that appear in more than one digest section."""
     anomalies = []
 
@@ -278,6 +313,11 @@ def _check_repeated_phrases(cross_domain_output: dict, seam_data: dict) -> list:
     found: set[str] = set()
     representative_phrases: list[str] = []
     suppressed_count = 0
+    max_anomalies = _cfg_int(
+        config,
+        "max_repeated_phrase_anomalies",
+        _DEFAULT_MAX_REPEATED_PHRASE_ANOMALIES,
+    )
 
     for i, sec_a in enumerate(section_names):
         words_a = section_words[sec_a]
@@ -303,7 +343,7 @@ def _check_repeated_phrases(cross_domain_output: dict, seam_data: dict) -> list:
                         suppressed_count += 1
                         continue
                     representative_phrases.append(phrase)
-                    if len(representative_phrases) > _MAX_REPEATED_PHRASE_ANOMALIES:
+                    if len(representative_phrases) > max_anomalies:
                         suppressed_count += 1
                         representative_phrases.pop()
                         continue
@@ -350,14 +390,20 @@ def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
     total_items = len(at_a_glance) + len(deep_dives)
 
     checks = [
-        ("category_skew", lambda: _check_category_skew(at_a_glance)),
+        ("category_skew", lambda: _check_category_skew(at_a_glance, config)),
         (
             "source_absence",
             lambda: _check_source_absence(raw_sources, domain_analysis, config),
         ),
-        ("unusual_deep_dives", lambda: _check_unusual_deep_dives(deep_dives, domain_analysis)),
+        (
+            "unusual_deep_dives",
+            lambda: _check_unusual_deep_dives(deep_dives, domain_analysis, config),
+        ),
         ("digest_length", lambda: _check_digest_length(total_items)),
-        ("repeated_phrases", lambda: _check_repeated_phrases(cross_domain_output, seam_data)),
+        (
+            "repeated_phrases",
+            lambda: _check_repeated_phrases(cross_domain_output, seam_data, config),
+        ),
     ]
 
     all_anomalies = []
