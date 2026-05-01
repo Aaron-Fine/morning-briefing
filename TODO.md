@@ -1,6 +1,6 @@
 # Morning Digest — TODO
 
-Last updated: 2026-04-22
+Last updated: 2026-05-01
 
 > **Design-intent note.** When triaging items marked "stale" or "unused,"
 > first ask whether the feature was *intentional but silently broken* (e.g.
@@ -11,46 +11,160 @@ Last updated: 2026-04-22
 
 ## Open
 
-### High — Review sweep (2026-04-21)
+### High — Source quality and downstream selection plan (2026-05-01)
 
-### Low — Review sweep (2026-04-21)
+These tasks are intended as implementation-ready work items. The immediate goal is to determine whether the digest has enough reliable source material to produce a strong report, then prevent downstream selection from overusing weak or redundant evidence.
 
-- ~~**Documentation still references dead or misleading architecture.** `stages/assemble.py` advertises a Phase 0 `synthesis_output` mode in its docstring but the implementation no longer has a `synthesis_output` branch. README says adding a desk means creating `prompts/desk_<name>.md`, while current desks are hard-coded in `_DOMAIN_CONFIGS` and use one shared prompt. This is the kind of stale doc that makes the next change worse than it needs to be.~~ Done 2026-04-22 — stale assemble docstring and README desk guidance updated.
-- ~~**Tag contract tests miss half the promised contract.** AGENTS says tag vocabulary is synchronized across five surfaces, including `_TAG_KEYWORDS` and the prompt tag list. `tests/test_contracts.py` checks labels/CSS and merely checks field names in `_SYSTEM_PROMPT`; it does not parse the allowed tag list in `prompts/cross_domain_execute.md`, and it does not assert keyword coverage for new tags. Add tests that fail when a tag is added without prompt and keyword updates.~~ Done 2026-04-22 — contract tests now assert `_TAG_KEYWORDS` coverage and parse the prompt allowed-tag list.
-- ~~**`cross_domain_connections` are generated and then mostly thrown in a drawer.** `assemble` saves them only in `digest_json["cross_domain_connections"]`; the email does not render them, and anomaly checks do not inspect them. Either render a compact section, feed them into seam annotations, or stop spending output tokens on them.~~ Done 2026-04-22 — kept as analysis metadata and passed through `briefing_packet`, matching the existing chat briefer prompt contract.
-  - Decision: keep them. Cross-domain connections are a key analytical input that the final report generator should draw on.
+Recommended implementation order:
 
-### High — Design (architecture)
+1. Fix collect-stage hidden failures.
+2. Add source health classifications.
+3. Curate stale and low-yield feeds.
+4. Harden distinct-source selection downstream.
+5. Make enrichment budget selective by source need.
+6. Add targeted sources for recurring coverage gaps.
+7. Tune source-absence and repeated-phrase diagnostics.
+8. Run and evaluate a full dry run.
+9. Close out the branch.
 
-- **Stage I/O is untyped dicts.** `context.get("domain_analysis", {})` everywhere. Pydantic models for `DomainAnalysis`, `CrossDomainOutput`, `SeamData` would catch schema drift — that seam is the most likely silent-regression spot.
-  - Plan 2026-04-22: see `docs/superpowers/plans/2026-04-22-stage-contract-hardening.md`. First implementation slice targets `DomainAnalysis` at the `analyze_domain` boundary.
-  - Status 2026-04-22: Phase 1 implemented with dependency-free contract normalizers, `domain_analysis_contract_issues`, and `scripts/validate_artifacts.py`; Dockerized full suite passed (`917 passed`).
-  - Status 2026-04-22: Phase 2 implemented for `seams` boundary normalization plus `seam_contract_issues`; focused Dockerized suite passed (`34 passed`). Remaining scope: cross-domain and assemble boundary contracts.
-  - Status 2026-04-22: Phase 3 implemented for cross-domain plan/output boundary normalization plus `cross_domain_contract_issues`; focused Dockerized suite passed (`46 passed`). Remaining scope: assemble boundary contracts and historical artifact review.
-  - Status 2026-04-22: Phase 4 implemented for assemble render-boundary normalization plus `assemble_contract_issues`; focused Dockerized suite passed (`102 passed`). Remaining scope: historical artifact review and follow-up tightening decisions.
-  - Status 2026-04-22: Phase 5 historical artifact review completed; dated artifacts from 2026-04-04 through 2026-04-22 validated cleanly. Full Dockerized suite passed (`924 passed`); validator/lint focused suite passed after CLI fix (`4 passed`). Pydantic remains deferred until schema churn slows.
+#### 1. Fix collect-stage hidden failures
 
-### High — Performance
+Problem: Some collectors return empty results while hiding real upstream failures. The clearest current example is the `On This Day` Wikimedia request returning 404 while the collect diagnostics still report the task as successful with zero items.
 
-- ~~**Tracked in `plan.md` Slice 10: parallelize `analyze_domain`.**~~ Done — 7 desk passes run via ThreadPoolExecutor (max 4 workers) with per-desk failure isolation.
+Definition of done:
 
-### Medium — Consolidation
+- `sources/history.py` either uses a working Wikimedia endpoint or emits an explicit degraded/failure diagnostic when the endpoint fails.
+- Collect diagnostics distinguish "valid empty result" from "HTTP/API failure with no usable fallback."
+- A test covers the failing HTTP path and verifies that it is visible in diagnostics.
+- A Dockerized focused test run passes for the changed collector/diagnostic code.
 
-- ~~**Tracked in `plan.md` Slice 6: consolidate tag vocabulary helpers.**~~ Done — `energy` and `biotech` tags added to all 5 synchronized surfaces (validate, cross_domain, assemble, CSS, TAG_KEYWORDS). Contract tests verify consistency.
-- ~~**Consolidate AQI breakpoint ladder.** The `if aqi <= 50: "Good" / <= 100: "Moderate" / ...` ladder appears in `sources/weather.py::_aqi_to_label` and twice more in `modules/weather_display.py` (label + color). Extract to `utils/aqi.py` with `aqi_label(aqi)` and `aqi_color(aqi)`.~~ Done 2026-04-22 — helper extracted and call sites wired.
-- **Extract retry backoff helper.** `morning_digest/llm.py::_retry_loop` and `pipeline.py` both implement exponential backoff with jitter. Once the 3-layer retry stack is consolidated (see above), keep one implementation in `utils/retry.py`.
-- ~~**Extract artifact helpers.** `_ARTIFACTS_BASE` path + date-directory iteration is duplicated in `pipeline.py` and `stages/anomaly.py`. Move to `utils/artifacts.py` (`artifact_dir(date)`, `iter_recent_dirs(n)`, `load_artifact(date, key)`).~~ Done 2026-04-22 — shared helper module added and call sites wired.
-- **Investigate recurring dry-run source warnings.** Current end-to-end dry-runs complete successfully, but `output/digest.log` consistently shows non-fatal source issues for SpaceNews (`429`), Brad Setser (`404`), Reuters Markets (`401`), China Global South Project (`410`), and The Diff (`400`). Decide case by case whether to:
-  - fix the feed URL,
-  - add provider-specific throttling/backoff,
-  - replace the source,
-  - or downgrade/remove the source if it is no longer viable.
+#### 2. Add source health classifications
 
-### Low — Correctness / cleanup
+Problem: Empty feeds currently require manual interpretation. Some are probably broken or stale; others are valuable but naturally low-frequency.
 
-- **Tracked in `plan.md` Slice 0: timezone/date audit.** The current plan now covers `TZ` authority, shared helper adoption, artifact dates, and user-visible date formatting across the codebase.
-- ~~**Phase 0 dead code in `assemble.py`.** The "empty fallback" branch is only reachable when Phase 3 (`cross_domain`) produces nothing, which hasn't happened since the `_failed` flag landed. Verify unreachable and delete, or keep but document the invariant.~~ Done 2026-04-22 — stale Phase 0 references removed from the docstring; runtime empty-output fallback left in place as degraded rendering guard.
-- **Tracked in `plan.md` Slice 0: `_empty_domain_result` contract drift.** Keep follow-up notes here only if additional edge cases appear during implementation.
+Add an explicit source health/status concept for RSS and HTML-index sources. Suggested statuses: `active`, `headline_radar`, `low_frequency`, `enrichment_required`, `degraded`, `broken`.
+
+Definition of done:
+
+- Source health can be represented in `config/sources.yaml` without breaking existing source loading.
+- The RSS quality audit reports each source's status, item count, median body length, enrichment behavior, and degraded/fallback rate.
+- Normalizer fallback no longer counts as clean success in source-quality reporting.
+- Sparse high-value feeds can be marked `low_frequency` so they do not create the same warning severity as broken feeds.
+- Tests cover config parsing and audit classification behavior.
+
+#### 3. Curate stale and low-yield feeds
+
+Problem: The latest full collect showed several empty or low-yield sources. Some should be repaired, some downgraded, and some removed.
+
+Current feeds needing review:
+
+- `Defense Tech and Acquisition`
+- `Sinification`
+- `MenaTrack`
+- `One Useful Thing`
+- `Import AI`
+- `The Overshoot`
+- `BIS Press Releases`
+- `The Diff`
+- `The New Atlantis`
+- `ScienceDaily Biotechnology`
+- `Phys.org Bio & Medicine`
+- `Lawfare`
+- `Salt Lake Tribune Culture`
+
+Definition of done:
+
+- Each listed feed has an explicit decision recorded in `config/sources.yaml` or a nearby source-health comment: keep, fix URL/parser, mark `low_frequency`, mark `headline_radar`, replace, or remove.
+- Clearly broken feeds are removed or disabled.
+- Valuable but sparse feeds are preserved with lower-severity expectations.
+- Redundant low-value feeds are removed when overlapping sources already provide better coverage.
+- `scripts/validate_new_feeds.py` and `scripts/audit_rss_quality.py --latest` complete successfully in Docker.
+
+#### 4. Add targeted sources for recurring coverage gaps
+
+Problem: Coverage-gap history repeatedly identifies missing or weak coverage in a few domains. These are input gaps, not just selection issues.
+
+Target expansion areas:
+
+- Maritime/shipping/insurance risk.
+- Arms control, NPT, nuclear governance, IAEA/UN institutions.
+- DPRK and Taiwan Strait security.
+- European LNG, gas, and energy-market coverage.
+- AI governance, compute governance, frontier model regulation.
+
+Definition of done:
+
+- Add a small, curated set of sources for the target areas rather than a broad dump of feeds.
+- Each new source has category routing, analysis mode, enrichment strategy, and source-health status.
+- New feeds pass validation.
+- A dry run shows the new sources entering `raw_sources` or produces clear diagnostics explaining why they did not.
+- The source additions reduce at least one recurring coverage-gap class or make the remaining gap visibly a selection issue rather than a collection issue.
+
+#### 5. Make enrichment budget selective by source need
+
+Problem: Many thin feeds need fetch/browser enrichment, but global fetch caps skip many candidates. Raising caps globally would increase latency and cost without guaranteeing better analysis.
+
+Definition of done:
+
+- Enrichment prioritization considers source health, category importance, body length, and recent coverage gaps.
+- High-value thin sources can receive reserved enrichment budget.
+- Low-value duplicates are skipped before scarce fetch/browser slots are consumed.
+- Enrichment diagnostics report why each candidate was fetched, browser-fetched, skipped by cap, skipped by policy, or degraded by fallback.
+- Tests cover prioritization order and cap behavior.
+
+#### 6. Harden distinct-source selection downstream
+
+Problem: Downstream output can look corroborated when multiple links come from the same outlet. At-a-glance and deep dives can also overuse a few sources such as SCMP, Al Jazeera, or OilPrice.
+
+Definition of done:
+
+- Cross-domain validation recomputes source depth from distinct outlets/domains instead of trusting the LLM label.
+- Same-outlet multi-link evidence cannot be labeled as independently corroborated.
+- At-a-glance and deep-dive selection enforce source concentration limits at both item and link/evidence level.
+- Validation diagnostics report when source-depth labels are downgraded or when source concentration caps alter output.
+- Tests cover same-outlet duplicates, distinct-outlet corroboration, and source-cap behavior.
+
+#### 7. Tune source-absence and repeated-phrase diagnostics
+
+Problem: Some source-absence warnings are useful, but others mean "the desk ignored this category" rather than "collect failed." Repeated-phrase warnings also reveal downstream reuse between at-a-glance, deep dives, and seams.
+
+Definition of done:
+
+- Source-absence diagnostics distinguish at least three cases: no raw input, raw input present but not selected by desk, and desk selected input but cross-domain omitted it.
+- Diagnostic severity is lower for categories intentionally marked low-frequency or headline-radar.
+- Repeated-phrase checks identify overlapping report sections and include enough context to debug the selection cause.
+- Tests cover each diagnostic class.
+
+#### 8. Run and evaluate a full dry run
+
+Problem: The above changes should be judged by actual pipeline artifacts, not just unit tests.
+
+Definition of done:
+
+- Run the full Dockerized dry run after implementation.
+- Inspect `collect_diagnostics`, `raw_sources`, `enriched_sources`, `domain_analysis`, `cross_domain_output`, `anomaly_report`, and `coverage_gaps` artifacts.
+- The final report has reasonable source diversity, no hidden collect failures, and no obvious same-outlet false corroboration.
+- Remaining warnings are documented as either accepted tradeoffs or follow-up TODOs.
+- Full Dockerized test suite passes before committing.
+
+#### 9. Close out the branch
+
+Problem: This branch rewrites enough of the source, enrichment, seams, and cross-domain path that "tests pass" is necessary but not sufficient. The branch should be closed only after the report is operationally usable.
+
+Definition of done:
+
+- All implementation tasks above are either complete or intentionally deferred with a written reason.
+- `TODO.md` reflects the remaining work accurately.
+- `docker compose build` completes successfully.
+- `docker compose run --rm --no-deps morning-digest python -m pytest tests/ -v --tb=short` passes.
+- A full dry run completes and the stage artifacts have been reviewed for reasonableness.
+- The final digest has acceptable source diversity, no hidden collect failures, no obvious false corroboration, and no unresolved high-severity anomaly warnings.
+- The final branch state is committed and pushed.
+
+### Medium — Deferred cleanup
+
+- **Extract retry backoff helper.** `morning_digest/llm.py::_retry_loop` and `pipeline.py` both implement exponential backoff with jitter. Keep one implementation in `utils/retry.py` when retry policy changes are next touched.
+- **Timezone/date audit.** `plan.md` Slice 0 tracks `TZ` authority, shared helper adoption, artifact dates, and user-visible date formatting. Revisit only if date drift appears in artifacts or rendered email.
 
 ---
 
