@@ -31,7 +31,7 @@ Recommended implementation order (not rigid; #2+#3 in particular are best done t
 11. Update README and contributor docs.
 12. Close out the branch.
 
-#### 1. Fix collect-stage hidden failures
+#### 1. Fix collect-stage hidden failures ✅
 
 Problem: Several collectors return empty results while hiding real upstream failures. Survey of the last 5 dated runs (`output/artifacts/2026-04-22..2026-04-29`) shows persistent zero-output collectors that should not be silently zero:
 
@@ -49,6 +49,8 @@ Definition of done:
 - Collect diagnostics distinguish `ok_empty` (valid empty result), `degraded` (partial result with fallback), and `failed` (HTTP/API failure with no usable output).
 - Tests cover each fixed collector's failing-HTTP path and verify the diagnostic appears in `run_meta` and/or a `collect_diagnostics` artifact.
 - Dockerized focused test run passes.
+
+**Status:** Completed 2026-05-01. Source modules now emit `_diagnostic` keys; `collect.py` propagates them as `ok_empty`/`degraded`/`failed` in `collect_diagnostics`. Tests verify all three statuses. The date-staleness issue was addressed by logging the local date used for the Wikimedia API call.
 
 #### 2. Add source health classifications and reporting
 

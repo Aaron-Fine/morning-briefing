@@ -180,7 +180,7 @@ def merge_enrich_metrics(feed_metrics: dict[str, dict], records: list[dict]) -> 
 
 
 def annotate_with_config(feed_metrics: dict[str, dict], config_path: Path) -> None:
-    """Add feed mode/cap/enrichment strategy from runtime config."""
+    """Add feed mode/cap/enrichment strategy and health from runtime config."""
     try:
         if config_path.is_dir():
             config = load_config(config_path.parent)
@@ -207,6 +207,7 @@ def annotate_with_config(feed_metrics: dict[str, dict], config_path: Path) -> No
         metric["mode"] = feed.get("mode", "rss")
         metric["cap"] = feed.get("cap", "")
         metric["strategy"] = strategy
+        metric["health"] = feed.get("health", "active")
         metric["enrich_cfg"] = enrich
         metric["skip_policy"] = enrich.get("skip_reason") or (
             "title_only_ok" if enrich.get("title_only_ok") else ""
@@ -266,8 +267,8 @@ def render_markdown_report(feed_metrics: dict[str, dict]) -> str:
     lines = [
         "# RSS Feed Quality Audit",
         "",
-        "| Feed | Items | Median chars | Empty % | Paywall % | HTTP % | Browser fail % | Normalizer fallback % | Mode | Strategy | Policy | Recommend |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|",
+        "| Feed | Items | Median chars | Empty % | Paywall % | HTTP % | Browser fail % | Normalizer fallback % | Mode | Strategy | Health | Policy | Recommend |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---|---|---|---|---|",
     ]
     for source, metric in sorted(
         feed_metrics.items(), key=lambda item: (item[1]["median_chars"], item[0])
@@ -282,7 +283,7 @@ def render_markdown_report(feed_metrics: dict[str, dict]) -> str:
             browser_failure_rate=metric.get("browser_failure_rate"),
         )
         lines.append(
-            "| {source} | {items} | {median} | {empty} | {paywall} | {http} | {browser} | {fallback} | {mode} | {strategy} | {policy} | {rec} |".format(
+            "| {source} | {items} | {median} | {empty} | {paywall} | {http} | {browser} | {fallback} | {mode} | {strategy} | {health} | {policy} | {rec} |".format(
                 source=source,
                 items=metric["items"],
                 median=metric["median_chars"],
@@ -293,6 +294,7 @@ def render_markdown_report(feed_metrics: dict[str, dict]) -> str:
                 fallback=_pct(metric.get("normalizer_fallback_rate")),
                 mode=metric.get("mode", "rss"),
                 strategy=metric.get("strategy", "auto"),
+                health=metric.get("health", "active"),
                 policy=metric.get("skip_policy", ""),
                 rec=rec,
             )

@@ -180,6 +180,28 @@ def _prepare_cross_domain_context(context: dict, **kwargs) -> None:
     _load_same_day_cross_domain_plan(context, **kwargs)
 
 
+def _write_source_health(
+    context: dict,
+    outputs: dict,
+    *,
+    artifact_dir: Path,
+    config: dict,
+    **_kwargs,
+) -> None:
+    """Write source_health.json artifact after collect completes."""
+    try:
+        from scripts.source_health import compute_source_health
+
+        health = compute_source_health(config)
+        save_artifact(artifact_dir, "source_health", health)
+        log.info(
+            f"  source_health: {len(health['feeds'])} feeds, "
+            f"{sum(1 for f in health['feeds'] if f['computed_health'] != f['health'])} computed overrides"
+        )
+    except Exception as e:
+        log.warning(f"source_health artifact generation failed (non-critical): {e}")
+
+
 def _write_assemble_outputs(
     context: dict,
     outputs: dict,
@@ -293,6 +315,7 @@ _STAGE_METADATA = {
         "empty_output": None,
         "model_defaults": None,
         "turn_model_overrides": None,
+        "after_run": _write_source_health,
     },
     "enrich_articles": {
         "artifact_key": "enrich_articles",

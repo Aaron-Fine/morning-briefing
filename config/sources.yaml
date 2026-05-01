@@ -39,16 +39,19 @@ rss:
   feeds:
   - url: https://www.aljazeera.com/xml/rss/all.xml
     name: Al Jazeera
+    health: active
     cap: 7
     category: non-western
     reliability: primary-reporting
   - url: https://scmp.com/rss/91/feed
     name: South China Morning Post
+    health: active
     cap: 10
     category: non-western
     reliability: primary-reporting
   - url: https://asia.nikkei.com/rss/feed/nar
     name: Nikkei Asia
+    health: active
     cap: 8
     category: non-western
     reliability: primary-reporting
@@ -56,21 +59,25 @@ rss:
       strategy: browser_fetch
   - url: https://www.thehindu.com/feeder/default.rss
     name: The Hindu
+    health: active
     cap: 5
     category: non-western
     reliability: primary-reporting
   - url: https://www.dawn.com/feeds/home
     name: Dawn
+    health: active
     cap: 5
     category: non-western
     reliability: primary-reporting
   - url: https://asiatimes.com/feed
     name: Asia Times
+    health: active
     cap: 5
     category: non-western
     reliability: analysis-opinion
   - url: https://www.theatlantic.com/feed/all/
     name: The Atlantic
+    health: active
     cap: 8
     category: western-analysis
     reliability: analysis-opinion
@@ -83,45 +90,54 @@ rss:
     reliability: primary-reporting
   - url: https://www.airandspaceforces.com/feed/
     name: Air & Space Forces
+    health: enrichment_required
     category: defense-mil
     reliability: primary-reporting
   - url: https://arstechnica.com/space/feed/
     name: Ars Technica Space
+    health: active
     cap: 5
     category: defense-mil
     reliability: analysis-opinion
   - url: https://www.nasa.gov/news-release/feed/
     name: NASA News Releases
+    health: active
     cap: 4
     category: defense-mil
     reliability: primary-reporting
   - url: https://www.nasa.gov/blogs/artemis/feed/
     name: NASA Artemis
+    health: active
     cap: 3
     category: defense-mil
     reliability: primary-reporting
   - url: https://www.jpl.nasa.gov/feeds/news/
     name: NASA JPL
+    health: active
     cap: 3
     category: defense-mil
     reliability: primary-reporting
   - url: https://spaceflightnow.com/feed/
     name: Spaceflight Now
+    health: active
     cap: 5
     category: defense-mil
     reliability: primary-reporting
   - url: https://warontherocks.com/feed/
     name: War on the Rocks
+    health: active
     cap: 5
     category: defense-mil
     reliability: analysis-opinion
   - url: https://defenseacquisition.substack.com/feed
     name: Defense Tech and Acquisition
+    health: low_frequency
     cap: 5
     category: defense-mil
     reliability: analysis-opinion
   - url: https://malcontentnews.substack.com/feed
     name: Malcontent News
+    health: active
     category: substack-independent
     reliability: primary-reporting
   - url: https://adamtooze.substack.com/feed
@@ -131,11 +147,13 @@ rss:
     reliability: analysis-opinion
   - url: https://chinatalk.substack.com/feed
     name: China Talk
+    health: enrichment_required
     cap: 3
     category: substack-independent
     reliability: analysis-opinion
   - url: https://sinification.substack.com/feed
     name: Sinification
+    health: enrichment_required
     cap: 3
     category: substack-independent
     reliability: analysis-opinion
@@ -146,6 +164,7 @@ rss:
     reliability: analysis-opinion
   - url: https://danieldrezner.substack.com/feed
     name: Daniel Drezner
+    health: enrichment_required
     cap: 3
     category: substack-independent
     reliability: analysis-opinion
@@ -156,16 +175,19 @@ rss:
     reliability: analysis-opinion
   - url: https://menatrack.substack.com/feed
     name: MenaTrack
+    health: low_frequency
     cap: 5
     category: substack-independent
     reliability: analysis-opinion
   - url: https://oneusefulthing.substack.com/feed
     name: One Useful Thing (Ethan Mollick)
+    health: low_frequency
     cap: 3
     category: ai-tech
     reliability: analysis-opinion
   - url: https://importai.substack.com/feed
     name: Import AI (Jack Clark)
+    health: enrichment_required
     cap: 3
     category: ai-tech
     reliability: analysis-opinion
@@ -176,11 +198,13 @@ rss:
     reliability: analysis-opinion
   - url: https://theovershoot.co/feed
     name: The Overshoot (Matt Klein)
+    health: low_frequency
     cap: 3
     category: econ-trade
     reliability: analysis-opinion
   - url: https://www.cfr.org/series/follow-the-money
     name: Brad Setser
+    health: low_frequency
     cap: 3
     category: econ-trade
     reliability: analysis-opinion
@@ -189,6 +213,7 @@ rss:
       strategy: fetch
   - url: https://www.ft.com/rss/home
     name: Financial Times
+    health: headline_radar
     cap: 5
     category: econ-trade
     reliability: primary-reporting
@@ -200,6 +225,7 @@ rss:
         subscription workflow
   - url: https://www.economist.com/finance-and-economics/rss.xml
     name: The Economist (Finance & Economics)
+    health: headline_radar
     cap: 5
     category: econ-trade
     reliability: analysis-opinion
@@ -211,21 +237,25 @@ rss:
         subscription workflow
   - url: https://www.bis.org/doclist/all_pressrels.rss
     name: BIS Press Releases
+    health: low_frequency
     cap: 3
     category: econ-trade
     reliability: primary-reporting
   - url: https://www.bis.org/doclist/cbspeeches.rss
     name: BIS Central Bank Speeches
+    health: low_frequency
     cap: 3
     category: econ-trade
     reliability: institutional-analysis
   - url: https://www.ipsnews.net/news/headlines/feed/
     name: Inter Press Service
+    health: enrichment_required
     cap: 5
     category: global-south
     reliability: primary-reporting
   - url: https://chinaglobalsouth.com/news-feed/
     name: China Global South Project
+    health: active
     cap: 3
     category: global-south
     reliability: analysis-opinion
@@ -234,6 +264,7 @@ rss:
       strategy: fetch
   - url: https://diff.substack.com/
     name: The Diff (Byrne Hobart)
+    health: low_frequency
     cap: 3
     category: perspective-diversity
     reliability: analysis-opinion
@@ -242,26 +273,31 @@ rss:
       strategy: fetch
   - url: https://slowboring.substack.com/feed
     name: Slow Boring (Matt Yglesias)
+    health: active
     cap: 3
     category: perspective-diversity
     reliability: analysis-opinion
   - url: https://ventureinsecurity.net/feed
     name: Venture in Security
+    health: enrichment_required
     cap: 3
     category: cyber
     reliability: analysis-opinion
   - url: https://risky.biz/feeds/risky-business-news/
     name: Risky Business
+    health: active
     cap: 3
     category: cyber
     reliability: analysis-opinion
   - url: https://utilitydive.com/feeds/news/
     name: Utility Dive
+    health: active
     cap: 5
     category: energy-materials
     reliability: primary-reporting
   - url: https://www.mining.com/feed/
     name: Mining.com
+    health: active
     cap: 5
     category: energy-materials
     reliability: primary-reporting
@@ -272,11 +308,13 @@ rss:
     reliability: primary-reporting
   - url: https://www.carbonbrief.org/feed
     name: Carbon Brief
+    health: enrichment_required
     cap: 5
     category: energy-materials
     reliability: analysis-opinion
   - url: https://www.theamericanconservative.com/feed/
     name: The American Conservative
+    health: enrichment_required
     cap: 3
     category: culture-structural
     reliability: analysis-opinion
@@ -287,16 +325,19 @@ rss:
     reliability: analysis-opinion
   - url: https://www.thenewatlantis.com/feed
     name: The New Atlantis
+    health: low_frequency
     cap: 3
     category: culture-structural
     reliability: analysis-opinion
   - url: https://comment.org/feed/
     name: Comment Magazine
+    health: low_frequency
     cap: 3
     category: culture-structural
     reliability: analysis-opinion
   - url: https://www.nature.com/nature.rss
     name: Nature
+    health: headline_radar
     cap: 5
     category: science-biotech
     reliability: primary-reporting
@@ -308,6 +349,7 @@ rss:
         source-specific policy is revisited
   - url: https://www.science.org/rss/news_current.xml
     name: Science Magazine
+    health: headline_radar
     cap: 5
     category: science-biotech
     reliability: primary-reporting
@@ -319,31 +361,37 @@ rss:
         source-specific policy is revisited
   - url: https://www.sciencedaily.com/rss/top/science.xml
     name: ScienceDaily Top Science
+    health: active
     cap: 4
     category: science-biotech
     reliability: science-wire
   - url: https://www.sciencedaily.com/rss/top/health.xml
     name: ScienceDaily Health
+    health: active
     cap: 4
     category: science-biotech
     reliability: science-wire
   - url: https://www.sciencedaily.com/rss/plants_animals/biotechnology.xml
     name: ScienceDaily Biotechnology
+    health: broken
     cap: 4
     category: science-biotech
     reliability: science-wire
   - url: https://phys.org/rss-feed/nanotech-news/bio-medicine/
     name: Phys.org Bio & Medicine
+    health: broken
     cap: 4
     category: science-biotech
     reliability: science-wire
   - url: https://phys.org/rss-feed/biology-news/biotechnology/
     name: Phys.org Biotechnology
+    health: active
     cap: 4
     category: science-biotech
     reliability: science-wire
   - url: https://www.statnews.com/feed/
     name: STAT News
+    health: active
     cap: 5
     category: science-biotech
     reliability: primary-reporting
@@ -354,6 +402,7 @@ rss:
     reliability: primary-reporting
   - url: https://feeds.feedburner.com/lawfare
     name: Lawfare
+    health: broken
     cap: 5
     category: legal-institutional
     reliability: analysis-opinion
@@ -364,41 +413,49 @@ rss:
     reliability: analysis-opinion
   - url: https://www.justsecurity.org/feed/
     name: Just Security
+    health: enrichment_required
     cap: 3
     category: legal-institutional
     reliability: analysis-opinion
   - url: https://www.deseret.com/arc/outboundfeeds/rss/category/utah/
     name: Deseret News (Utah)
+    health: enrichment_required
     cap: 5
     category: regional-west
     reliability: primary-reporting
   - url: https://www.sltrib.com/arc/outboundfeeds/news/?outputType=xml
     name: Salt Lake Tribune (Utah)
+    health: active
     cap: 5
     category: regional-west
     reliability: primary-reporting
   - url: https://www.sltrib.com/arc/outboundfeeds/religion/?outputType=xml
     name: Salt Lake Tribune (Religion)
+    health: active
     cap: 5
     category: regional-west
     reliability: primary-reporting
   - url: https://www.sltrib.com/arc/outboundfeeds/culture/?outputType=xml
     name: Salt Lake Tribune (Culture)
+    health: low_frequency
     cap: 5
     category: regional-west
     reliability: primary-reporting
   - url: https://www.kuer.org/news.rss
     name: KUER public radio
+    health: active
     cap: 5
     category: regional-west
     reliability: primary-reporting
   - url: https://www.pewresearch.org/feed/
     name: Pew Research Center
+    health: active
     cap: 3
     category: demographics
     reliability: primary-reporting
   - url: https://ifstudies.org/blog/rss
     name: Institute for Family Studies
+    health: active
     cap: 3
     category: demographics
     reliability: primary-reporting
