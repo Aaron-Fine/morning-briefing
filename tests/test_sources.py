@@ -10,6 +10,8 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from sources.holidays import get_upcoming_holidays
+from sources.history import fetch_on_this_day
+from sources.astronomy import fetch_astronomy
 from sources.come_follow_me import (
     get_current_lesson,
     get_upcoming_church_events,
@@ -35,6 +37,8 @@ class TestHolidays:
         result = get_upcoming_holidays(days=10)
         assert isinstance(result, list)
         for item in result:
+            if "_diagnostic" in item:
+                continue
             assert "date" in item
             assert "event" in item
 
@@ -43,9 +47,12 @@ class TestHolidays:
         for item in result:
             date.fromisoformat(item["date"])  # should not raise
 
-    def test_empty_window_returns_empty(self):
+    def test_empty_window_returns_empty_with_diagnostic(self):
         result = get_upcoming_holidays(days=0)
         assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["_diagnostic"]["status"] == "ok_empty"
+        assert "No US/UT holidays" in result[0]["_diagnostic"]["error"]
 
     def test_includes_pioneer_day_when_in_range(self):
         # Pioneer Day is July 24 in Utah
@@ -109,7 +116,15 @@ class TestComeFollowMe:
             mock_date.today.return_value = date(2026, 6, 1)
             mock_date.side_effect = lambda *a, **kw: date(*a, **kw)
             result = get_upcoming_church_events(lookahead_days=10)
-            assert result == []
+            assert len(result) == 1
+            assert result[0]["_diagnostic"]["status"] == "ok_empty"
+
+    def test_get_upcoming_church_events_reports_diagnostic(self):
+        with patch("sources.come_follow_me.date") as mock_date:
+            mock_date.today.return_value = date(2026, 6, 1)
+            mock_date.side_effect = lambda *a, **kw: date(*a, **kw)
+            result = get_upcoming_church_events(lookahead_days=10)
+            assert result[0]["_diagnostic"]["error"].startswith("No General Conference dates")
 
 
 class TestEconomicCalendar:
@@ -447,3 +462,54 @@ class TestRssFeeds:
 
         assert result is not None
         assert result["skipped"] is True
+
+
+class TestHistory:
+    @patch("sources.history.http_get_json")
+    def test_fetch_on_this_day_returns_failed_diagnostic_on_error(self, mock_get):
+        mock_get.return_value = None
+        result = fetch_on_this_day({})
+        assert result["_diagnostic"]["status"] == "failed"
+        assert "Wikimedia API returned no data" in result["_diagnostic"]["error"]
+        assert "month" in result
+        assert "day" in result
+
+    @patch("sources.history.http_get_json")
+    def test_fetch_on_this_day_returns_ok_empty_when_no_events(self, mock_get):
+        mock_get.return_value = {"selected": [], "events": []}
+        result = fetch_on_this_day({})
+        assert result["_diagnostic"]["status"] == "ok_empty"
+        assert result["selected"] == []
+        assert result["events"] == []
+
+    @patch("sources.history.http_get_json")
+    def test_fetch_on_this_day_populates_events(self, mock_get):
+        mock_get.return_value = {
+            "selected": [{"year": "1989", "text": "Test event"}],
+            "events": [{"year": "1990", "text": "Another event"}],
+        }
+        result = fetch_on_this_day({"history": {"event_count": 2}})
+        assert "_diagnostic" not in result
+        assert len(result["selected"]) == 1
+        assert len(result["events"]) == 1
+
+
+class TestAstronomy:
+    def test_fetch_astronomy_degraded_without_n2yo_key(self):
+        result = fetch_astronomy({})
+        assert result["_diagnostic"]["status"] == "degraded"
+        assert "No N2YO API key" in result["_diagnostic"]["error"]
+        assert result["iss_passes"] == []
+        assert result["moon_phase"] != ""
+
+    @patch("sources.astronomy.http_get_json")
+    def test_fetch_astronomy_degraded_when_n2yo_empty(self, mock_get):
+        mock_get.return_value = {"passes": []}
+        result = fetch_astronomy(
+            {
+                "astronomy": {"n2yo_api_key": "test"},
+                "location": {"latitude": 41.0, "longitude": -111.0},
+            }
+        )
+        assert result["_diagnostic"]["status"] == "degraded"
+        assert result["iss_passes"] == []

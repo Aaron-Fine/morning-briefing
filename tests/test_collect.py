@@ -601,3 +601,82 @@ class TestCollectRun:
         assert isinstance(result["raw_sources"], dict)
         assert "collect_diagnostics" in result
         assert "sources" in result["collect_diagnostics"]
+
+    @patch("stages.collect.fetch_weather")
+    @patch("stages.collect.fetch_markets")
+    @patch("stages.collect.fetch_upcoming_launches")
+    @patch("stages.collect.fetch_hackernews")
+    @patch("stages.collect.fetch_github_trending")
+    @patch("stages.collect.fetch_astronomy")
+    @patch("stages.collect.fetch_on_this_day")
+    @patch("stages.collect.get_upcoming_church_events")
+    @patch("stages.collect.get_upcoming_holidays")
+    @patch("stages.collect.fetch_economic_calendar")
+    @patch("stages.collect.get_current_lesson")
+    @patch("stages.collect.fetch_analysis_transcripts")
+    @patch("stages.collect.fetch_rss_with_diagnostics")
+    @patch("stages.collect.sanitize_all_sources")
+    def test_collect_diagnostics_propagate_source_status(
+        self,
+        mock_sanitize,
+        mock_rss,
+        mock_yt,
+        mock_lesson,
+        mock_econ_cal,
+        mock_holidays,
+        mock_church,
+        mock_history,
+        mock_astronomy,
+        mock_github,
+        mock_hn,
+        mock_launches,
+        mock_markets,
+        mock_weather,
+    ):
+        """Verify ok_empty / degraded / failed statuses from source modules surface in diagnostics."""
+        mock_weather.return_value = {"temp": 72}
+        mock_markets.return_value = []
+        mock_launches.return_value = []
+        mock_hn.return_value = []
+        mock_github.return_value = []
+        mock_astronomy.return_value = {
+            "iss_passes": [],
+            "moon_phase": "Full Moon",
+            "_diagnostic": {"status": "degraded", "error": "No N2YO key"},
+        }
+        mock_history.return_value = {
+            "selected": [],
+            "events": [],
+            "month": 4,
+            "day": 29,
+            "_diagnostic": {"status": "failed", "error": "API down"},
+        }
+        mock_church.return_value = [
+            {"_diagnostic": {"status": "ok_empty", "error": "No conference dates"}}
+        ]
+        mock_holidays.return_value = [
+            {"_diagnostic": {"status": "ok_empty", "error": "No holidays"}}
+        ]
+        mock_econ_cal.return_value = []
+        mock_lesson.return_value = {}
+        mock_yt.return_value = []
+        mock_rss.return_value = ([], [])
+        mock_sanitize.return_value = {
+            "rss": [],
+            "local_news": [],
+            "analysis_transcripts": [],
+        }
+
+        result = run({}, self._make_config())
+
+        sources = result["collect_diagnostics"]["sources"]
+        by_name = {d["source"]: d for d in sources}
+        assert by_name["astronomy"]["status"] == "degraded"
+        assert "No N2YO key" in by_name["astronomy"]["error"]
+        assert by_name["on_this_day"]["status"] == "failed"
+        assert "API down" in by_name["on_this_day"]["error"]
+        # calendar aggregates church_events + holidays + economic_calendar;
+        # the diagnostic is propagated from the first nested _diagnostic found
+        assert by_name["calendar"]["status"] == "ok_empty"
+
+

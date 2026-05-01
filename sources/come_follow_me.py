@@ -44,6 +44,7 @@ def get_upcoming_church_events(lookahead_days: int = 10) -> list[dict]:
     """Return General Conference sessions within the lookahead window.
 
     Returns list of dicts: {date, event, description}
+    Includes _diagnostic key when no conferences are in range.
     """
     today = date.today()
     cutoff = today + timedelta(days=lookahead_days)
@@ -57,6 +58,15 @@ def get_upcoming_church_events(lookahead_days: int = 10) -> list[dict]:
                 "event": f"LDS General Conference — {season} {d.year} ({label})",
                 "description": "Worldwide broadcast of LDS General Conference sessions.",
             })
+    if not events:
+        events.append(
+            {
+                "_diagnostic": {
+                    "status": "ok_empty",
+                    "error": f"No General Conference dates in {lookahead_days}-day window starting {today.isoformat()}",
+                }
+            }
+        )
     return events
 
 

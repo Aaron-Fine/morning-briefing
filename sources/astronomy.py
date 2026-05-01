@@ -27,6 +27,7 @@ def fetch_astronomy(config: dict) -> dict:
     """Return ISS passes and notable sky events.
 
     Returns dict: {iss_passes: [...], moon_phase: str, events: [...]}
+    Includes _diagnostic key for ISS pass failures.
     """
     loc = config.get("location", {})
     lat = loc.get("latitude", 41.737)
@@ -41,10 +42,21 @@ def fetch_astronomy(config: dict) -> dict:
     # Try N2YO API for ISS visible passes (requires free API key)
     n2yo_key = config.get("astronomy", {}).get("n2yo_api_key", "")
     if n2yo_key:
-        result["iss_passes"] = _fetch_iss_passes_n2yo(lat, lon, n2yo_key)
+        passes = _fetch_iss_passes_n2yo(lat, lon, n2yo_key)
+        result["iss_passes"] = passes
+        if not passes:
+            result["_diagnostic"] = {
+                "status": "degraded",
+                "error": "N2YO API returned no visible passes (may be valid empty or API failure)",
+            }
     else:
         # Fallback: just report ISS current position
-        result["iss_passes"] = _fetch_iss_simple()
+        passes = _fetch_iss_simple()
+        result["iss_passes"] = passes
+        result["_diagnostic"] = {
+            "status": "degraded",
+            "error": "No N2YO API key configured; ISS pass predictions unavailable",
+        }
 
     return result
 

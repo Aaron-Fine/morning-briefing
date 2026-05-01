@@ -107,13 +107,42 @@ def _fetch_local_news(config):
 
 def _item_count(value) -> int | None:
     if isinstance(value, list):
-        return len(value)
+        # Exclude diagnostic-only entries from item count
+        real_items = [item for item in value if not isinstance(item, dict) or "_diagnostic" not in item]
+        return len(real_items)
     if isinstance(value, dict):
+        if "_diagnostic" in value:
+            # If the dict only contains diagnostic + metadata, count real items
+            if "events" in value and isinstance(value["events"], list):
+                return len(value["events"])
+            if "selected" in value and isinstance(value["selected"], list):
+                return len(value["selected"])
+            return 0
         if "events" in value and isinstance(value["events"], list):
             return len(value["events"])
         if "selected" in value and isinstance(value["selected"], list):
             return len(value["selected"])
         return None
+    return None
+
+
+def _extract_diagnostic(value) -> dict | None:
+    """Extract _diagnostic dict from a source return value if present.
+
+    Checks top-level dict, list elements, and nested dict values
+    (needed for calendar which returns church_events/holidays sub-structures).
+    """
+    if isinstance(value, dict) and "_diagnostic" in value:
+        return value["_diagnostic"]
+    if isinstance(value, list) and value:
+        first = value[0]
+        if isinstance(first, dict) and "_diagnostic" in first:
+            return first["_diagnostic"]
+    if isinstance(value, dict):
+        for sub in value.values():
+            diag = _extract_diagnostic(sub)
+            if diag is not None:
+                return diag
     return None
 
 
@@ -128,12 +157,18 @@ def _run_collect_task(fn, cfg):
         else:
             key, value = result
         elapsed = time.monotonic() - started
+
+        # Check for explicit diagnostic from source module
+        source_diag = _extract_diagnostic(value)
+        status = source_diag["status"] if source_diag else "ok"
+        error = source_diag.get("error", "") if source_diag else ""
+
         diagnostic = {
             "source": key,
-            "status": "ok",
+            "status": status,
             "item_count": _item_count(value),
             "elapsed_seconds": round(elapsed, 2),
-            "error": "",
+            "error": error,
         }
         return key, value, diagnostic, extra
     except Exception as exc:
@@ -143,7 +178,7 @@ def _run_collect_task(fn, cfg):
             None,
             {
                 "source": key or fn.__name__.removeprefix("_fetch_"),
-                "status": "error",
+                "status": "failed",
                 "item_count": None,
                 "elapsed_seconds": round(elapsed, 2),
                 "error": str(exc),
