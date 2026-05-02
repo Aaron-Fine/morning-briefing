@@ -29,7 +29,12 @@ _PRIMARY_TAGS = _DEFAULT_PRIMARY_TAGS
 _TERTIARY_TAGS = _DEFAULT_TERTIARY_TAGS
 
 # Domain names produced by cross_domain that map to primary interests
-_DEFAULT_PRIMARY_DOMAINS = {"geopolitics", "defense_space", "ai_tech"}
+_DEFAULT_PRIMARY_DOMAINS = {
+    "geopolitics_events",
+    "geopolitics",  # Backward compatibility for older artifacts/tests.
+    "defense_space",
+    "ai_tech",
+}
 _DEFAULT_MAX_SOURCE_ABSENCE_ANOMALIES = 4
 _DEFAULT_MAX_REPEATED_PHRASE_ANOMALIES = 6
 
@@ -81,12 +86,36 @@ def _active_analysis_categories(config: dict) -> set[str]:
     }
 
 
+def _health_of_category(config: dict, cat: str) -> str:
+    """Return the dominant health status for feeds in a category."""
+    healths = [
+        f.get("health", "active")
+        for f in config.get("rss", {}).get("feeds", [])
+        if f.get("category") == cat
+    ]
+    if not healths:
+        return "active"
+    # If any feed is broken, report broken; otherwise take the most common
+    if "broken" in healths:
+        return "broken"
+    return max(set(healths), key=healths.count)
+
+
 def _check_source_absence(
     raw_sources: dict,
     domain_analysis: dict,
     config: dict | None = None,
+    perspective_framing: dict | None = None,
 ) -> list:
-    """Warn if an analysis-routed category with 3+ raw items produced 0 items."""
+    """Warn if an analysis-routed category with 3+ raw items produced 0 items.
+
+    Distinguishes three cases:
+      1. No raw input (count < 3 — already filtered out)
+      2. Raw present but not selected by desk (no domain_analysis items from this category)
+      3. Desk selected but cross-domain omitted it (domain_analysis has items but they didn't make the cut)
+
+    Severity is lowered for low_frequency and headline_radar categories.
+    """
     anomalies = []
     analysis_categories = _active_analysis_categories(config or {})
 
@@ -97,19 +126,32 @@ def _check_source_absence(
         if cat:
             raw_by_category[cat] = raw_by_category.get(cat, 0) + 1
 
-    # Collect domains referenced in domain analysis (domain-level matching
-    # to stay consistent with analyze_domain.py's URL validation)
+    # Collect domains referenced in domain analysis
     covered_domains: set[str] = set()
+    covered_categories: set[str] = set()
     for domain_result in domain_analysis.values():
         if not isinstance(domain_result, dict):
             continue
         for item in domain_result.get("items", []):
+            item_cat = item.get("category", "")
+            if item_cat:
+                covered_categories.add(item_cat)
             for link in item.get("links", []):
                 netloc = urlparse(link.get("url", "")).netloc
                 if netloc:
                     covered_domains.add(netloc)
 
-    # Find raw source domains by category to check coverage
+    if isinstance(perspective_framing, dict):
+        for item in perspective_framing.get("items", []) or []:
+            item_cat = item.get("category", "")
+            if item_cat:
+                covered_categories.add(item_cat)
+            for link in item.get("links", []):
+                netloc = urlparse(link.get("url", "")).netloc
+                if netloc:
+                    covered_domains.add(netloc)
+
+    # Find raw source domains by category
     raw_domains_by_category: dict[str, set] = {}
     for item in raw_sources.get("rss", []):
         cat = item.get("category", "")
@@ -134,12 +176,19 @@ def _check_source_absence(
 
     missing_categories.sort(key=lambda item: (-item[1], item[0]))
     for cat, count in missing_categories[:max_anomalies]:
+        health = _health_of_category(config or {}, cat)
+        # Determine case
+        if cat in covered_categories:
+            case = "desk_selected_but_cross_domain_omitted"
+        else:
+            case = "raw_present_but_not_selected_by_desk"
+        severity = "info" if health in ("low_frequency", "headline_radar") else "warning"
         anomalies.append({
             "check": "source_absence",
-            "severity": "warning",
+            "severity": severity,
             "detail": (
-                f"Category '{cat}' had {count} raw items but contributed 0 items "
-                "to domain analysis"
+                f"Category '{cat}' ({health}) had {count} raw items but contributed 0 items "
+                f"to analysis outputs — case: {case}"
             ),
         })
 
@@ -265,51 +314,62 @@ def _check_digest_length(total_items: int) -> list:
 def _check_repeated_phrases(
     cross_domain_output: dict, seam_data: dict, config: dict | None = None
 ) -> list:
-    """Find 10+ word sequences that appear in more than one digest section."""
+    """Find 10+ word sequences that appear in more than one digest section.
+
+    Now tracks item IDs so overlaps can be traced to specific at-a-glance
+    items or deep dives for debugging.
+    """
     anomalies = []
 
-    # Collect all text per section
-    sections: dict[str, str] = {}
+    # Collect text per item with metadata for richer diagnostics
+    item_texts: list[dict] = []
 
-    glance_texts = []
     for item in cross_domain_output.get("at_a_glance", []):
-        # Phase 3 items have facts/analysis/cross_domain_note as separate fields;
-        # Phase 1 items may have a combined "context" field instead.
         facts = item.get("facts", "")
         analysis = item.get("analysis", "")
         cross_note = item.get("cross_domain_note", "")
         context_fallback = item.get("context", "")
         body = f"{facts} {analysis} {cross_note}".strip() or context_fallback
-        parts = [item.get("headline", ""), body]
-        glance_texts.append(" ".join(p for p in parts if p))
-    if glance_texts:
-        sections["at_a_glance"] = " ".join(glance_texts)
+        text = " ".join(p for p in [item.get("headline", ""), body] if p)
+        item_texts.append({
+            "section": "at_a_glance",
+            "item_id": item.get("item_id", ""),
+            "text": text,
+        })
 
-    dive_texts = []
     for dive in cross_domain_output.get("deep_dives", []):
         body = re.sub(r"<[^>]+>", " ", dive.get("body", ""))
-        dive_texts.append(f"{dive.get('headline', '')} {body}")
-    if dive_texts:
-        sections["deep_dives"] = " ".join(dive_texts)
+        text = f"{dive.get('headline', '')} {body}"
+        item_texts.append({
+            "section": "deep_dives",
+            "item_id": dive.get("headline", "")[:40],
+            "text": text,
+        })
 
-    cn_texts = []
     for cn in seam_data.get("contested_narratives", []):
-        cn_texts.append(f"{cn.get('topic', '')} {cn.get('description', '')}")
-    if cn_texts:
-        sections["contested_narratives"] = " ".join(cn_texts)
+        text = f"{cn.get('topic', '')} {cn.get('description', '')}"
+        item_texts.append({
+            "section": "contested_narratives",
+            "item_id": cn.get("topic", "")[:40],
+            "text": text,
+        })
 
-    if len(sections) < 2:
+    if len(item_texts) < 2:
         return anomalies
 
-    # Build word-list per section
-    section_words: dict[str, list[str]] = {}
-    for sec, text in sections.items():
-        words = re.sub(r"[^\w\s]", "", text.lower()).split()
-        section_words[sec] = words
-
-    # Sliding window: find 10-word sequences common to any two sections
+    # Build n-grams per item
     window = 10
-    section_names = list(section_words.keys())
+    item_ngrams: list[dict] = []
+    for entry in item_texts:
+        words = re.sub(r"[^\w\s]", "", entry["text"].lower()).split()
+        if len(words) < window:
+            continue
+        ngrams = {
+            " ".join(words[j:j + window])
+            for j in range(len(words) - window + 1)
+        }
+        item_ngrams.append({**entry, "ngrams": ngrams})
+
     found: set[str] = set()
     representative_phrases: list[str] = []
     suppressed_count = 0
@@ -319,42 +379,32 @@ def _check_repeated_phrases(
         _DEFAULT_MAX_REPEATED_PHRASE_ANOMALIES,
     )
 
-    for i, sec_a in enumerate(section_names):
-        words_a = section_words[sec_a]
-        if len(words_a) < window:
-            continue
-        ngrams_a = {
-            " ".join(words_a[j:j + window])
-            for j in range(len(words_a) - window + 1)
-        }
-        for sec_b in section_names[i + 1:]:
-            words_b = section_words[sec_b]
-            if len(words_b) < window:
-                continue
-            ngrams_b = {
-                " ".join(words_b[k:k + window])
-                for k in range(len(words_b) - window + 1)
-            }
-            repeated = ngrams_a & ngrams_b
+    for i, item_a in enumerate(item_ngrams):
+        for item_b in item_ngrams[i + 1:]:
+            if item_a["section"] == item_b["section"]:
+                continue  # only cross-section overlaps matter
+            repeated = item_a["ngrams"] & item_b["ngrams"]
             for phrase in sorted(repeated):
-                if phrase not in found:
-                    found.add(phrase)
-                    if _is_redundant_phrase(phrase, representative_phrases):
-                        suppressed_count += 1
-                        continue
-                    representative_phrases.append(phrase)
-                    if len(representative_phrases) > max_anomalies:
-                        suppressed_count += 1
-                        representative_phrases.pop()
-                        continue
-                    anomalies.append({
-                        "check": "repeated_phrase",
-                        "severity": "warning",
-                        "detail": (
-                            f"10-word phrase appears in both '{sec_a}' and '{sec_b}': "
-                            f"\"{phrase}\""
-                        ),
-                    })
+                if phrase in found:
+                    continue
+                found.add(phrase)
+                if _is_redundant_phrase(phrase, representative_phrases):
+                    suppressed_count += 1
+                    continue
+                representative_phrases.append(phrase)
+                if len(representative_phrases) > max_anomalies:
+                    suppressed_count += 1
+                    representative_phrases.pop()
+                    continue
+                anomalies.append({
+                    "check": "repeated_phrase",
+                    "severity": "warning",
+                    "detail": (
+                        f"10-word phrase appears in '{item_a['section']}' "
+                        f"(item: {item_a['item_id']}) and '{item_b['section']}' "
+                        f"(item: {item_b['item_id']}): \"{phrase}\""
+                    ),
+                })
 
     if suppressed_count:
         anomalies.append({
@@ -384,6 +434,7 @@ def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
     domain_analysis = context.get("domain_analysis", {})
     raw_sources = context.get("raw_sources", {})
     seam_data = context.get("seam_data", {})
+    perspective_framing = context.get("perspective_framing", {})
 
     at_a_glance = cross_domain_output.get("at_a_glance", [])
     deep_dives = cross_domain_output.get("deep_dives", [])
@@ -393,7 +444,12 @@ def run(context: dict, config: dict, model_config=None, **kwargs) -> dict:
         ("category_skew", lambda: _check_category_skew(at_a_glance, config)),
         (
             "source_absence",
-            lambda: _check_source_absence(raw_sources, domain_analysis, config),
+            lambda: _check_source_absence(
+                raw_sources,
+                domain_analysis,
+                config,
+                perspective_framing,
+            ),
         ),
         (
             "unusual_deep_dives",

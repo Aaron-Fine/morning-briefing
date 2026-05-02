@@ -171,6 +171,7 @@ def run(
         {"artifact": "cross_domain_output", **issue} for issue in output_issues
     )
     result = _validated_output(result, domain_analysis, raw_sources, config)
+    source_depth_downgrades = list(result.get("_source_depth_downgrades", []) or [])
     result = validate_stage_output(
         result,
         raw_sources,
@@ -182,6 +183,21 @@ def run(
         "_validation_diagnostics",
         {"stage": "cross_domain", "issue_count": 0, "issues": []},
     )
+    if source_depth_downgrades:
+        issues = validation_diagnostics.setdefault("issues", [])
+        for downgrade in source_depth_downgrades:
+            issues.append(
+                {
+                    "kind": "source_depth_recomputed",
+                    "path": downgrade.get("section", ""),
+                    "message": (
+                        f"{downgrade.get('original_depth', '')} -> "
+                        f"{downgrade.get('recomputed_depth', '')}"
+                    ),
+                    "detail": downgrade,
+                }
+            )
+        validation_diagnostics["issue_count"] = len(issues)
 
     n_glance = len(result["at_a_glance"])
     n_dives = len(result["deep_dives"])

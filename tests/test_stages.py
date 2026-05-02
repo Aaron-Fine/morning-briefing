@@ -339,6 +339,32 @@ class TestAnomalySourceAbsence:
         result = _check_source_absence(raw_sources, domain_analysis)
         assert result == []
 
+    def test_no_anomaly_when_perspective_category_covered_by_framing(self):
+        raw_sources = {
+            "rss": [
+                {
+                    "url": f"https://perspective.example/{i}",
+                    "category": "perspective-diversity",
+                }
+                for i in range(3)
+            ]
+        }
+        perspective_framing = {
+            "items": [
+                {
+                    "category": "perspective-diversity",
+                    "links": [{"url": "https://perspective.example/1"}],
+                }
+            ]
+        }
+        result = _check_source_absence(
+            raw_sources,
+            {},
+            None,
+            perspective_framing,
+        )
+        assert result == []
+
     def test_anomaly_when_category_not_covered(self):
         raw_sources = {
             "rss": [

@@ -55,6 +55,31 @@ class TestComputeSourceHealth:
         feed = report["feeds"][0]
         assert feed["computed_health"] == "low_frequency"
 
+    def test_broken_feed_with_items_promotes_to_degraded_for_review(self):
+        config = {
+            "rss": {
+                "feeds": [
+                    {"name": "Recovered Feed", "health": "broken"},
+                ]
+            }
+        }
+        with patch("scripts.source_health.load_artifacts") as mock_load:
+            mock_load.return_value = [
+                {
+                    "date": "2026-04-29",
+                    "rss_items": [
+                        {"source": "Recovered Feed", "summary": "new item text"}
+                    ],
+                    "enrich_records": [],
+                },
+            ]
+            report = compute_source_health(config, window_days=14)
+
+        feed = report["feeds"][0]
+        assert feed["computed_health"] == "degraded"
+        assert feed["status_transition"] == "better"
+        assert "produced items" in " ".join(feed["observations"])
+
     def test_overrides_active_when_short_text(self):
         config = {
             "rss": {
@@ -87,3 +112,30 @@ class TestComputeSourceHealth:
             assert feed["computed_health"] == "enrichment_required"
             obs_text = " ".join(feed["observations"])
             assert "Short RSS bodies" in obs_text
+
+    def test_last_nonempty_date_uses_most_recent_artifact(self):
+        config = {
+            "rss": {
+                "feeds": [
+                    {"name": "Feed", "health": "active"},
+                ]
+            }
+        }
+        with patch("scripts.source_health.load_artifacts") as mock_load:
+            mock_load.return_value = [
+                {
+                    "date": "2026-04-20",
+                    "rss_items": [{"source": "Feed", "summary": "older useful text"}],
+                    "enrich_records": [],
+                },
+                {
+                    "date": "2026-04-29",
+                    "rss_items": [{"source": "Feed", "summary": "newer useful text"}],
+                    "enrich_records": [],
+                },
+            ]
+            report = compute_source_health(config, window_days=14)
+
+        feed = report["feeds"][0]
+        assert feed["last_nonempty_date"] == "2026-04-29"
+        assert feed["status_transition"] == "worse"

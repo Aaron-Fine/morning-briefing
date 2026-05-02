@@ -47,7 +47,7 @@ class TestNewDeskConfigs:
 
     def test_categories_match_expected_rss_categories(self):
         expected = {
-            "energy_materials": {"energy-materials"},
+            "energy_materials": {"energy-materials", "european-energy"},
             "culture_structural": {"culture-structural"},
             "science_biotech": {"science-biotech"},
         }

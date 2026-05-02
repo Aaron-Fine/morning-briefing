@@ -86,6 +86,7 @@ rss:
       cookies_file: cookies/atlantic.cookies.txt
   - url: https://breakingdefense.com/feed/
     name: Breaking Defense
+    health: active
     category: defense-mil
     reliability: primary-reporting
   - url: https://www.airandspaceforces.com/feed/
@@ -142,6 +143,7 @@ rss:
     reliability: primary-reporting
   - url: https://adamtooze.substack.com/feed
     name: Adam Tooze — Chartbook
+    health: active
     cap: 3
     category: substack-independent
     reliability: analysis-opinion
@@ -159,6 +161,7 @@ rss:
     reliability: analysis-opinion
   - url: https://proximities.substack.com/feed
     name: Proximities
+    health: active
     cap: 5
     category: substack-independent
     reliability: analysis-opinion
@@ -170,6 +173,7 @@ rss:
     reliability: analysis-opinion
   - url: https://claireberlinski.substack.com/feed
     name: The Cosmopolitan Globalist
+    health: active
     cap: 3
     category: substack-independent
     reliability: analysis-opinion
@@ -193,6 +197,7 @@ rss:
     reliability: analysis-opinion
   - url: https://simonwillison.net/atom/everything/
     name: Simon Willison
+    health: active
     cap: 8
     category: ai-tech
     reliability: analysis-opinion
@@ -303,6 +308,7 @@ rss:
     reliability: primary-reporting
   - url: https://oilprice.com/rss/main
     name: OilPrice.com
+    health: active
     cap: 5
     category: energy-materials
     reliability: primary-reporting
@@ -320,6 +326,7 @@ rss:
     reliability: analysis-opinion
   - url: https://worksinprogress.substack.com/feed
     name: Works in Progress
+    health: active
     cap: 3
     category: culture-structural
     reliability: analysis-opinion
@@ -397,6 +404,7 @@ rss:
     reliability: primary-reporting
   - url: https://endpts.com/feed/
     name: Endpoints News
+    health: active
     cap: 3
     category: science-biotech
     reliability: primary-reporting
@@ -408,6 +416,7 @@ rss:
     reliability: analysis-opinion
   - url: https://www.scotusblog.com/feed/
     name: SCOTUSblog
+    health: active
     cap: 3
     category: legal-institutional
     reliability: analysis-opinion
@@ -459,6 +468,86 @@ rss:
     cap: 3
     category: demographics
     reliability: primary-reporting
+  - url: https://gcaptain.com/feed/
+    name: gCaptain
+    health: active
+    cap: 3
+    category: maritime
+    reliability: primary-reporting
+    enrich:
+      strategy: auto
+  - url: https://splash247.com/feed/
+    name: Splash247
+    health: active
+    cap: 3
+    category: maritime
+    reliability: primary-reporting
+    enrich:
+      strategy: auto
+  - url: http://feeds.feedburner.com/ArmsControlAssociationUpdates
+    name: Arms Control Association
+    health: low_frequency
+    cap: 3
+    category: arms-control
+    reliability: primary-reporting
+    enrich:
+      strategy: auto
+  - url: https://www.iaea.org/feeds/news
+    name: IAEA News
+    health: active
+    cap: 3
+    category: arms-control
+    reliability: primary-reporting
+    enrich:
+      strategy: auto
+  - url: https://www.38north.org/feed/
+    name: 38 North
+    health: active
+    cap: 3
+    category: dprk-taiwan
+    reliability: analysis-opinion
+    enrich:
+      strategy: auto
+  - url: https://www.nknews.org/feed/
+    name: NK News
+    health: active
+    cap: 5
+    category: dprk-taiwan
+    reliability: primary-reporting
+    enrich:
+      strategy: auto
+  - url: https://www.euractiv.com/feed/
+    name: Euractiv
+    health: active
+    cap: 5
+    category: european-energy
+    reliability: primary-reporting
+    enrich:
+      strategy: auto
+  - url: https://www.naturalgasintel.com/feed/
+    name: Natural Gas Intelligence
+    health: active
+    cap: 3
+    category: european-energy
+    reliability: primary-reporting
+    enrich:
+      strategy: auto
+  - url: https://ainowinstitute.org/feed
+    name: AI Now Institute
+    health: active
+    cap: 3
+    category: ai-governance
+    reliability: analysis-opinion
+    enrich:
+      strategy: auto
+  - url: https://cset.georgetown.edu/feed/
+    name: CSET Georgetown
+    health: active
+    cap: 3
+    category: ai-governance
+    reliability: analysis-opinion
+    enrich:
+      strategy: auto
 come_follow_me:
   base_url: https://www.churchofjesuschrist.org/study/manual/come-follow-me-for-home-and-church-old-testament-2026
   year: 2026

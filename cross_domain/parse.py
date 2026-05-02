@@ -1,6 +1,7 @@
 """Normalization and fallback helpers for the cross-domain stage."""
 
 import logging
+import re
 
 from utils.urls import collect_known_urls, registered_domain, url_known
 
@@ -148,7 +149,8 @@ _TAG_KEYWORDS: list[tuple[str, str]] = [
 
 _DEFAULT_PRIMARY_GLANCE_TAGS = ("war", "ai", "defense")
 _DEFAULT_PRIMARY_DOMAIN_TAGS = {
-    "geopolitics": "war",
+    "geopolitics_events": "war",
+    "geopolitics": "war",  # Backward compatibility for older artifacts/tests.
     "ai_tech": "ai",
     "defense_space": "defense",
 }
@@ -438,12 +440,21 @@ def _distinct_domains(links: list[dict]) -> set[str]:
     return domains
 
 
-def _recompute_source_depth(item: dict) -> str:
-    """Recompute source_depth from distinct registered domains in links.
+def _supporting_links(item: dict, *keys: str) -> list[dict]:
+    """Return evidence links from the first non-empty link field."""
+    for key in keys:
+        links = item.get(key, [])
+        if links:
+            return links
+    return []
+
+
+def _recompute_source_depth(item: dict, *link_keys: str) -> str:
+    """Recompute source_depth from distinct registered domains in evidence links.
 
     Overrides LLM-provided depth labels when same-outlet evidence dominates.
     """
-    links = item.get("links", [])
+    links = _supporting_links(item, *(link_keys or ("links",)))
     if not links:
         return "single-source"
     domains = _distinct_domains(links)
@@ -459,7 +470,7 @@ def _downgrade_same_outlet_depth(result: dict) -> dict:
     downgrades = []
     for item in result.get("at_a_glance", []):
         original = item.get("source_depth", "")
-        recomputed = _recompute_source_depth(item)
+        recomputed = _recompute_source_depth(item, "links")
         if original and original != recomputed:
             downgrades.append(
                 {
@@ -474,7 +485,8 @@ def _downgrade_same_outlet_depth(result: dict) -> dict:
 
     for dive in result.get("deep_dives", []):
         original = dive.get("source_depth", "")
-        recomputed = _recompute_source_depth(dive)
+        recomputed = _recompute_source_depth(dive, "further_reading", "links")
+        domains = sorted(_distinct_domains(_supporting_links(dive, "further_reading", "links")))
         if original and original != recomputed:
             downgrades.append(
                 {
@@ -482,7 +494,7 @@ def _downgrade_same_outlet_depth(result: dict) -> dict:
                     "section": "deep_dives",
                     "original_depth": original,
                     "recomputed_depth": recomputed,
-                    "domains": sorted(_distinct_domains(dive.get("further_reading", []))),
+                    "domains": domains,
                 }
             )
         dive["source_depth"] = recomputed
@@ -491,6 +503,70 @@ def _downgrade_same_outlet_depth(result: dict) -> dict:
         log.warning(
             f"cross_domain: downgraded {len(downgrades)} source_depth label(s) "
             f"due to same-outlet concentration"
+        )
+    result["_source_depth_downgrades"] = downgrades
+    return result
+
+
+def _extract_ngrams(text: str, window: int = 10) -> set[str]:
+    """Return the set of `window`-word n-grams from text."""
+    words = re.sub(r"[^\w\s]", "", text.lower()).split()
+    if len(words) < window:
+        return set()
+    return {" ".join(words[i:i + window]) for i in range(len(words) - window + 1)}
+
+
+def _downgrade_overlap_depth(result: dict) -> dict:
+    """Downgrade source_depth for deep dives reusing ≥10-word spans from at_a_glance."""
+    glance_texts = []
+    for item in result.get("at_a_glance", []):
+        facts = item.get("facts", "")
+        analysis = item.get("analysis", "")
+        cross_note = item.get("cross_domain_note", "")
+        context_fallback = item.get("context", "")
+        body = f"{facts} {analysis} {cross_note}".strip() or context_fallback
+        text = " ".join(p for p in [item.get("headline", ""), body] if p)
+        glance_texts.append(text)
+
+    glance_ngrams: set[str] = set()
+    for text in glance_texts:
+        glance_ngrams.update(_extract_ngrams(text))
+
+    if not glance_ngrams:
+        return result
+
+    downgrades = result.get("_source_depth_downgrades", [])
+
+    for dive in result.get("deep_dives", []):
+        body = re.sub(r"<[^>]+>", " ", dive.get("body", ""))
+        text = f"{dive.get('headline', '')} {body}"
+        dive_ngrams = _extract_ngrams(text)
+        overlap = dive_ngrams & glance_ngrams
+        if overlap:
+            original = dive.get("source_depth", "")
+            downgrade_map = {
+                "widely-reported": "corroborated",
+                "corroborated": "single-source",
+                "single-source": "single-source",
+            }
+            new_depth = downgrade_map.get(original, "single-source")
+            if original and new_depth != original:
+                downgrades.append({
+                    "item_id": dive.get("headline", "")[:40],
+                    "section": "deep_dives",
+                    "original_depth": original,
+                    "recomputed_depth": new_depth,
+                    "reason": "phrase_overlap_with_at_a_glance",
+                    "overlap_count": len(overlap),
+                    "sample_phrase": sorted(overlap)[0],
+                })
+                dive["source_depth"] = new_depth
+
+    if downgrades != result.get("_source_depth_downgrades", []):
+        added = len(downgrades) - len(result.get("_source_depth_downgrades", []))
+        log.warning(
+            f"cross_domain: downgraded {added} source_depth label(s) "
+            f"due to phrase overlap with at_a_glance"
         )
     result["_source_depth_downgrades"] = downgrades
     return result
@@ -544,6 +620,7 @@ def _validated_output(
 
     # Recompute source_depth from distinct domains before enforcing caps
     result = _downgrade_same_outlet_depth(result)
+    result = _downgrade_overlap_depth(result)
 
     digest_cfg = config.get("digest", {})
     glance_cfg = digest_cfg.get("at_a_glance", {})

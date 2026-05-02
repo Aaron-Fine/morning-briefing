@@ -47,6 +47,12 @@ class TestStageMetadata:
         assert meta["context_keys"] == ["enriched_sources", "enrich_articles"]
         assert "raw_sources" not in meta["context_keys"]
 
+    def test_analyze_domain_loads_perspective_and_rebalance_sidecars(self):
+        meta = _get_stage_meta("analyze_domain")
+        assert "domain_analysis" in meta["context_keys"]
+        assert "perspective_framing" in meta["context_keys"]
+        assert "category_rebalance_log" in meta["context_keys"]
+
 
 class TestStageObservability:
     def test_contract_issues_are_logged(self, caplog):

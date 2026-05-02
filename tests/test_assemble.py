@@ -872,3 +872,29 @@ class TestSourceCaps:
         ]
         result = _enforce_source_caps(items, max_per_outlet=1, section_name="test")
         assert len(result) == 1
+
+    def test_records_source_cap_diagnostics(self):
+        from stages.assemble import _enforce_source_caps
+
+        diagnostics = []
+        items = [
+            {"headline": "Keep", "links": [{"url": "https://example.com/1"}]},
+            {"headline": "Drop", "links": [{"url": "https://example.com/2"}]},
+        ]
+        result = _enforce_source_caps(
+            items,
+            max_per_outlet=1,
+            section_name="test",
+            diagnostics=diagnostics,
+        )
+        assert len(result) == 1
+        assert diagnostics == [
+            {
+                "kind": "source_cap_enforced",
+                "section": "test",
+                "outlet": "example.com",
+                "max_per_outlet": 1,
+                "headline": "Drop",
+                "reason": "per_outlet_cap_exceeded",
+            }
+        ]

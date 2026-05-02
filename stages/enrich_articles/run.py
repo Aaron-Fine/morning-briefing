@@ -183,6 +183,13 @@ def run(
                 log.error(f"enrich_articles: failed for {item.get('url')}: {exc}")
                 status_records.append(_record(item, "exception", str(exc)))
 
+    tier_by_url = {
+        candidate.item.get("url", ""): (candidate.feed_conf or {}).get("health", "active")
+        for candidate in candidates
+    }
+    _annotate_tier_records(status_records, tier_by_url)
+    tier_outcomes = _summarize_tier_outcomes(status_records)
+
     for item in items:
         canonical = canonical_by_url.get(item.get("url"))
         if canonical is not None and canonical is not item:
@@ -196,6 +203,7 @@ def run(
             "tier_summary": {
                 "http_fetch": http_tier_stats,
                 "browser_fetch": browser_tier_stats,
+                "outcomes": tier_outcomes,
             },
         },
     }
@@ -435,3 +443,38 @@ def _record(
     if rejected_summary_preview:
         record["rejected_summary_preview"] = rejected_summary_preview
     return record
+
+
+def _annotate_tier_records(records: list[dict], tier_by_url: dict[str, str]) -> None:
+    for record in records:
+        tier = tier_by_url.get(record.get("url", ""), "active")
+        record.setdefault("tier", tier)
+        record.setdefault("cap_tier", tier)
+
+
+def _summarize_tier_outcomes(records: list[dict]) -> dict[str, dict]:
+    summary: dict[str, dict] = {}
+    for record in records:
+        tier = record.get("tier", "active")
+        stats = summary.setdefault(
+            tier,
+            {
+                "records": 0,
+                "attempted": 0,
+                "succeeded": 0,
+                "skipped_by_cap": 0,
+                "fallback": 0,
+            },
+        )
+        stats["records"] += 1
+        status = record.get("status", "")
+        if status.startswith("skipped_") and status.endswith("_cap"):
+            stats["skipped_by_cap"] += 1
+            continue
+        if status != "skipped":
+            stats["attempted"] += 1
+        if status in {"ok", "cache_hit:ok"}:
+            stats["succeeded"] += 1
+        if "fallback" in status or record.get("fallback_reason"):
+            stats["fallback"] += 1
+    return summary

@@ -345,11 +345,13 @@ def test_tiered_budget_skips_headline_radar_and_broken(tmp_path):
         {"name": "Active", "url": "x", "health": "active"},
         {"name": "Headline", "url": "x", "health": "headline_radar"},
         {"name": "Broken", "url": "x", "health": "broken"},
+        {"name": "Degraded", "url": "x", "health": "degraded"},
     ]
     items = [
         {"source": "Active", "url": "https://x/1", "summary": ""},
         {"source": "Headline", "url": "https://x/2", "summary": ""},
         {"source": "Broken", "url": "https://x/3", "summary": ""},
+        {"source": "Degraded", "url": "https://x/4", "summary": ""},
     ]
     cfg = _config(
         tmp_path,
@@ -369,17 +371,21 @@ def test_tiered_budget_skips_headline_radar_and_broken(tmp_path):
             browser.return_value.error = "blocked"
             out = run({"raw_sources": {"rss": items}}, cfg)
     statuses = [record["status"] for record in out["enrich_articles"]["records"]]
-    # Headline and broken should never be fetched (cap=0) — 2 skipped by HTTP cap
-    assert statuses.count("skipped_fetch_cap") == 2
+    # Headline, broken, and degraded should never be fetched (cap=0).
+    assert statuses.count("skipped_fetch_cap") == 3
     # Active should be allowed HTTP fetch (1 allowed), but browser capped at 0
-    assert statuses.count("skipped_browser_fetch_cap") == 3
+    assert statuses.count("skipped_browser_fetch_cap") == 4
     tier_summary = out["enrich_articles"]["tier_summary"]
     assert tier_summary["http_fetch"]["headline_radar"]["allowed"] == 0
     assert tier_summary["http_fetch"]["broken"]["allowed"] == 0
+    assert tier_summary["http_fetch"]["degraded"]["allowed"] == 0
     assert tier_summary["http_fetch"]["active"]["allowed"] == 1
     assert tier_summary["browser_fetch"]["headline_radar"]["allowed"] == 0
     assert tier_summary["browser_fetch"]["broken"]["allowed"] == 0
+    assert tier_summary["browser_fetch"]["degraded"]["allowed"] == 0
     assert tier_summary["browser_fetch"]["active"]["allowed"] == 0
+    assert all("tier" in record and "cap_tier" in record for record in out["enrich_articles"]["records"])
+    assert tier_summary["outcomes"]["headline_radar"]["skipped_by_cap"] >= 1
 
 
 def test_rejects_meta_llm_summary_for_long_source(tmp_path):

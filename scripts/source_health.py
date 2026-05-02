@@ -17,8 +17,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from morning_digest.config import load_config
 from scripts.audit_rss_quality import (
@@ -39,6 +42,15 @@ _VALID_HEALTHS = {
     "enrichment_required",
     "degraded",
     "broken",
+}
+
+_HEALTH_SEVERITY = {
+    "active": 0,
+    "low_frequency": 1,
+    "headline_radar": 1,
+    "enrichment_required": 2,
+    "degraded": 3,
+    "broken": 4,
 }
 
 
@@ -100,12 +112,12 @@ def compute_source_health(
     metrics = compute_feed_metrics(all_items)
     merge_enrich_metrics(metrics, all_records)
 
-    # Compute last non-empty date per feed
+    # Compute last non-empty date per feed.
     last_nonempty: dict[str, str] = {}
     for artifact in sorted(artifacts, key=lambda a: a["date"]):
         for item in artifact.get("rss_items", []):
             source = item.get("source", "")
-            if source and source not in last_nonempty:
+            if source:
                 last_nonempty[source] = artifact["date"]
 
     feeds = []
@@ -123,7 +135,10 @@ def compute_source_health(
         observations = []
         computed_health = health
 
-        if items == 0:
+        if items > 0 and health == "broken":
+            observations.append("Broken feed produced items; review for recovery")
+            computed_health = "degraded"
+        elif items == 0:
             observations.append(f"Zero items in {window_days}-day window")
             if health == "active":
                 computed_health = "degraded"
@@ -167,6 +182,7 @@ def compute_source_health(
                     round(fallback_rate, 2) if fallback_rate is not None else None
                 ),
                 "last_nonempty_date": last_nonempty.get(name),
+                "status_transition": _status_transition(health, computed_health),
                 "observations": observations,
             }
         )
@@ -179,6 +195,19 @@ def compute_source_health(
     }
 
 
+def _status_transition(configured: str, computed: str) -> str:
+    """Classify the computed health movement relative to configured health."""
+    if configured == computed:
+        return "unchanged"
+    configured_rank = _HEALTH_SEVERITY.get(configured, 0)
+    computed_rank = _HEALTH_SEVERITY.get(computed, configured_rank)
+    if computed_rank > configured_rank:
+        return "worse"
+    if computed_rank < configured_rank:
+        return "better"
+    return "changed"
+
+
 def render_health_cli_table(health_report: dict) -> str:
     """Render a human-readable roll-up of all feeds' health."""
     lines = [
@@ -186,14 +215,14 @@ def render_health_cli_table(health_report: dict) -> str:
         "",
         f"Date: {health_report['date']}  (window: {health_report['window_days']} days)",
         "",
-        "| Feed | Config health | Computed | Items | Median chars | Last non-empty | Observations |",
-        "|---|---:|---:|---:|---:|---:|---|",
+        "| Feed | Config health | Computed | Transition | Items | Median chars | Last non-empty | Observations |",
+        "|---|---:|---:|---:|---:|---:|---:|---|",
     ]
     for feed in health_report["feeds"]:
         obs = "; ".join(feed["observations"]) if feed["observations"] else "—"
         lines.append(
             f"| {feed['name']} | {feed['health']} | {feed['computed_health']} | "
-            f"{feed['items']} | {feed['median_chars']} | "
+            f"{feed['status_transition']} | {feed['items']} | {feed['median_chars']} | "
             f"{feed['last_nonempty_date'] or 'never'} | {obs} |"
         )
     return "\n".join(lines) + "\n"

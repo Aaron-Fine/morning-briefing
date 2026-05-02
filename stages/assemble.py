@@ -111,6 +111,7 @@ def _enforce_source_caps(
     items: list[dict],
     max_per_outlet: int,
     section_name: str,
+    diagnostics: list[dict] | None = None,
 ) -> list[dict]:
     """Drop items that exceed the per-outlet cap, preserving priority order."""
     counts: dict[str, int] = {}
@@ -123,6 +124,17 @@ def _enforce_source_caps(
             continue
         if counts.get(outlet, 0) >= max_per_outlet:
             dropped.append(item)
+            if diagnostics is not None:
+                diagnostics.append(
+                    {
+                        "kind": "source_cap_enforced",
+                        "section": section_name,
+                        "outlet": outlet,
+                        "max_per_outlet": max_per_outlet,
+                        "headline": item.get("headline", ""),
+                        "reason": "per_outlet_cap_exceeded",
+                    }
+                )
             continue
         counts[outlet] = counts.get(outlet, 0) + 1
         kept.append(item)
@@ -334,6 +346,7 @@ def run(
         worth_reading = []
 
     # Enforce per-outlet source caps to prevent false corroboration
+    source_cap_diagnostics: list[dict] = []
     digest_cfg = config.get("digest", {})
     glance_cfg = digest_cfg.get("at_a_glance", {})
     dive_cfg = digest_cfg.get("deep_dives", {})
@@ -341,11 +354,13 @@ def run(
         at_a_glance,
         max_per_outlet=glance_cfg.get("max_per_outlet", 2),
         section_name="at-a-glance",
+        diagnostics=source_cap_diagnostics,
     )
     deep_dives_raw = _enforce_source_caps(
         deep_dives_raw,
         max_per_outlet=dive_cfg.get("max_per_outlet", 1),
         section_name="deep-dive",
+        diagnostics=source_cap_diagnostics,
     )
 
     peripheral = _extract_peripheral_data(context, raw_sources)
@@ -422,6 +437,7 @@ def run(
         "cross_domain_connections", []
     )
     digest_json["assemble_contract_issues"] = assemble_contract_issues
+    digest_json["source_cap_diagnostics"] = source_cap_diagnostics
 
     log.info(
         f"assemble: rendered digest — "

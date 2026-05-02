@@ -880,3 +880,118 @@ class TestSourceDepthRecomputation:
         out = _downgrade_same_outlet_depth(result)
         assert out["at_a_glance"][0]["source_depth"] == "widely-reported"
         assert len(out["_source_depth_downgrades"]) == 0
+
+    def test_deep_dive_uses_further_reading_for_depth(self):
+        from cross_domain.parse import _downgrade_same_outlet_depth
+
+        result = {
+            "at_a_glance": [],
+            "deep_dives": [
+                {
+                    "headline": "Deep A",
+                    "source_depth": "widely-reported",
+                    "further_reading": [
+                        {"url": "https://a.com/1"},
+                        {"url": "https://b.com/2"},
+                        {"url": "https://c.com/3"},
+                        {"url": "https://d.com/4"},
+                    ],
+                }
+            ],
+        }
+        out = _downgrade_same_outlet_depth(result)
+        assert out["deep_dives"][0]["source_depth"] == "widely-reported"
+        assert out["_source_depth_downgrades"] == []
+
+
+class TestOverlapDepthDowngrade:
+    def test_downgrades_when_phrase_overlaps_at_a_glance(self):
+        from cross_domain.parse import _downgrade_overlap_depth
+
+        shared = "one two three four five six seven eight nine ten"
+        result = {
+            "at_a_glance": [
+                {
+                    "item_id": "a1",
+                    "headline": "Headline A",
+                    "facts": shared,
+                    "source_depth": "corroborated",
+                    "links": [{"url": "https://a.com/1"}, {"url": "https://b.com/2"}],
+                }
+            ],
+            "deep_dives": [
+                {
+                    "headline": "Deep A",
+                    "body": f"<p>{shared} and more unique analysis here</p>",
+                    "source_depth": "corroborated",
+                    "further_reading": [{"url": "https://c.com/3"}, {"url": "https://d.com/4"}],
+                }
+            ],
+        }
+        out = _downgrade_overlap_depth(result)
+        assert out["deep_dives"][0]["source_depth"] == "single-source"
+        downgrades = out["_source_depth_downgrades"]
+        assert len(downgrades) == 1
+        assert downgrades[0]["reason"] == "phrase_overlap_with_at_a_glance"
+        assert downgrades[0]["overlap_count"] >= 1
+
+    def test_no_downgrade_without_overlap(self):
+        from cross_domain.parse import _downgrade_overlap_depth
+
+        result = {
+            "at_a_glance": [
+                {
+                    "item_id": "a1",
+                    "headline": "Headline A",
+                    "facts": "completely distinct set of words for at a glance",
+                    "source_depth": "single-source",
+                    "links": [{"url": "https://a.com/1"}],
+                }
+            ],
+            "deep_dives": [
+                {
+                    "headline": "Deep B",
+                    "body": "<p>another entirely different sentence with no shared ten word span</p>",
+                    "source_depth": "corroborated",
+                    "further_reading": [{"url": "https://c.com/3"}, {"url": "https://d.com/4"}],
+                }
+            ],
+        }
+        out = _downgrade_overlap_depth(result)
+        assert out["deep_dives"][0]["source_depth"] == "corroborated"
+        assert len(out["_source_depth_downgrades"]) == 0
+
+    def test_widely_reported_downgraded_to_corroborated_on_overlap(self):
+        from cross_domain.parse import _downgrade_overlap_depth
+
+        shared = "alpha beta gamma delta epsilon zeta eta theta iota kappa"
+        result = {
+            "at_a_glance": [
+                {
+                    "item_id": "a1",
+                    "headline": "Headline C",
+                    "facts": shared,
+                    "source_depth": "single-source",
+                    "links": [{"url": "https://a.com/1"}],
+                }
+            ],
+            "deep_dives": [
+                {
+                    "headline": "Deep C",
+                    "body": f"<p>{shared} with extensive further background</p>",
+                    "source_depth": "widely-reported",
+                    "further_reading": [
+                        {"url": "https://a.com/1"},
+                        {"url": "https://b.com/2"},
+                        {"url": "https://c.com/3"},
+                        {"url": "https://d.com/4"},
+                    ],
+                }
+            ],
+        }
+        out = _downgrade_overlap_depth(result)
+        assert out["deep_dives"][0]["source_depth"] == "corroborated"
+        downgrades = out["_source_depth_downgrades"]
+        assert len(downgrades) == 1
+        assert downgrades[0]["original_depth"] == "widely-reported"
+        assert downgrades[0]["recomputed_depth"] == "corroborated"

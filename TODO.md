@@ -1,6 +1,6 @@
 # Morning Digest — TODO
 
-Last updated: 2026-05-01 (revised after empirical artifact review)
+Last updated: 2026-05-01 (plan complete)
 
 > **Design-intent note.** When triaging items marked "stale" or "unused,"
 > first ask whether the feature was *intentional but silently broken* (e.g.
@@ -74,7 +74,7 @@ Definition of done:
 - Health classification is monitorable: a single CLI/script invocation prints a roll-up of all feeds' current status, the last date each was non-empty, and any status transitions.
 - Tests cover config parsing, audit classification, and the per-run health artifact.
 
-**Status:** Completed 2026-05-01. `scripts/source_health.py` provides the CLI and per-run artifact; `config/sources.yaml` carries health on every feed; `audit_rss_quality.py` includes the health column; pipeline writes `source_health.json` after collect.
+**Status:** Completed 2026-05-01. `scripts/source_health.py` provides the CLI and per-run artifact; `config/sources.yaml` carries health on every feed; `audit_rss_quality.py` includes the health column and no longer treats normalizer fallback as clean success; pipeline writes `source_health.json` after collect. Broken feeds that produce items compute as `degraded` for recovery review.
 
 #### 3. Empirically audit and curate stale / low-yield feeds ✅
 
@@ -106,13 +106,13 @@ Definition of done:
 - Clearly broken feeds are removed or marked `broken`.
 - `scripts/validate_new_feeds.py` and `scripts/audit_rss_quality.py --latest` complete successfully in Docker.
 
-**Status:** Completed 2026-05-01. Empirical audit ran over 26 days of artifacts. Dispositions applied:
+**Status:** Completed 2026-05-01. Empirical audit ran over 26 days of artifacts. Dockerized `scripts/validate_new_feeds.py --new-only` and `scripts/audit_rss_quality.py --latest` completed successfully on 2026-05-01. Dispositions applied:
 - `broken`: Lawfare, Phys.org Bio & Medicine, ScienceDaily Biotechnology (zero items, should be active)
 - `low_frequency`: Defense Tech and Acquisition, MenaTrack, One Useful Thing, The Overshoot, The Diff, The New Atlantis, BIS Press Releases, BIS Central Bank Speeches, Brad Setser, Comment Magazine, Salt Lake Tribune Culture
 - `enrichment_required`: Sinification, Import AI, China Talk, Daniel Drezner, Venture in Security, The American Conservative, Deseret News (Utah), Just Security, Inter Press Service, Carbon Brief, Air & Space Forces
 - `headline_radar`: Financial Times, The Economist, Nature, Science Magazine
 
-#### 4. Add targeted sources for recurring coverage gaps
+#### 4. Add targeted sources for recurring coverage gaps ✅
 
 Problem: Coverage-gap history repeatedly identifies missing or weak coverage in a few domains. These are input gaps, not just selection issues.
 
@@ -134,7 +134,9 @@ Definition of done:
 - A dry run shows the new sources entering `raw_sources` or produces clear diagnostics explaining why they did not.
 - The next dry run's `coverage_gaps.json` reduces at least one recurring gap class or makes the remaining gap visibly a selection issue rather than a collection issue.
 
-#### 5. Make enrichment budget tiered by source health
+**Status:** Completed 2026-05-01. Added 10 targeted feeds across maritime/shipping, arms control/nuclear governance, DPRK/Taiwan, European energy, and AI governance. Each new feed has explicit category routing, enrichment strategy, and health. The 2026-05-01 dry run showed new-source categories entering `raw_sources` (`maritime`, `arms-control`, `dprk-taiwan`, `european-energy`, `ai-governance`), and recurring coverage-gap patterns dropped from 4 to 3. Remaining coverage gaps are documented below as follow-up source-depth work.
+
+#### 5. Make enrichment budget tiered by source health ✅
 
 Problem: Current enrichment caps in `config/pipeline.yaml` are global and tight: `max_fetches_per_run: 10`, `max_browser_fetches_per_run: 3`. The 2026-04-29 run had 249 enrich candidates with 46 skipped by fetch cap and 5 by browser cap; only 13 fetches across 249 items. Items that genuinely need fetched bodies (`enrichment_required` sources) are being starved.
 
@@ -154,7 +156,9 @@ Definition of done:
 - A dashboard-style summary of per-tier fetch usage is emitted per run (counts of attempted, succeeded, skipped-by-cap, fallback).
 - Tests cover tier-based cap behavior, prioritization order within a tier, and the no-fetch guarantee for `headline_radar`/`broken`/`degraded`.
 
-#### 6. Harden distinct-source selection downstream
+**Status:** Completed 2026-05-01. `config/pipeline.yaml` now has per-tier enrichment caps; `enrich_articles` assigns `tier` and `cap_tier` per record; `enrich_articles.json` includes per-tier outcomes. Focused tests cover tier caps and the no-fetch guarantee for `headline_radar`, `broken`, and `degraded` feeds.
+
+#### 6. Harden distinct-source selection downstream ✅
 
 Problem: Downstream output can look corroborated when multiple links come from the same outlet. At-a-glance and deep dives can also overuse a few sources such as SCMP, Al Jazeera, or OilPrice.
 
@@ -172,7 +176,9 @@ Definition of done:
 - Validation diagnostics report when source-depth labels are downgraded or when source-cap enforcement altered the output (which item dropped, why).
 - Tests cover same-outlet duplicates, distinct-outlet corroboration, and per-section cap behavior.
 
-#### 7a. Add per-category quotas inside multi-category desks
+**Status:** Completed 2026-05-01. Cross-domain parsing recomputes `source_depth` from distinct registered domains for at-a-glance and deep dives, including `further_reading`. Per-section source caps are enforced and diagnostic entries are emitted when caps alter output. The 2026-05-01 dry run recorded three explicit `source_depth_recomputed` diagnostics and no source-cap drops.
+
+#### 7a. Add per-category quotas inside multi-category desks ✅
 
 Problem: The 2026-04-29 anomaly report flagged four categories (`global-south`, `western-analysis`, `culture-structural`, `perspective-diversity`) as having raw items but contributing zero items to domain analysis. Investigation showed this is *not* a routing failure: those categories share desks with higher-volume siblings (e.g. `geopolitics` desk receives 40 `non-western` items vs 8 `western-analysis` and 8 `global-south`; `culture_structural` desk receives `culture-structural` (6), `legal-institutional` (6), `demographics` (4)). The desk LLM picks ~8 from the combined pool and high-volume categories crowd out the smaller ones.
 
@@ -188,7 +194,9 @@ Definition of done:
 - A focused test confirms a synthetic high-volume + low-volume category mix produces output with both represented.
 - After this lands, the `source_absence` warnings for `western-analysis`, `global-south`, and `culture-structural` either disappear or convert into intentional `low_frequency`-marked exceptions.
 
-#### 7b. Introduce a `perspective` mini-desk feeding seams
+**Status:** Completed 2026-05-01. Post-LLM rebalance `_rebalance_categories` prepends a synthetic item for any category with raw items but zero desk output, with per-desk config in `pipeline.yaml` and optional `max_category_share`. Applied to `geopolitics_events`, `perspective`, `defense_space`, `ai_tech`, `energy_materials`, and `culture_structural`. Rebalance actions are recorded in `category_rebalance_log`; the 2026-05-01 dry run represented `western-analysis`, `global-south`, and `culture-structural` when raw input was present.
+
+#### 7b. Introduce a `perspective` mini-desk feeding seams ✅
 
 Problem: The categories `substack-independent` and `perspective-diversity` are content-type mismatches inside the geopolitics desk. They are framing, commentary, and contrarian takes — not event reporting. Mixing 9–12 opinion items with 40 news items in one LLM call invites the model to either ignore them (the current failure) or weight them inappropriately. Today the seams stage has to *extract* contested framing from news items written for a different purpose.
 
@@ -209,7 +217,9 @@ Definition of done:
 - Tests cover routing changes, the new desk's output contract, and seams consumption of perspective input.
 - A dry run shows perspective desk output materially shaping at least one seam candidate that previously had to be inferred from news items.
 
-#### 8. Tune source-absence and repeated-phrase diagnostics
+**Status:** Completed 2026-05-01. New `perspective` desk added to `_DOMAIN_CONFIGS` and `config/pipeline.yaml`; the events desk is now `geopolitics_events`, with the old `geopolitics` name accepted only as a compatibility alias for older artifacts/tests. `analyze_domain.run()` extracts `perspective_framing` into a separate artifact. Seams consumes it in `_build_domain_summary`. Tests verify extraction, routing, and desk contract. The 2026-05-01 dry run produced 6 perspective framing candidates and 4 seam candidates.
+
+#### 8. Tune source-absence and repeated-phrase diagnostics ✅
 
 Problem: Some `source_absence` warnings are useful, but others are noise (low-frequency categories, intentionally headline-only sources). The 2026-04-29 anomaly report also showed 5/9 anomalies were repeated-phrase overlaps between at-a-glance and deep dives, indicating the cross-domain prompt's "must add distinct value" instruction is not being enforced.
 
@@ -221,7 +231,9 @@ Definition of done:
 - Add either (a) a post-cross-domain dedup pass that regenerates or shortens deep-dive paragraphs reusing ≥10-word spans from at-a-glance, or (b) a stronger constraint in `prompts/cross_domain_execute.md` and a validation gate that downgrades `source_depth` when overlap is detected.
 - Tests cover each diagnostic class and the dedup behavior.
 
-#### 9. One-time validation for newly added sources
+**Status:** Completed 2026-05-01. Source-absence diagnostics distinguish routing/selection cases, lower severity for low-frequency/headline-only sources, and now treat `perspective_framing` as a first-class analysis output. Repeated-phrase diagnostics include section and item context, and overlap with at-a-glance triggers a source-depth validation diagnostic. The 2026-05-01 dry run had 0 anomaly warnings.
+
+#### 9. One-time validation for newly added sources ✅
 
 Problem: New sources added under #4 (and any future additions) need a sanity check before being committed: feed reachable, parses, has recent items, category routes to an active desk, source-health field present and valid. This is a *one-shot, on-add* check — not a per-run pipeline cost.
 
@@ -232,7 +244,9 @@ Definition of done:
 - The validator is invoked manually (or via a developer-facing `make` / pre-commit hook on staged `config/sources.yaml` changes), NOT from the daily pipeline. Per-run health visibility is the responsibility of #2's `source_health` artifact, not this validator.
 - Tests cover each validation rule.
 
-#### 10. Run and evaluate a full dry run
+**Status:** Completed 2026-05-01. `scripts/validate_new_feeds.py --new-only` validates added feeds, checking reachability/parsing, recency unless exempt, routed category, and valid `health`. It uses live desk routing including `prepare_local`'s `regional-west` consumer. Dockerized run on 2026-05-01 exited cleanly with "No new feeds detected since the last commit"; tests cover the individual validation rules and missing-git Docker behavior.
+
+#### 10. Run and evaluate a full dry run ✅
 
 Problem: The above changes should be judged by actual pipeline artifacts, not just unit tests.
 
@@ -246,7 +260,9 @@ Definition of done:
 - Remaining warnings are documented as either accepted tradeoffs or follow-up TODOs.
 - Full Dockerized test suite passes before committing.
 
-#### 11. Update README and contributor docs
+**Status:** Completed 2026-05-01. Full Docker dry run completed and wrote artifacts under `output/artifacts/2026-05-01`. Reviewed `collect_diagnostics`, `raw_sources`, `enriched_sources`, `domain_analysis`, `perspective_framing`, `category_rebalance_log`, `cross_domain_output`, `validation_diagnostics`, `anomaly_report`, `coverage_gaps`, `source_health`, and `digest_json`. Result: 7 at-a-glance items, 2 deep dives, 4 seams, 0 anomaly warnings, 0 repeated-phrase anomalies, no source-distribution warning, explicit source-depth recomputation diagnostics, and target categories represented as expected. Accepted residuals: On This Day still fails upstream with a visible `failed` diagnostic; astronomy ISS remains `degraded` without an N2YO key; coverage gaps still identify deeper source needs for NPT/AI governance, DPRK posture, European LNG, maritime insurance, and Taiwan Strait monitoring.
+
+#### 11. Update README and contributor docs ✅
 
 Problem: This branch changes user-visible structure (a new `perspective` desk, renamed `geopolitics_events`, a `health:` field on every source, a new `source_health` artifact, tiered enrichment caps, new diagnostic enums). The current README (542 lines) and CLAUDE.md will go stale in several specific places if not updated alongside the code.
 
@@ -269,7 +285,9 @@ Definition of done:
 - Any new prompt files added under #7b are listed in the README prompts section.
 - Documentation changes are committed in the same PR that lands the corresponding code change, not deferred.
 
-#### 12. Close out the branch
+**Status:** Completed 2026-05-01. README now reflects the `geopolitics_events` + `perspective` desk topology, source `health:` semantics, tiered enrichment caps, RSS quality/source health scripts, new prompt listing, and `collect_diagnostics.json`/`source_health.json` artifacts. CLAUDE.md documents Docker execution, tiered enrichment behavior, artifact paths, audit flags, source-health CLI, and cookie handling. The requested stale-doc grep strings return no matches.
+
+#### 12. Close out the branch ✅
 
 Problem: This branch rewrites enough of the source, enrichment, seams, and cross-domain path that "tests pass" is necessary but not sufficient. The branch should be closed only after the report is operationally usable.
 
@@ -283,10 +301,13 @@ Definition of done:
 - The final digest has acceptable source diversity, no hidden collect failures, no obvious false corroboration, and no unresolved high-severity anomaly warnings.
 - The final branch state is committed and pushed.
 
+**Status:** Completed 2026-05-01. Items 1-11 are complete against their definitions of done, with residual coverage gaps documented under deferred cleanup. `docker compose build` passed; the full Docker dry run completed with 0 anomaly warnings; reviewed artifacts were reasonable; `docker compose run --rm --no-deps morning-digest python -m pytest tests/ -v --tb=short` passed (`989 passed`). Final branch changes are included in the closeout commit and pushed to the branch.
+
 ### Medium — Deferred cleanup
 
 - **Extract retry backoff helper.** `morning_digest/llm.py::_retry_loop` and `pipeline.py` both implement exponential backoff with jitter. Keep one implementation in `utils/retry.py` when retry policy changes are next touched.
 - **Timezone/date audit.** `plan.md` Slice 0 tracks `TZ` authority, shared helper adoption, artifact dates, and user-visible date formatting. Revisit only if date drift appears in artifacts or rendered email.
+- **Residual coverage-gap source depth.** The 2026-05-01 dry run still flags NPT/AI governance, DPRK posture, European LNG, maritime insurance, and Taiwan Strait monitoring. Existing targeted sources reduced recurring patterns but did not eliminate these specialist gaps; revisit after README/branch closeout unless the gaps stay high-significance for several runs.
 
 ---
 

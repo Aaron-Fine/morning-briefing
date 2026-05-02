@@ -285,6 +285,32 @@ class TestValidateAtAGlance:
             _validate_at_a_glance(items, set(), {})
         assert "source distribution anomaly" in caplog.text
 
+    def test_source_distribution_counts_each_outlet_once_per_item(self, caplog):
+        items = [
+            {
+                "tag": "war",
+                "headline": "One",
+                "links": [
+                    {"label": "Repeated: First"},
+                    {"label": "Repeated: Second"},
+                    {"label": "Other: Third"},
+                ],
+            },
+            {
+                "tag": "war",
+                "headline": "Two",
+                "links": [{"label": "Different: First"}],
+            },
+            {
+                "tag": "war",
+                "headline": "Three",
+                "links": [{"label": "Different2: First"}],
+            },
+        ]
+        with caplog.at_level(logging.WARNING):
+            _validate_at_a_glance(items, set(), {})
+        assert "source distribution anomaly" not in caplog.text
+
     def test_verbatim_echo_detection_logged(self, caplog):
         source_data = {"rss": [{"title": "Exact Headline Match"}]}
         items = [{"tag": "tech", "headline": "Exact Headline Match", "links": []}]

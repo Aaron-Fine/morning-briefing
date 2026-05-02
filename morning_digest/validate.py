@@ -177,10 +177,14 @@ def _validate_at_a_glance(
     for item in items:
         if not isinstance(item, dict):
             continue
+        item_sources = set()
         for link in item.get("links") or []:
             label = link.get("label", "")
             # Extract outlet name (format: "Source: Title" or just label)
             source = label.split(":")[0].strip() if ":" in label else label
+            if source:
+                item_sources.add(source)
+        for source in item_sources:
             source_counts[source] = source_counts.get(source, 0) + 1
 
     total = len(items)

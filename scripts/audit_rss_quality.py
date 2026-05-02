@@ -6,11 +6,14 @@ from __future__ import annotations
 import argparse
 import json
 import statistics
+import sys
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from morning_digest.config import load_config
 
@@ -126,8 +129,7 @@ def merge_enrich_metrics(feed_metrics: dict[str, dict], records: list[dict]) -> 
         feed_metrics[source]["enrichment_attempts"] = total
         feed_metrics[source]["success_rate"] = _rate(
             statuses,
-            lambda value: value in {"ok", "normalizer_fallback"}
-            or value in {"cache_hit:ok", "cache_hit:normalizer_fallback"},
+            lambda value: value in {"ok", "cache_hit:ok"},
         )
         feed_metrics[source]["paywall_rate"] = _rate(
             statuses, lambda value: value == "paywall"

@@ -56,7 +56,7 @@ def test_merge_enrich_metrics_keeps_http_separate_from_paywall():
     assert metrics["A"]["http_error_rate"] == pytest.approx(1 / 3)
 
 
-def test_merge_enrich_metrics_tracks_normalizer_fallback_as_success():
+def test_merge_enrich_metrics_tracks_normalizer_fallback_separately_from_success():
     metrics = {"A": {"items": 2, "median_chars": 200, "empty_rate": 0}}
     merge_enrich_metrics(
         metrics,
@@ -65,7 +65,7 @@ def test_merge_enrich_metrics_tracks_normalizer_fallback_as_success():
             {"source": "A", "status": "cache_hit:normalizer_fallback", "native_length": 900},
         ],
     )
-    assert metrics["A"]["success_rate"] == 1.0
+    assert metrics["A"]["success_rate"] == 0.0
     assert metrics["A"]["normalizer_fallback_rate"] == 1.0
 
 

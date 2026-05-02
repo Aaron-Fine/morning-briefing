@@ -238,8 +238,8 @@ class TestResolveDomainConfigs:
                 ]
             }
         )
-        assert list(resolved.keys()) == ["geopolitics", "econ"]
-        assert resolved["geopolitics"]["categories"] == {"custom-cat"}
+        assert list(resolved.keys()) == ["geopolitics_events", "econ"]
+        assert resolved["geopolitics_events"]["categories"] == {"custom-cat"}
 
     def test_falls_back_to_builtin_configs(self):
         resolved = _resolve_domain_configs({})
@@ -766,6 +766,40 @@ class TestCategoryRebalance:
         result, log = _rebalance_categories("geopolitics", desk_result, desk_cfg, rss_items, [])
         assert len(result["items"]) == 2
         assert len(log) == 0
+
+    def test_can_disable_rebalance_per_desk(self):
+        from stages.analyze_domain import _rebalance_categories
+
+        desk_result = {"items": [{"item_id": "x", "category": "non-western"}]}
+        desk_cfg = {
+            "categories": {"non-western", "western-analysis"},
+            "category_rebalance": {"enabled": False},
+        }
+        rss_items = [
+            {"category": "western-analysis", "title": "B", "url": "https://b.com", "source": "B"},
+        ]
+        result, log = _rebalance_categories("geopolitics", desk_result, desk_cfg, rss_items, [])
+        assert result["items"] == [{"item_id": "x", "category": "non-western"}]
+        assert log == []
+
+    def test_category_share_cap_drops_excess_dominant_items(self):
+        from stages.analyze_domain import _rebalance_categories
+
+        desk_result = {
+            "items": [
+                {"item_id": "a", "category": "non-western"},
+                {"item_id": "b", "category": "non-western"},
+                {"item_id": "c", "category": "non-western"},
+                {"item_id": "d", "category": "western-analysis"},
+            ]
+        }
+        desk_cfg = {
+            "categories": {"non-western", "western-analysis"},
+            "category_rebalance": {"enabled": True, "max_category_share": 0.5},
+        }
+        result, log = _rebalance_categories("geopolitics", desk_result, desk_cfg, [], [])
+        assert [item["item_id"] for item in result["items"]] == ["a", "b", "d"]
+        assert any(entry["action"] == "dropped_for_category_share_cap" for entry in log)
 
 
 class TestPerspectiveDesk:

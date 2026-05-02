@@ -10,7 +10,7 @@ Every morning at 6:00 AM MT, this container:
 
 1. **Collects** data from multiple sources:
    - YouTube analysis channels (yt-dlp — transcripts from configured channels, no API key)
-   - RSS feeds (50+ categorized feeds: non-western press, defense/military, geopolitics, AI/tech, economics, energy/materials, science/biotech, legal/institutional, cybersecurity, demographics, and more)
+   - RSS feeds (50+ categorized feeds: non-western press, defense/military, world news, AI/tech, economics, energy/materials, science/biotech, legal/institutional, cybersecurity, demographics, and more)
    - Local news RSS (Cache Valley Daily, Herald Journal)
    - NWS weather (primary) with Open-Meteo fallback, AirNow AQI, NOAA normals/records
    - Finnhub market quotes (SPY, DIA, XAR, XLE)
@@ -22,7 +22,7 @@ Every morning at 6:00 AM MT, this container:
    - **collect** — Fetches all sources (RSS, YouTube transcripts, weather, markets, CFM)
    - **enrich_articles** — Normalizes RSS items to canonical sanitized summaries using native RSS body fields or fetched article text
    - **compress** — Pre-compresses YouTube transcripts to ~400–800 word summaries
-   - **analyze_domain** — Seven specialist desks run in parallel: geopolitics, defense/space, AI/tech, energy/materials, culture/structural, science/biotech, economics
+   - **analyze_domain** — Seven event-analysis desks run in parallel (`geopolitics_events`, defense/space, AI/tech, energy/materials, culture/structural, science/biotech, economics), plus a perspective mini-desk for contested framing and contrarian takes
    - **prepare_*** — Calendar, weather (HTML email-safe chart), spiritual, local news enrichment passes
    - **seams** — Two-turn adversarial review: scan for tensions/absences/assumptions, then synthesize into contested narratives, coverage gaps, key assumptions
    - **cross_domain** — Two-turn editor-in-chief synthesis: plan (editorial decisions) then execute (at-a-glance, deep dives, worth reading)
@@ -59,7 +59,7 @@ graph TD
     collect --> enrich_articles
     enrich_articles --> compress
     compress --> analyze_domain
-    analyze_domain -->|"7 desks in parallel"| prepare["prepare_*"]
+    analyze_domain -->|"8 desks in parallel"| prepare["prepare_*"]
     prepare --> seams
     seams -->|"scan → synthesis"| cross_domain
     cross_domain -->|"plan → execute"| coverage_gaps
@@ -292,8 +292,12 @@ Runtime config is split across:
 
 ```yaml
 desks:
-  - { name: "geopolitics", categories: ["non-western", "substack-independent", "global-south", "western-analysis"] }
-  - { name: "energy_materials", categories: ["energy-materials"] }
+  - { name: "geopolitics_events", categories: ["non-western", "global-south", "western-analysis", "maritime", "dprk-taiwan"] }
+  - { name: "perspective", categories: ["substack-independent", "perspective-diversity"] }
+  - { name: "defense_space", categories: ["defense-mil", "arms-control"] }
+  - { name: "ai_tech", categories: ["ai-tech", "cyber", "ai-governance"] }
+  - { name: "energy_materials", categories: ["energy-materials", "european-energy"] }
+  - { name: "culture_structural", categories: ["culture-structural", "legal-institutional", "demographics"] }
 ```
 
 **`pipeline.stages[].turns.<name>`** — Per-turn model overrides for two-turn stages (`seams`, `cross_domain`). Override `max_tokens`, `temperature`, or `model` for individual turns without changing the stage default.
@@ -306,7 +310,25 @@ desks:
     synthesis: { max_tokens: 5000, temperature: 0.3 }
 ```
 
-**`rss.feeds`** — Feed list with optional `cap` (max items per feed) and `category` for editorial treatment.
+**`rss.feeds`** — Feed list with optional `cap` (max items per feed), `category` for editorial routing, and `health` for source-quality handling.
+
+```yaml
+rss:
+  feeds:
+    - url: https://example.com/feed
+      name: Example Feed
+      cap: 5
+      category: non-western
+      health: active
+```
+
+**`health`** values:
+- `active` (default) — standard handling; empty for >7 days raises a warning
+- `headline_radar` — headlines only; no fetch/browser enrichment attempted; not eligible for deep dives
+- `low_frequency` — empty results over 24–48h are expected; fewer items is normal
+- `enrichment_required` — RSS body is unreliable; fetch (and browser-fetch on failure) is preferred when budget allows
+- `degraded` — currently failing or partially working; included with reduced severity warnings
+- `broken` — skipped at fetch time; auto-promotes to `degraded` when items reappear
 
 **`enrich_articles`** — RSS summary normalization. The stage chooses the best native RSS text first, fetches article HTML only when configured or when native text is too thin, and writes one canonical sanitized `summary` for downstream stages.
 
@@ -321,6 +343,13 @@ enrich_articles:
   cache_failure_backoff_hours: 24
   per_host_concurrency: 2
   per_host_min_interval_ms: 500
+  tier_caps:
+    active: { max_fetches: 10, max_browser_fetches: 3 }
+    low_frequency: { max_fetches: 10, max_browser_fetches: 3 }
+    enrichment_required: { max_fetches: 9999, max_browser_fetches: 30 }
+    headline_radar: { max_fetches: 0, max_browser_fetches: 0 }
+    degraded: { max_fetches: 0, max_browser_fetches: 0 }
+    broken: { max_fetches: 0, max_browser_fetches: 0 }
 ```
 
 Per-feed overrides live under `rss.feeds[].enrich`:
@@ -364,13 +393,18 @@ The digest applies different editorial treatment to each category:
 | `non-western` | "What's missing" layer — flag when framing diverges from wire coverage |
 | `western-analysis` | "What it means" — interpretation and framing |
 | `defense-mil` | Defense and military news |
-| `substack-independent` | Geopolitics and independent analysis |
+| `substack-independent` | Independent commentary / Substack perspectives (routed to **perspective** desk) |
 | `ai-tech` | AI, LLMs, and software |
+| `ai-governance` | AI policy, compute governance, frontier-model regulation |
 | `econ-trade` | Economics and trade |
 | `global-south` | Global South perspective |
-| `perspective-diversity` | "Stress test" layer — surface only when contradicting consensus |
+| `perspective-diversity` | Contrarian and diversity-of-opinion sources (routed to **perspective** desk) |
 | `cyber` | Cybersecurity |
 | `energy-materials` | Physical substrate: power, raw materials, grid, industrial capacity |
+| `european-energy` | European LNG, gas markets, and EU energy policy |
+| `arms-control` | NPT, nuclear governance, IAEA, arms-control institutions |
+| `maritime` | Shipping, maritime security, insurance risk, strait disruptions |
+| `dprk-taiwan` | DPRK and Taiwan Strait security |
 | `culture-structural` | Institutional shifts — not entertainment or discourse-chasing |
 | `science-biotech` | Frontier science and biotech with geopolitical/economic implications |
 | `legal-institutional` | Legal analysis, Supreme Court, national security law |
@@ -450,7 +484,7 @@ Costs vary by the providers and models configured in `config/`.
 | Stage | Input | Output | Est. cost |
 |-------|-------|--------|-----------|
 | compress (per transcript) | ~5K tokens | ~1.5K tokens | depends on configured model |
-| analyze_domain (×7 desks) | ~30K tokens each | ~6K tokens each | depends on configured model |
+| analyze_domain (×8 desks) | ~30K tokens each | ~6K tokens each | depends on configured model |
 | seams (2 turns) | ~12K tokens | ~4K tokens | depends on configured model |
 | cross_domain (2 turns) | ~25K tokens | ~12K tokens | depends on configured model |
 | coverage_gaps | ~15K tokens | ~3K tokens | depends on configured model |
@@ -474,7 +508,7 @@ morning-digest/
 ├── stages/
 │   ├── collect.py           # Fetches all sources
 │   ├── compress.py          # YouTube transcript compression
-│   ├── analyze_domain.py    # Seven specialist domain passes (parallel)
+│   ├── analyze_domain.py    # Eight specialist domain passes (parallel)
 │   ├── prepare_calendar.py  # Calendar enrichment
 │   ├── prepare_weather.py   # Weather enrichment + HTML weather block
 │   ├── prepare_spiritual_weekly.py # Weekly study-guide artifact
@@ -498,6 +532,7 @@ morning-digest/
 │   └── economic_calendar.py # Economic events
 ├── prompts/                 # Prompt files for LLM stages
 │   ├── analyze_domain_system.md # Shared specialist desk prompt
+│   ├── perspective_system.md # Perspective mini-desk prompt (contested framing)
 │   ├── seam_annotations.md  # Per-item seam annotation prompt
 │   ├── seam_candidates.md   # Broad seam candidate scan prompt
 │   ├── prepare_spiritual_weekly.md # Weekly spiritual artifact prompt
@@ -517,7 +552,9 @@ morning-digest/
 │   ├── validate.py          # URL validation + HTML sanitization (Security Layer)
 │   └── sanitize.py          # HTML sanitizer for deep dive bodies
 ├── scripts/
-│   └── validate_new_feeds.py  # One-off feed URL validator
+│   ├── validate_new_feeds.py  # One-off feed URL validator (supports --new-only)
+│   ├── audit_rss_quality.py   # Per-feed body-length and fallback-rate audit
+│   └── source_health.py       # Per-run source-health artifact and CLI monitor
 ├── templates/
 │   └── email_template.py    # Jinja2 HTML email template
 ├── output/                  # Generated at runtime (volume-mounted in Docker)
@@ -526,7 +563,9 @@ morning-digest/
 │   ├── digest.log           # Pipeline log (30-day rotation)
 │   └── artifacts/
 │       └── YYYY-MM-DD/      # Per-run JSON artifacts for each stage
-├── tests/                   # 780+ tests
+│           ├── collect_diagnostics.json  # Collect-stage health (ok_empty/degraded/failed)
+│           ├── source_health.json        # Per-feed status, last-seen, and transitions
+├── tests/                   # 980+ tests
 │   ├── fixtures/            # JSON test fixtures
 │   ├── test_contracts.py    # Tag vocabulary sync across all surfaces
 │   ├── test_seams_two_turn.py

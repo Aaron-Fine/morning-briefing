@@ -1,7 +1,7 @@
 """Stage: analyze_domain — Domain-specific analytical passes.
 
 Runs seven focused LLM analysis passes on filtered subsets of raw_sources:
-  1. geopolitics       — world news, conflict, non-western + western-analysis + substack
+  1. geopolitics_events — world news, conflict, non-western + western-analysis
   2. defense_space     — defense, military, missile defense, space
   3. ai_tech           — AI/LLMs, cybersecurity, consumer tech
   4. energy_materials  — power, raw materials, grid, industrial capacity
@@ -14,7 +14,7 @@ source content is delimited with <untrusted_sources> tags).
 
 Input:  context["raw_sources"], context["compressed_transcripts"]
 Output: {"domain_analysis": {
-    "geopolitics": {"items": [...]},
+    "geopolitics_events": {"items": [...]},
     "defense_space": {"items": [...]},
     "ai_tech": {"items": [...]},
     "energy_materials": {"items": [...]},
@@ -37,6 +37,7 @@ import hashlib
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
+from math import ceil
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -60,12 +61,14 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _DOMAIN_CONFIGS = {
-    "geopolitics": {
+    "geopolitics_events": {
         "label": "Geopolitics & World News",
         "categories": {
             "non-western",
             "western-analysis",
             "global-south",
+            "maritime",
+            "dprk-taiwan",
         },
         "transcript_channels": {"Beau of the Fifth Column", "Perun"},
         "tags": "war|domestic|econ",
@@ -132,7 +135,7 @@ _DOMAIN_CONFIGS = {
     },
     "defense_space": {
         "label": "Defense & Space",
-        "categories": {"defense-mil"},
+        "categories": {"defense-mil", "arms-control"},
         "transcript_channels": {"Perun"},
         "tags": "defense|space",
         "tag_labels": "Defense|Space",
@@ -172,7 +175,7 @@ _DOMAIN_CONFIGS = {
     },
     "ai_tech": {
         "label": "AI & Technology",
-        "categories": {"ai-tech", "cyber"},
+        "categories": {"ai-tech", "cyber", "ai-governance"},
         "transcript_channels": {"Theo - t3.gg", "Folding Ideas"},
         "tags": "ai|tech|cyber",
         "tag_labels": "AI|Technology|Cyber",
@@ -213,7 +216,7 @@ _DOMAIN_CONFIGS = {
     },
     "energy_materials": {
         "label": "Energy & Materials",
-        "categories": {"energy-materials"},
+        "categories": {"energy-materials", "european-energy"},
         "transcript_channels": set(),
         "tags": "energy|econ",
         "tag_labels": "Energy|Economy",
@@ -727,6 +730,8 @@ def _resolve_domain_configs(config: dict) -> dict[str, dict]:
         if not isinstance(entry, dict):
             continue
         name = entry.get("name")
+        if name == "geopolitics":
+            name = "geopolitics_events"
         if name not in _DOMAIN_CONFIGS:
             log.warning(f"analyze_domain: unknown desk in config.desks: {name!r}")
             continue
@@ -735,6 +740,8 @@ def _resolve_domain_configs(config: dict) -> dict[str, dict]:
         categories = entry.get("categories")
         if categories is not None:
             cfg["categories"] = set(categories)
+        if "category_rebalance" in entry:
+            cfg["category_rebalance"] = deepcopy(entry.get("category_rebalance") or {})
         resolved[name] = cfg
 
     return resolved or deepcopy(_DOMAIN_CONFIGS)
@@ -753,7 +760,8 @@ def _rebalance_categories(
     prepend the highest-priority raw item from that category to the desk output.
     """
     categories = desk_cfg.get("categories", set())
-    if not categories:
+    rebalance_cfg = desk_cfg.get("category_rebalance", {}) or {}
+    if not categories or not rebalance_cfg.get("enabled", True):
         return desk_result, rebalance_log
 
     items = desk_result.get("items", [])
@@ -809,6 +817,31 @@ def _rebalance_categories(
             f"analyze_domain[{desk_key}]: category rebalance prepended item from {cat}"
         )
 
+    max_share = float(rebalance_cfg.get("max_category_share", 1.0) or 1.0)
+    if 0 < max_share < 1 and items:
+        max_per_category = max(1, ceil(len(items) * max_share))
+        kept = []
+        category_counts: dict[str, int] = {}
+        for item in items:
+            cat = item.get("category", "")
+            if not cat:
+                kept.append(item)
+                continue
+            if category_counts.get(cat, 0) >= max_per_category:
+                rebalance_log.append(
+                    {
+                        "desk": desk_key,
+                        "category": cat,
+                        "action": "dropped_for_category_share_cap",
+                        "item_id": item.get("item_id", ""),
+                        "max_category_share": max_share,
+                    }
+                )
+                continue
+            category_counts[cat] = category_counts.get(cat, 0) + 1
+            kept.append(item)
+        items = kept
+
     desk_result["items"] = items
     return desk_result, rebalance_log
 
@@ -853,15 +886,18 @@ def run(
 
     # Category rebalance: ensure low-volume categories get representation
     rebalance_log = []
-    for desk_key in ("geopolitics", "culture_structural"):
-        if desk_key in domain_analysis:
-            domain_analysis[desk_key], rebalance_log = _rebalance_categories(
-                desk_key,
-                domain_analysis[desk_key],
-                domain_configs.get(desk_key, {}),
-                rss_items,
-                rebalance_log,
-            )
+    for desk_key in domain_configs:
+        if desk_key not in domain_analysis:
+            continue
+        if len(domain_configs.get(desk_key, {}).get("categories", set())) <= 1:
+            continue
+        domain_analysis[desk_key], rebalance_log = _rebalance_categories(
+            desk_key,
+            domain_analysis[desk_key],
+            domain_configs.get(desk_key, {}),
+            rss_items,
+            rebalance_log,
+        )
 
     # Extract perspective desk output into its own key
     perspective_output = domain_analysis.pop("perspective", {})
