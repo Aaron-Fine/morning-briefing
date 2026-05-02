@@ -388,6 +388,49 @@ def test_tiered_budget_skips_headline_radar_and_broken(tmp_path):
     assert tier_summary["outcomes"]["headline_radar"]["skipped_by_cap"] >= 1
 
 
+def test_enrichment_required_tier_uncapped_by_default(tmp_path):
+    """An enrichment_required feed must bypass max_fetches_per_run.
+
+    Regression for the case where ``tier_caps`` is absent from the config
+    (e.g., a stripped or programmatically-built config). The in-code default
+    for the ``enrichment_required`` tier must remain effectively uncapped,
+    not silently inherit ``max_fetches_per_run``.
+    """
+    feeds = [
+        {
+            "name": "Substack",
+            "url": "x",
+            "health": "enrichment_required",
+            "enrich": {"strategy": "auto"},
+        }
+    ]
+    items = [
+        {"source": "Substack", "url": f"https://s/{i}", "summary": ""}
+        for i in range(5)
+    ]
+    cfg = _config(
+        tmp_path,
+        feeds=feeds,
+        # Deliberately tight global cap, and NO tier_caps in config.
+        enrich={"max_fetches_per_run": 2},
+    )
+    cfg["enrich_articles"].pop("tier_caps", None)
+
+    with patch("stages.enrich_articles.fetch.fetch_article_html") as http_fetch:
+        http_fetch.return_value.status = "http_error"
+        http_fetch.return_value.http_status = 500
+        http_fetch.return_value.html = ""
+        http_fetch.return_value.error = "boom"
+        out = run({"raw_sources": {"rss": items}}, cfg)
+
+    statuses = [record["status"] for record in out["enrich_articles"]["records"]]
+    # All 5 items needed a fetch; none should be capped despite max_fetches_per_run=2.
+    assert statuses.count("skipped_fetch_cap") == 0
+    tier_summary = out["enrich_articles"]["tier_summary"]
+    assert tier_summary["http_fetch"]["enrichment_required"]["allowed"] == 5
+    assert tier_summary["http_fetch"]["enrichment_required"]["skipped_by_cap"] == 0
+
+
 def test_rejects_meta_llm_summary_for_long_source(tmp_path):
     feeds = [{"name": "A", "url": "x", "enrich": {"strategy": "rss_only"}}]
     item = {

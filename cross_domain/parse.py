@@ -516,8 +516,18 @@ def _extract_ngrams(text: str, window: int = 10) -> set[str]:
     return {" ".join(words[i:i + window]) for i in range(len(words) - window + 1)}
 
 
+_OVERLAP_DOWNGRADE_MIN_WINDOWS = 3
+
+
 def _downgrade_overlap_depth(result: dict) -> dict:
-    """Downgrade source_depth for deep dives reusing ≥10-word spans from at_a_glance."""
+    """Downgrade source_depth for deep dives that substantively reuse at_a_glance prose.
+
+    Requires ``_OVERLAP_DOWNGRADE_MIN_WINDOWS`` distinct 10-word spans to overlap
+    before triggering — a single shared phrase (e.g. boilerplate journalistic
+    framing like "Russia launched a large-scale missile attack") is not enough
+    evidence of duplication and would falsely downgrade legitimately-deeper
+    coverage.
+    """
     glance_texts = []
     for item in result.get("at_a_glance", []):
         facts = item.get("facts", "")
@@ -542,7 +552,7 @@ def _downgrade_overlap_depth(result: dict) -> dict:
         text = f"{dive.get('headline', '')} {body}"
         dive_ngrams = _extract_ngrams(text)
         overlap = dive_ngrams & glance_ngrams
-        if overlap:
+        if len(overlap) >= _OVERLAP_DOWNGRADE_MIN_WINDOWS:
             original = dive.get("source_depth", "")
             downgrade_map = {
                 "widely-reported": "corroborated",

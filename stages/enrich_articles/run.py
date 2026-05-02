@@ -104,10 +104,16 @@ def run(
         )
 
     tier_caps = enrich_cfg.get("tier_caps", {})
+    # enrichment_required feeds are intentionally uncapped (see CLAUDE.md): the
+    # whole point of the tier is to bypass the global cap for sources that
+    # cannot publish a usable summary in their RSS body. The in-code default
+    # must reflect that intent so a stripped/minimal config doesn't silently
+    # downgrade them to max_fetches_per_run.
+    UNCAPPED = 9999
     default_tier_caps = {
         "active": {"max_fetches": max_fetches, "max_browser_fetches": max_browser_fetches},
         "low_frequency": {"max_fetches": max_fetches, "max_browser_fetches": max_browser_fetches},
-        "enrichment_required": {"max_fetches": max_fetches, "max_browser_fetches": max_browser_fetches},
+        "enrichment_required": {"max_fetches": UNCAPPED, "max_browser_fetches": UNCAPPED},
         "headline_radar": {"max_fetches": 0, "max_browser_fetches": 0},
         "degraded": {"max_fetches": 0, "max_browser_fetches": 0},
         "broken": {"max_fetches": 0, "max_browser_fetches": 0},

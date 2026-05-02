@@ -731,6 +731,13 @@ def _resolve_domain_configs(config: dict) -> dict[str, dict]:
             continue
         name = entry.get("name")
         if name == "geopolitics":
+            log.warning(
+                "analyze_domain: desk name 'geopolitics' is deprecated; "
+                "rename to 'geopolitics_events' in config.desks. The "
+                "desk has been split into 'geopolitics_events' and "
+                "'perspective' — using 'geopolitics' silently routes to "
+                "events only and skips perspective."
+            )
             name = "geopolitics_events"
         if name not in _DOMAIN_CONFIGS:
             log.warning(f"analyze_domain: unknown desk in config.desks: {name!r}")

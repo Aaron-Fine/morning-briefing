@@ -908,7 +908,9 @@ class TestOverlapDepthDowngrade:
     def test_downgrades_when_phrase_overlaps_at_a_glance(self):
         from cross_domain.parse import _downgrade_overlap_depth
 
-        shared = "one two three four five six seven eight nine ten"
+        # 12 words → 3 distinct 10-word windows, which clears the
+        # _OVERLAP_DOWNGRADE_MIN_WINDOWS threshold.
+        shared = "one two three four five six seven eight nine ten eleven twelve"
         result = {
             "at_a_glance": [
                 {
@@ -933,7 +935,38 @@ class TestOverlapDepthDowngrade:
         downgrades = out["_source_depth_downgrades"]
         assert len(downgrades) == 1
         assert downgrades[0]["reason"] == "phrase_overlap_with_at_a_glance"
-        assert downgrades[0]["overlap_count"] >= 1
+        assert downgrades[0]["overlap_count"] >= 3
+
+    def test_single_window_overlap_does_not_downgrade(self):
+        """One shared 10-word phrase is below the threshold and must not downgrade."""
+        from cross_domain.parse import _downgrade_overlap_depth
+
+        # Exactly 10 words → exactly 1 window. Common journalistic boilerplate
+        # like this should not trigger a downgrade on its own.
+        shared = "russia launched a large scale missile attack on ukraine today"
+        result = {
+            "at_a_glance": [
+                {
+                    "item_id": "a1",
+                    "headline": "Headline A",
+                    "facts": shared,
+                    "source_depth": "corroborated",
+                    "links": [{"url": "https://a.com/1"}, {"url": "https://b.com/2"}],
+                }
+            ],
+            "deep_dives": [
+                {
+                    "headline": "Deep A",
+                    "body": f"<p>{shared}, with extensive new sourcing and original analysis "
+                            "from independent reporters working on the ground in kyiv</p>",
+                    "source_depth": "corroborated",
+                    "further_reading": [{"url": "https://c.com/3"}, {"url": "https://d.com/4"}],
+                }
+            ],
+        }
+        out = _downgrade_overlap_depth(result)
+        assert out["deep_dives"][0]["source_depth"] == "corroborated"
+        assert out["_source_depth_downgrades"] == []
 
     def test_no_downgrade_without_overlap(self):
         from cross_domain.parse import _downgrade_overlap_depth
@@ -964,7 +997,8 @@ class TestOverlapDepthDowngrade:
     def test_widely_reported_downgraded_to_corroborated_on_overlap(self):
         from cross_domain.parse import _downgrade_overlap_depth
 
-        shared = "alpha beta gamma delta epsilon zeta eta theta iota kappa"
+        # 12 words → 3 windows, clears the overlap threshold.
+        shared = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
         result = {
             "at_a_glance": [
                 {

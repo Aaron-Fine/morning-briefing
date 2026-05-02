@@ -828,3 +828,24 @@ class TestPerspectiveDesk:
             assert len(result["perspective_framing"]["items"]) == 1
             assert "domain_analysis" not in result["perspective_framing"]
             assert "domain_analysis" in result
+
+    def test_perspective_desk_handles_zero_qualifying_items(self):
+        """min_items=0: empty perspective output must be tolerated, not error."""
+        with patch("stages.analyze_domain.call_llm") as mock_llm:
+            mock_llm.return_value = {"items": []}
+            context = {
+                "raw_sources": {
+                    "rss": [
+                        {"category": "substack-independent", "title": "T", "url": "https://t.com", "source": "S"}
+                    ]
+                },
+                "compressed_transcripts": [],
+            }
+            config = {
+                "llm": {"provider": "fireworks"},
+                "desks": [{"name": "perspective", "categories": ["substack-independent"]}],
+            }
+            result = run(context, config)
+            assert "perspective_framing" in result
+            assert result["perspective_framing"].get("items", []) == []
+            assert result["domain_analysis_failures"] == []
