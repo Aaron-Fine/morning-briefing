@@ -791,3 +791,526 @@ Concrete sequencing:
 4. If §B.2 continuity is later pursued, embeddings of *entity descriptions* (rolled forward across days) become a natural fit for "is today's `Iran` the same `Iran` node as yesterday's." That's a different system from the per-day index and should be designed then, not now.
 
 The buzzword path — "add a vector DB, retrieve top-k articles into every prompt" — is the cargo-cult version. The earned-its-keep path is one optional edge type in a graph that already has a more important edge type. Build the more important edge type first.
+
+## Appendix D: Architectural inspiration from Intelligence Community software & tradecraft
+
+### Framing
+
+The IC has spent decades on the exact problem Morning-Digest solves at hobby
+scale: fuse multi-source open material into a daily product with calibrated
+claims, sourcing, and judgment. The literature is large, mostly
+public, and mostly *not* worth importing as software — DCGS-class systems,
+Storm/RabbitMQ orchestrators, classification-marking pipelines, and
+multi-INT taxonomies all assume a battalion, not a person, and the same is
+true for OpenCTI/MISP/STIX wire formats. **The IC concepts that matter at
+this scale are tradecraft, not infrastructure**: calibrated estimative
+language, BLUF/tearline structure, sourcing tiers, structured analytic
+techniques (ACH, key-assumptions check, devil's advocate), and explicit
+Priority Intelligence Requirements. Each of those is small (tens to a few
+hundred lines) and slots onto a stage that already exists. The big-system
+inspirations are NiFi-style provenance (already partially present in
+artifacts), Sigma/YARA-style declarative rules (a reasonable fit for
+`anomaly.py`), and the *workflow* idioms of link-analysis tools like
+Maltego (UI-only — irrelevant here). Most of this appendix says SKIP or
+ADAPT; the WINs are concentrated in §D.3.
+
+This appendix deliberately does not re-derive ground covered earlier. Graph
+substrate is Appendix B; per-day embeddings are Appendix C; the
+LLM-vs-deterministic audit is the first appendix. The discipline applied
+to those — say NO when the data isn't shaped for it, say WIN only when the
+current code visibly strains — is applied here too.
+
+### D.1 Note on what was already inspected
+
+To avoid asserting things about code I didn't read, the verdicts below cite
+specific files and lines. The pipeline today is:
+`collect → enrich_articles → compress → analyze_domain → seams →
+cross_domain (plan→execute) → coverage_gaps → assemble → anomaly →
+briefing_packet → send`
+(`config/pipeline.yaml:16-97`). The desks are seven topical analyst passes
+(`config/pipeline.yaml:98-148`, `stages/analyze_domain.py:63-388`). Sourcing
+already has a 2-tier `reliability` field per feed
+(`config/sources.yaml:45,77,254` — `primary-reporting`,
+`analysis-opinion`, `institutional-analysis`) which is surfaced into desk
+prompts as a bracketed annotation
+(`stages/analyze_domain.py:514-515`, `stages/seams.py:173-174`) but is
+*not* propagated downstream into cross_domain or assemble. Hedging
+discipline is already partially encoded in `analyze_domain`'s
+`_SHARED_RULES` (`stages/analyze_domain.py:452-454`) and
+`cross_domain_system.md:9-11`, and a regex blocks four hedged seam openings
+(`stages/assemble.py:52-56,161-164`). No stage today emits a numeric or
+labeled confidence band; `seam_annotations` has the only structured
+confidence field (`high|medium|low`, `prompts/seam_annotations.md:18`).
+There is no PIR config — interest priorities are hardcoded as the literal
+strings "war", "ai", "defense" in three places
+(`config/pipeline.yaml:205-208,219-222`, `cross_domain/parse.py:150`) and as
+keyword lists in `anomaly.py:43-48` and `cross_domain/parse.py:40-148`.
+There is no devil's-advocate stage; `seams.py` does adversarial review on
+*facts* (framing/causal/magnitude divergence between sources) but never
+attacks today's draft. There is no I&W register beyond `coverage_gaps`'
+implicit "what's missing" prompt.
+
+### D.2 Software-architecture patterns
+
+#### Apache NiFi (NSA Niagarafiles) — provenance — **ADAPT, partial**
+
+NiFi's load-bearing idea is **per-record provenance**: every flowfile
+carries a lineage of every processor that touched it, with timestamps and
+attributes, queryable end-to-end. Morning-Digest already does a folk
+version of this — the run writes per-stage artifacts to
+`output/artifacts/YYYY-MM-DD/*.json` and `enrich_articles.json` records
+per-item provenance/status/tier/before-after lengths
+(`CLAUDE.md` enrichment notes; `stages/enrich_articles/`). The gap is
+**audit at the briefing edge**: nothing today verifies that every
+factual claim that lands in `digest_json["at_a_glance"][*].facts`,
+`digest_json["deep_dives"][*].body`, or
+`digest_json["worth_reading"][*].description` is supported by a URL that
+appears in `raw_sources` *and* survived `_validated_output`'s `url_known`
+filter (`cross_domain/parse.py:599-629`). That filter does its job at the
+links level, but a deep-dive *body paragraph* can assert "Iran reportedly
+struck a tanker" with no surviving link to evidence — the body is opaque
+to the URL audit. **Verdict: ADAPT** — write a 50-line
+`stages/audit_provenance.py` post-pass that scans deep-dive bodies for
+proper-noun claims (NER-lite, regex on capitalized 2+ word spans) and
+flags any unanchored claim, similar to the `_downgrade_overlap_depth`
+pattern at `cross_domain/parse.py:522-582`. Don't import NiFi itself —
+the NSA repo is JVM/Storm machinery and the gap here is one missing
+audit, not a flow framework.
+
+#### Apache Metron / Spot — security analytics pipelines — **SKIP**
+
+Both are batch pipelines for SIEM-style telemetry: ingest → parse →
+enrich → score → store. Morning-Digest is already this shape
+(`config/pipeline.yaml:16-97`). The interesting Metron primitives —
+threat intel feed integration, Stellar-the-DSL, Storm topology — solve
+SOC-scale problems Morning-Digest doesn't have. SKIP.
+
+#### STIX 2.1 data model — **ADAPT one idea, SKIP the wire format**
+
+STIX is a JSON schema for cyber-threat info: SDOs (campaign, threat-actor,
+malware, indicator), SROs (`uses`, `targets`, `attributed-to`),
+sightings, confidence, kill-chain phases. The wire format is irrelevant
+here — we are not exchanging with TAXII servers. The *one* idea worth
+stealing is **typed relationships as first-class objects with their own
+properties** (confidence, first-seen, last-seen). Morning-Digest's
+`connection_hooks` (`stages/analyze_domain.py:406`) and
+`cross_domain_connections` (`prompts/cross_domain_system.md:67-73`,
+`prompts/cross_domain_plan.md:39-47`) are already trying to be SROs but
+they're stored as untyped string blobs inside item dicts. The Appendix
+B.1+B.2 graph substrate is the right place for this — when (if) that
+graph is built, give edges typed predicates (`mentions`, `targets`,
+`opposes`, `funded_by`, `regulates`) drawn from a small vocabulary
+rather than free-form `theme` strings. **Don't import STIX schemas.**
+A 20-entry vocabulary of edge types beats a 200-entry STIX taxonomy at
+this scale; STIX's surface area is the wrong tradeoff for one user.
+
+#### Sigma / YARA — pattern-as-rule — **APPLY**
+
+Sigma rules are YAML-encoded detection patterns (logsource + selection +
+condition); YARA rules are byte-pattern matches with metadata. The
+load-bearing idea is **declarative, versioned, reviewable rules** stored
+as files separate from code. `anomaly.py` is structurally a Sigma
+ruleset written as imperative Python: five hardcoded checks
+(`stages/anomaly.py:443-463`) with parameters scattered through
+`config/pipeline.yaml:218-257` and code constants
+(`stages/anomaly.py:26-48`). It works, but adding a sixth check today
+means editing Python in two places. **Verdict: APPLY** — when the next
+two anomaly checks get added (say "primary tag dropped from at-a-glance
+3+ days running" and "deep dive headline reuses yesterday's headline
+verbatim"), refactor to a `config/anomaly_rules.yaml` Sigma-shaped file
+where each rule has `id`, `description`, `severity`, and a small Python
+function reference. ~80 lines of refactor in `anomaly.py`, gates added
+without code changes thereafter. Lower priority than §D.3 wins; do it
+opportunistically.
+
+#### OpenCTI / MISP — **SKIP**
+
+Both are multi-org STIX-aware threat-intel platforms. They solve sharing
+and federation; you have no peers and no sharing requirement. Their
+internal data models are 5-10x richer than this pipeline needs and
+their UIs are ops-grade. SKIP entirely.
+
+#### Maltego / Palantir Gotham — link-analysis UI — **SKIP for now**
+
+The interesting concept is the *workflow*: pivot off an entity, expand
+neighbors, mark interesting nodes, save the canvas as an investigation.
+Morning-Digest delivers a *rendered email* to a human reader, not an
+interactive canvas. If §B.2 continuity ever gets built and the user
+wants to spelunk the entity graph, a tiny PyVis or Cytoscape-JS view
+over the daily graph would deliver this — but it's a feature waiting on
+the substrate. SKIP today.
+
+#### ELK / OpenSearch + Kibana, Grafana — **SKIP for the briefing, MAYBE for ops**
+
+The briefing is conceptually a dashboard already (it has at-a-glance,
+deep dives, weather, markets, calendar — same shape as a Grafana page).
+Re-implementing it on top of Kibana would lose the email-render path that
+is the whole point. The one place a real dashboard would help is *ops*:
+`scripts/source_health.py` and the run-meta artifacts
+(`stages/briefing_packet.py:118-124`) are screaming for a Grafana
+panel showing per-feed health, stage timings, and coverage-gap recurrence
+across weeks. **Verdict: MAYBE for ops only** — and even then, a plain
+HTML page generated by a 50-line script that aggregates
+`output/artifacts/*/source_health.json` and
+`output/coverage_gaps_history.jsonl` is probably enough. Don't add
+Prometheus/Grafana for one user.
+
+#### DCGS / TAC / GETS — **SKIP, architectural inspiration only**
+
+These are federated multi-INT systems built around classification,
+need-to-know, sensitive-source protection, and provenance for legal
+chain-of-custody. The user is one person reading their own digest. SKIP.
+
+#### Recorded Future / Mandiant / Flashpoint output style — **APPLY**
+
+Worth imitating: numbered key takeaways (BLUF), inline footnoted
+sources, confidence-band tags (high/medium/low) next to each claim,
+explicit "we did not find evidence of X" negative findings, an
+**indicators-to-watch** section. Morning-Digest already partly does this
+— `analyze_domain` requires "what to watch for"
+(`prompts/analyze_domain_system.md` via `_SHARED_RULES`,
+`stages/analyze_domain.py:455`), and deep dives are required to
+"end with specific indicators to watch"
+(`prompts/cross_domain_system.md:29`,
+`prompts/cross_domain_execute.md:33`). Confidence bands and footnoted
+inline sourcing are not yet present. See §D.3 (calibrated uncertainty)
+for the concrete proposal.
+
+### D.3 Tradecraft / methodology patterns — most of the WINs live here
+
+#### Calibrated estimative language (Sherman Kent / ICD 203) — **WIN**
+
+LLMs hedge softly by default ("could," "may," "potentially," "appears
+to") in ways that read like calibrated uncertainty but aren't —
+nothing is anchored to a probability band. The pipeline's response to
+this today is a partial blocklist: `_SHARED_RULES`
+(`stages/analyze_domain.py:452-454`) tells the desk model not to use
+"it remains to be seen / only time will tell / the situation is fluid";
+`cross_domain_system.md:9-11` repeats it; `assemble.py:52-56` regex-blocks
+four hedged seam openings. That catches the worst phrases and ignores the
+rest. The Kent ladder ("almost certain ≥95%, very likely 80-95%, likely
+60-80%, roughly even 40-60%, unlikely 20-40%, very unlikely 5-20%, almost
+no chance ≤5%") is the canonical reference (ICD 203, "Analytic
+Standards"). **Verdict: WIN.** Two-stage fix:
+
+1. **Demand a band tag where uncertainty is asserted.** Extend the
+   `at_a_glance` and `deep_dives` schema with an optional
+   `estimative_confidence: high|medium|low|null` field
+   (`prompts/cross_domain_execute.md:43-65`,
+   `prompts/cross_domain_system.md:46-58`,
+   normalized in `cross_domain/parse.py:_validated_output`). Where the
+   `analysis` field contains a forward-looking claim ("this likely
+   forces…", "expect X within…"), the model must populate the field.
+   Render it as an inline tag in the email
+   (`templates/email_template.py:108`-area).
+2. **Lint hedge usage at assemble time.** Add ~30 lines to
+   `stages/assemble.py` that scan `facts`, `analysis`, and deep-dive
+   body for the standard hedging vocabulary ("could", "may", "might",
+   "possibly", "potentially", "perhaps", "suggests that") and require
+   each occurrence to be co-located within ~80 chars of either an
+   attribution ("X said", "according to Y") or a band tag. Items that
+   fail land in `assemble_contract_issues` (already present at
+   `stages/assemble.py:285-302`) and are surfaced in the digest's
+   diagnostics or anomaly report. This is the *highest ROI single change
+   in the appendix*: ~30 lines of post-processing, no new model calls,
+   sharply better epistemic discipline. Do not let the lint fail the
+   pipeline — log and surface.
+
+The seam annotations already carry `confidence: high|medium|low`
+(`prompts/seam_annotations.md:18`,
+`stages/seams.py:368-370,440-447`); standardize on the same vocabulary
+so renderers and downstream stages can treat all confidence the same way.
+
+#### BLUF / tearline structure — **PARTIAL → tighten**
+
+The briefing follows BLUF in spirit (At a Glance → Deep Dives → Coverage
+Gaps → Week Ahead) but the *individual items* don't. A canonical
+intel-product item leads with the key judgment, then supporting facts,
+then context. `analyze_domain`'s schema is `headline → facts → analysis`
+(`stages/analyze_domain.py:402-404`) — the "facts then analysis" order
+is the inverse of BLUF; the analytical *judgment* arrives second. The
+template surfaces this as `Sources / Analysis / Thread` voice labels
+(`templates/email_template.py:108`), which is honest about the structure
+but not BLUF. **Verdict: PARTIAL.** Two cheap moves:
+
+1. Add a `bottom_line` field to the desk schema (1 sentence, the lead
+   judgment) and render it bolded above `Sources` in the template. ~15
+   lines across `stages/analyze_domain.py:402-411`,
+   `cross_domain/parse.py`, and `templates/email_template.py:104-111`.
+2. For deep dives, require the first paragraph to be the BLUF and the
+   `why_it_matters` callout to be the tearline summary — the template
+   already renders `why_it_matters` in a callout box
+   (`templates/email_template.py:189-194`); the field exists; it just
+   needs the prompt to enforce it (`prompts/cross_domain_execute.md:27-36`
+   already says "what happened → why it matters → what to watch for"
+   but in the *body*; require the **first sentence** of body to be the
+   judgment).
+
+This is a writing-style change with one schema field and one prompt
+edit. ~20 lines. Worth doing.
+
+#### Analysis of Competing Hypotheses (ACH) — **PARTIAL → already mostly mapped onto seams**
+
+Heuer's ACH is the standard SAT for adjudicating among rival
+explanations: list hypotheses, list evidence, score consistency, prefer
+the hypothesis least disconfirmed. `seams.py`'s `causal_divergence` and
+`framing_divergence` types
+(`stages/seams.py:37-43`, `prompts/seam_annotations.md:23-30`) capture
+the *evidence-of-disagreement* layer of ACH but not the
+*scoring-against-hypotheses* layer. The output is "sources A and B
+disagree about cause," not "of three candidate causal mechanisms,
+mechanism 2 is least disconfirmed by available reporting." **Verdict:
+PARTIAL.** Building real ACH is not worth it — Heuer's matrix only pays
+off when you have ≥3 hypotheses, ≥6 evidence items, and analytical time
+on the order of hours. At one user × ten minutes of reading × ~50
+items/day, the existing seam framing captures what an LLM will reliably
+produce. **What to do:** add an explicit `competing_hypotheses` field
+to the **deep_dive** schema (1-3 short hypothesis strings, each with one
+`disconfirming_evidence` excerpt). This shows up in deep dives only —
+where the time budget exists — not at-a-glance items. ~25 lines across
+schema, prompt, and template.
+
+#### Structured Analytic Techniques — Key Assumptions Check, Indicators List, Devil's Advocacy — **MIXED**
+
+- **Key Assumptions Check.** The `seam_annotations` schema explicitly
+  forbids it (`prompts/seam_annotations.md:72`: "Do not use
+  `embedded_premise`. Assumption tracking is out of scope."). That was
+  a deliberate scope decision. Reversing it would require its own
+  stage; the LLM-tradecraft fit is OK but "what does today's coverage
+  *assume* that should be checked?" is a notoriously low-yield prompt
+  in practice — models hallucinate trivia like "assumes the journalist
+  is reporting accurately." **SKIP unless requested.**
+- **Indicators List / I&W.** Each desk and deep dive already ends with
+  "what to watch for" (`stages/analyze_domain.py:455`,
+  `prompts/cross_domain_system.md:29`). What's missing is the **register**
+  — the same indicator should accumulate across days so "watch for
+  Hormuz closure" appearing on day 1, day 4, and day 9 becomes a flag
+  on day 9. **Verdict: MAYBE WIN** — ~60 lines: append today's
+  indicators to `output/indicators_history.jsonl`, load the last 14
+  days at the start of `cross_domain.run`, surface "indicators recurring
+  ≥3 times in last 14 days" as an explicit input to the planning
+  prompt. Cheaper if §B.2 continuity is built; standalone if not.
+- **Devil's Advocacy / Red Team.** No stage today attacks the draft.
+  See dedicated entry below.
+
+#### Devil's-advocate / red-team pass on the draft — **WIN**
+
+This is the most under-implemented IC concept in the pipeline. `seams.py`
+does adversarial review on *facts* (does coverage A disagree with
+coverage B). Nothing reviews *the draft itself* — i.e., reads the
+finished `cross_domain_output` and argues "here is what you got wrong."
+**Verdict: WIN.** Sketch:
+
+- New stage `stages/red_team.py`, runs after `cross_domain` and before
+  `assemble` (config insertion at `config/pipeline.yaml:71-95`).
+- One LLM call, ~3000 tokens budget, MiniMax M2 7 (already the
+  cheap-pass model used by `enrich_articles` and `compress`,
+  `config/pipeline.yaml:21-36`).
+- Prompt: "Read this draft digest. For each at-a-glance item and each
+  deep dive, identify the strongest argument *against* the analysis,
+  the assumption most likely to be wrong, and any factual claim that
+  is not anchored in the cited links. Return at most 5 critiques."
+- Output: `red_team_critique` artifact with `{item_id, critique_type,
+  one_line, evidence_pointer}` entries. Renders as an optional
+  diagnostic section in dry-run output (mirror `coverage_gaps`'
+  visibility model, `stages/coverage_gaps.py:29,79-86`,
+  `templates/email_template.py:223-245`). ~150 lines stage + ~40 lines
+  template + 60-line prompt file. **Highest-value new stage in this
+  appendix.**
+
+The devil's-advocate stage *uses an LLM call* and is therefore subject
+to the same audit as everything else — its critiques should themselves
+include a confidence band (D.3 calibrated uncertainty) and an
+evidence_pointer that must resolve to a known URL or item ID. If you
+don't gate it on evidence, it will hallucinate critiques.
+
+#### Priority Intelligence Requirements (PIRs) — **WIN**
+
+The IC concept: standing questions the product is answering against,
+made explicit and shared between consumer and producer ("any movement
+on Iran-Israel?", "AI-policy developments affecting compute export?",
+"Russian arms-industry strain?"). Today, Morning-Digest's
+selection-against-priorities is implicit in three places: the literal
+strings `["war", "ai", "defense"]` at `config/pipeline.yaml:205-208,
+219-222`; the prose "Aaron's primary interests: defense/space
+technology, AI and national security, geopolitical shifts affecting US
+posture" at `prompts/cross_domain_plan.md:24` and
+`prompts/cross_domain_system.md:24`; and the keyword lists at
+`cross_domain/parse.py:40-148` and `stages/anomaly.py:43-48`. Three
+problems:
+
+1. The priorities aren't a single source of truth. Editing them today
+   means editing five places.
+2. They are tag-shaped, not question-shaped. "war" matches anything
+   tagged war; it cannot match "is Iran moving toward closing Hormuz?"
+3. There's no concept of *standing* — a question that should be answered
+   even if today's pull missed it. `coverage_gaps.py` is the closest
+   analog; it asks the LLM "what's missing" but does not ask "given
+   these specific standing questions, were any answered today?"
+
+**Verdict: WIN.** Sketch:
+
+- New file `config/priorities.yaml` with ~10 entries shaped as
+  `{id, question, tags, recurring: bool, source_categories_required}`.
+  Example: `{id: pir-iran-hormuz, question: "Movement toward Hormuz
+  closure or strait disruption", tags: [war, energy], recurring:
+  true, source_categories_required: [non-western, maritime]}`.
+- Load at run start; pass into `cross_domain_plan` prompt as an
+  explicit "STANDING QUESTIONS" block (~10 lines added to
+  `cross_domain/prompt.py:35-95`).
+- Surface in `coverage_gaps` prompt as "for each standing question,
+  was today's pull responsive?" (~5 lines in
+  `prompts/coverage_gaps.md`).
+- Replace the hardcoded `primary_tags` lists in
+  `config/pipeline.yaml:205-208,219-222` and
+  `cross_domain/parse.py:150` with a derived set
+  (`set().union(*pir.tags for pir in pirs)`) so the literal strings go
+  away. ~30 lines of refactor.
+
+This single change unifies five scattered priority encodings, makes
+priorities user-editable as a config artifact, and gives `coverage_gaps`
+a real spec to audit against. **Highest structural-clarity win in the
+appendix.**
+
+#### Sourcing tiers (primary / secondary / tertiary) — **PARTIAL → propagate**
+
+`config/sources.yaml` already has 3 tiers (`primary-reporting`,
+`analysis-opinion`, `institutional-analysis`,
+`config/sources.yaml:45,77,254`). The desk prompt prose distinguishes
+"primary-reporting sources" from "analysis/opinion sources" in detailed
+guidance for `geopolitics_events`
+(`stages/analyze_domain.py:80-94`). But the field stops there:
+`stages/seams.py:173-174` and `stages/analyze_domain.py:514-515`
+display it inline; `cross_domain` never sees it; `assemble.py` never
+sees it; the rendered email never tags it. **Verdict: PARTIAL.**
+Three small changes:
+
+1. Propagate `reliability` from `raw_sources.rss[*]` through
+   `analyze_domain.items[*].links[*]` to
+   `cross_domain_output.at_a_glance[*].links[*]` (~15 lines across
+   `cross_domain/parse.py:599-629` and the URL-known filter).
+2. In `assemble.py`, when rendering inline source links
+   (`templates/email_template.py:113-117,196-201`), emit a small badge
+   for `primary-reporting` vs. `analysis-opinion` so the reader can
+   see at a glance that "the WSJ says" carries different weight than
+   "Tooze says." ~10 lines CSS, ~5 lines template.
+3. The IC tertiary tier ("analysis of analysis") is not currently
+   marked. Most analysis-opinion feeds are *secondary*; a few
+   (`Proximities`, `Tooze`, `Drezner`, certain Substack threads) are
+   `tertiary` because they meta-comment on other analysts. Adding a
+   third tier is one config edit and one display label. ~10 lines.
+
+This is a 40-line propagation, not a new system. The infrastructure is
+already there.
+
+#### Indications & Warning (I&W) register — **MAYBE**
+
+Per the SAT entry above, the watch-list pattern is half-present in
+"what to watch for" lines but lacks accumulation. Build only if §B.2
+continuity gets built; otherwise, the standalone "indicators history
+JSONL" is fine but adds little before there's a way to show
+"recurring indicator X has been on the watch list for 9 days running."
+
+### D.4 Top 3 by value-per-effort
+
+Ranked. Each is sketched concretely so the work is unambiguous.
+
+1. **Calibrated estimative language as a lint + schema field
+   (D.3, ~50 lines).** Add an `estimative_confidence:
+   high|medium|low|null` field to `cross_domain_output.at_a_glance[*]`
+   and `deep_dives[*]` schemas. Edit
+   `prompts/cross_domain_execute.md:42-65` and
+   `prompts/cross_domain_system.md:46-58` to require the field where
+   the `analysis` makes a forward-looking claim. Add a 30-line lint in
+   `stages/assemble.py` (sibling to `_HEDGED_SEAM_RE` at line 52-56)
+   that scans `facts`/`analysis`/deep-dive body for unanchored
+   hedging vocabulary and writes findings to
+   `assemble_contract_issues`. Render the band as a small badge in
+   `templates/email_template.py:108-area`. **Highest ROI in the
+   appendix; do this first.**
+
+2. **PIRs as `config/priorities.yaml` (D.3, ~80 lines including
+   refactor).** Create `config/priorities.yaml` with 8-12 entries
+   shaped as `{id, question, tags, recurring, source_categories_required}`.
+   Load at run start (`pipeline.py`), pass into `cross_domain_plan`
+   prompt as a STANDING QUESTIONS block
+   (`cross_domain/prompt.py:35-95`), pass into `coverage_gaps`
+   prompt (`prompts/coverage_gaps.md`), derive
+   `primary_tags`/`primary_domains` from
+   `set().union(*pir.tags)` in
+   `config/pipeline.yaml:205-208,219-222` and
+   `cross_domain/parse.py:150` so the literal strings go away. **Single
+   biggest structural-clarity improvement available.** Doubles as
+   documentation of what the digest is *for*.
+
+3. **Devil's-advocate / red-team stage (D.3, ~250 lines new).** New
+   `stages/red_team.py` between `cross_domain` and `assemble`
+   (`config/pipeline.yaml:71-95`). One MiniMax M2 7 LLM call (matches
+   the cheap-pass tier at `config/pipeline.yaml:21-36`). New prompt
+   `prompts/red_team.md`. Critiques rendered as an optional
+   diagnostic section (mirror coverage_gaps' visibility model in
+   `stages/coverage_gaps.py:29,79-86` and
+   `templates/email_template.py:223-245`). Each critique itself
+   carries a confidence band and an evidence_pointer to a known
+   item_id or URL — no unanchored critiques. **Largest editorial-quality
+   delta of the three; also the most code.**
+
+After those, the next tier is sourcing-tier propagation (D.3, ~40
+lines), then BLUF `bottom_line` field (D.3, ~20 lines), then I&W
+register (D.3, ~60 lines, gated on §B.2). Sigma-style anomaly rules
+(D.2, ~80 lines) and NiFi-style provenance audit (D.2, ~50 lines) are
+the architectural hygiene tier; do them when adding the next anomaly
+check or after the first time a deep-dive body cites something not in
+the links list.
+
+### D.5 What deliberately not to import
+
+Concrete list, so the trap-doors are named:
+
+- **Classification markings (CUI / FOUO / TS//SCI / ORCON / NOFORN /
+  releasability tearlines).** No multi-reader audience, no clearance
+  ladder, no need to redact based on a recipient's accesses. Importing
+  this for "completeness" adds metadata fields nothing reads.
+- **Multi-INT taxonomies (HUMINT / SIGINT / GEOINT / OSINT / MASINT /
+  IMINT).** Morning-Digest is single-INT (OSINT). Tagging every item
+  "OSINT" is noise. STIX kill-chain phases fall in the same bucket —
+  there is no kill chain here.
+- **MITRE-style giant ontologies (ATT&CK, CAPEC, CWE).** They earn
+  their keep at threat-intel-platform scale (thousands of analysts,
+  millions of indicators). At this scale, a 20-entry edge-type
+  vocabulary outperforms a 200-entry MITRE schema for readability and
+  authoring cost.
+- **STIX/TAXII wire formats and OpenCTI/MISP servers.** Sharing-format
+  primitives for organizations that don't share. SKIP.
+- **SCIF-grade audit trails / WORM logs / HSM-backed signing.** The
+  artifacts in `output/artifacts/YYYY-MM-DD/` are sufficient run-history
+  for one user; cryptographic chain-of-custody adds ops weight that
+  protects against threats Morning-Digest does not face.
+- **Tasking workflows / collection management / RFI tickets.** Single
+  user; the "tasking" is the cron schedule.
+- **Storm / Kafka / RabbitMQ / Mesos orchestration.** Already covered
+  in §6 against LemonGrenade's NSA stack — same conclusion holds for
+  Metron, NiFi-cluster, and DCGS-style federations. A ten-stage Python
+  pipeline running once a day does not need an event bus.
+- **Structured Threat Information eXpression confidence scales (none /
+  low / med / high / admiralty A1-F6).** Three levels (high/medium/low)
+  are sufficient and match what `seam_annotations` already uses
+  (`prompts/seam_annotations.md:18`). Admiralty's two-axis source-times-info
+  is the kind of precision that survives only at industrial scale.
+- **Heuer's full ACH matrix.** As argued in §D.3, the matrix pays off at
+  scales Morning-Digest doesn't operate at. The ACH-shaped tradecraft
+  worth keeping is the "competing hypotheses" *field* on deep dives,
+  not the matrix scoring.
+- **A separate "tradecraft training" prompt loaded into every model
+  call.** Tempting and wrong — it bloats every call's system prompt
+  for a benefit better delivered as small per-stage rules. The current
+  per-prompt `_SHARED_RULES` pattern (`stages/analyze_domain.py:448-490`)
+  is the right granularity.
+
+The rule of thumb: import IC tradecraft *concepts* (band-tagging,
+BLUF, sourcing tiers, devil's advocate, PIRs) where they map onto
+concrete ~10-100 line edits to existing stages. Refuse IC *systems*
+(NiFi, OpenCTI, STIX servers, multi-INT taxonomies, classification
+machinery) — they assume a scale and a threat model Morning-Digest
+does not have. The earned-its-keep pattern, again: small disciplines
+on top of the existing pipeline; not a new platform underneath.
