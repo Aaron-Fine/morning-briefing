@@ -38,16 +38,19 @@ source of truth for personalization, and reconstruct seams. The pipeline is
       ~dozen-file inventory (mostly prompt markdown) — see PR-B.
 - [x] Expand PR-0 into a per-run observability artifact (`run_metrics.json`)
       that feeds every later keep-or-drop decision.
-- [ ] **Decide PR-0 placement** — keep as the leading Phase 1 PR (lightweight
-      per-run logger) vs. fold into PR-A. (Framing resolved; sequencing open.)
-- [ ] Capture the PR-B rendered-prompt baseline *before* any PR-B change, so
-      the before/after prompt diff has something to compare against.
+- [x] **PR-0 leads Phase 1** — built up front (observe-only), extended by
+      later phases. The PR-B rendered-prompt baseline is captured at the *end
+      of PR-0* (instrumentation doesn't touch prompt text, so the baseline is
+      clean and exists before any PR-B threading begins).
 
 ## Next: Phase 1 (structural cleanup)
 
-Three PRs, order-independent (lead with PR-A — it has the validated checklist
-behind it). See the epic for detail.
+PR-0 leads; PR-A/B/C are order-independent after it (lead with PR-A — it has
+the validated checklist behind it). See the epic for detail.
 
+- [ ] **PR-0** — per-run `run_metrics.json` observability (per-stage
+      cost/usage, override firing counts, item-flow, domain_research loop).
+      Capture the PR-B rendered-prompt baseline at the end.
 - [ ] **PR-A** — work the Appendix A override checklist; drop `tag_label`,
       derive `tag` from desk-of-origin, switch cross_domain to item_id
       selection, relax "exactly N" → "up to N", regex sweep.
