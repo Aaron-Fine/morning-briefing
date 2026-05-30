@@ -20,7 +20,7 @@ from morning_digest.contracts import (
     normalize_domain_analysis,
     normalize_seam_annotations_artifact,
 )
-from morning_digest.llm import call_llm
+from morning_digest.llm import call_llm, LLMUsage
 from morning_digest.sanitize import sanitize_source_content
 from utils.prompts import load_prompt
 
@@ -584,7 +584,7 @@ def _call_turn_json(
     model_config: dict | None,
     turn_name: str,
     fallback_shape: dict,
-) -> tuple[dict, object]:
+) -> tuple[dict, LLMUsage]:
     """Call a seams turn, preferring provider JSON mode before raw repair paths."""
     try:
         result, usage = call_llm(
@@ -606,7 +606,7 @@ def _call_turn_json(
         )
 
     last_usage = None
-    raw_attempts: list[str] = []
+    raw_attempts: list[str | dict] = []
     for stream in (True, False):
         try:
             raw, last_usage = call_llm(
@@ -660,7 +660,7 @@ def _repair_turn_json(
     model_config: dict | None,
     turn_name: str,
     fallback_shape: dict,
-) -> tuple[dict, object]:
+) -> tuple[dict, LLMUsage]:
     repair_config = dict(model_config or {})
     repair_config["max_tokens"] = min(repair_config.get("max_tokens", 4000), 4000)
     repair_request = f"""Repair this malformed {turn_name} JSON into valid JSON.

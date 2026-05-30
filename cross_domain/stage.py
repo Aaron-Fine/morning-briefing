@@ -7,7 +7,7 @@ from morning_digest.contracts import (
     normalize_cross_domain_plan_artifact,
     normalize_domain_analysis,
 )
-from morning_digest.llm import call_llm
+from morning_digest.llm import call_llm, LLMUsage
 from morning_digest.validate import validate_stage_output
 
 from cross_domain.parse import (
@@ -40,7 +40,7 @@ def _call_turn_json(
     user_content: str,
     model_config: dict | None,
     turn_name: str,
-) -> tuple[dict, object]:
+) -> tuple[dict, LLMUsage]:
     try:
         value, usage = call_llm(
             prompt,
