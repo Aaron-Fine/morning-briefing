@@ -46,12 +46,14 @@ from unittest.mock import MagicMock, patch
 from morning_digest.llm import call_llm, LLMResult, LLMUsage
 
 
-def _fireworks_resp(content, prompt_tokens=12, completion_tokens=7):
+def _fireworks_resp(content, prompt_tokens=12, completion_tokens=7, cached_tokens=3):
+    # Verified shape (2026-05-30): usage has prompt_tokens_details.cached_tokens.
     resp = MagicMock()
     resp.choices = [MagicMock()]
     resp.choices[0].message.content = content
     resp.usage.prompt_tokens = prompt_tokens
     resp.usage.completion_tokens = completion_tokens
+    resp.usage.prompt_tokens_details.cached_tokens = cached_tokens
     return resp
 
 
@@ -63,7 +65,7 @@ def test_call_llm_returns_llmresult_with_usage(mock_client):
     out = call_llm("sys", "user", {"provider": "fireworks", "model": "m", "max_tokens": 100}, stream=False)
     assert isinstance(out, LLMResult)
     assert out.value == {"ok": True}
-    assert out.usage == LLMUsage(model="m", provider="fireworks", tokens_in=12, tokens_out=7)
+    assert out.usage == LLMUsage("m", "fireworks", tokens_in=12, tokens_out=7, tokens_cached=3)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -84,6 +86,7 @@ class LLMUsage(NamedTuple):
     provider: str
     tokens_in: int | None
     tokens_out: int | None
+    tokens_cached: int | None = None   # cached portion of tokens_in (Fireworks prompt_tokens_details)
 
 
 class LLMResult(NamedTuple):
@@ -94,18 +97,37 @@ class LLMResult(NamedTuple):
 Change `_fireworks_call` to return `(text, tokens_in, tokens_out)`. Replace its body's two `return` paths:
 
 ```python
+def _usage_tuple(usage):
+    """Extract (tokens_in, tokens_out, tokens_cached) from a Fireworks usage object.
+
+    Verified live 2026-05-30: usage.prompt_tokens / completion_tokens, and
+    usage.prompt_tokens_details.cached_tokens (cached_tokens=0 when none).
+    """
+    if not usage:
+        return None, None, None
+    details = getattr(usage, "prompt_tokens_details", None)
+    cached = getattr(details, "cached_tokens", None) if details else None
+    return (
+        getattr(usage, "prompt_tokens", None),
+        getattr(usage, "completion_tokens", None),
+        cached,
+    )
+
+
 def _fireworks_call(client, create_kwargs: dict, stream: bool):
     if stream:
         kwargs = {**create_kwargs, "stream": True, "stream_options": {"include_usage": True}}
         content_chunks: list[str] = []
         saw_reasoning_content = False
         empty_count = 0
-        tokens_in = tokens_out = None
+        tokens_in = tokens_out = tokens_cached = None
         with client.chat.completions.create(**kwargs) as resp:
             for chunk in resp:
+                # Verified: usage arrives on a FINAL chunk with choices == [];
+                # intermediate chunks carry usage == null. Read before the
+                # empty-choices guard so the usage chunk isn't skipped.
                 if getattr(chunk, "usage", None):
-                    tokens_in = chunk.usage.prompt_tokens
-                    tokens_out = chunk.usage.completion_tokens
+                    tokens_in, tokens_out, tokens_cached = _usage_tuple(chunk.usage)
                 if not chunk.choices:
                     empty_count += 1
                     if empty_count > 500:
@@ -124,19 +146,19 @@ def _fireworks_call(client, create_kwargs: dict, stream: bool):
                 "Fireworks stream: reasoning_content received without assistant content; "
                 "ignoring reasoning trace"
             )
-        return text, tokens_in, tokens_out
+        return text, tokens_in, tokens_out, tokens_cached
     else:
         kwargs = {**create_kwargs, "stream": False}
         resp = client.chat.completions.create(**kwargs)
         text = (resp.choices[0].message.content or "").strip()
-        usage = getattr(resp, "usage", None)
-        return text, getattr(usage, "prompt_tokens", None), getattr(usage, "completion_tokens", None)
+        tokens_in, tokens_out, tokens_cached = _usage_tuple(getattr(resp, "usage", None))
+        return text, tokens_in, tokens_out, tokens_cached
 ```
 
 In `_call_fireworks`, replace the `_retry_loop(...)` + `return _parse_response(...)` tail:
 
 ```python
-    raw, tokens_in, tokens_out = _retry_loop(
+    raw, tokens_in, tokens_out, tokens_cached = _retry_loop(
         lambda: _fireworks_call(client, create_kwargs, stream),
         max_retries,
         retryable,
@@ -144,11 +166,11 @@ In `_call_fireworks`, replace the `_retry_loop(...)` + `return _parse_response(.
     )
     return LLMResult(
         _parse_response(raw, json_mode, model),
-        LLMUsage(model=model, provider="fireworks", tokens_in=tokens_in, tokens_out=tokens_out),
+        LLMUsage(model, "fireworks", tokens_in, tokens_out, tokens_cached),
     )
 ```
 
-The `_retry_loop` `fn()` now returns a 3-tuple; `_retry_loop` already returns whatever `fn()` returns, so no signature change is needed there beyond its return annotation (drop `-> str` or change to `-> tuple`).
+The `_retry_loop` `fn()` now returns a 4-tuple; `_retry_loop` already returns whatever `fn()` returns, so no signature change is needed beyond its return annotation (drop `-> str`).
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -162,7 +184,13 @@ Add to `tests/test_llm.py`:
 ```python
 @patch("morning_digest.llm._fireworks_client")
 def test_fireworks_stream_usage_from_final_chunk(mock_client):
-    usage_chunk = MagicMock(choices=[], usage=MagicMock(prompt_tokens=100, completion_tokens=40))
+    # Mirrors the verified live shape: usage on a final choices==[] chunk;
+    # intermediate text chunk has usage == None.
+    usage_chunk = MagicMock(
+        choices=[],
+        usage=MagicMock(prompt_tokens=100, completion_tokens=40,
+                        prompt_tokens_details=MagicMock(cached_tokens=12)),
+    )
     text_chunk = MagicMock()
     text_chunk.choices = [MagicMock()]
     text_chunk.choices[0].delta.content = "hello"
@@ -174,6 +202,7 @@ def test_fireworks_stream_usage_from_final_chunk(mock_client):
     out = call_llm("s", "u", {"provider": "fireworks", "model": "m", "max_tokens": 8000}, json_mode=False)
     assert out.value == "hello"
     assert out.usage.tokens_in == 100 and out.usage.tokens_out == 40
+    assert out.usage.tokens_cached == 12
 
 
 @patch("morning_digest.llm._anthropic_client")
@@ -701,20 +730,22 @@ from morning_digest.llm import LLMUsage
 
 def test_aggregate_usage_sums_and_counts_missing():
     records = [
-        LLMUsage("m1", "fireworks", 100, 40),
-        LLMUsage("m1", "fireworks", 50, 10),
-        LLMUsage("m2", "fireworks", None, None),
+        LLMUsage("m1", "fireworks", 100, 40, 30),
+        LLMUsage("m1", "fireworks", 50, 10, 0),
+        LLMUsage("m2", "fireworks", None, None, None),
     ]
     agg = aggregate_usage(records)
     assert agg["tokens_in"] == 150
     assert agg["tokens_out"] == 50
+    assert agg["tokens_cached"] == 30
     assert agg["usage_missing"] == 1
     assert agg["model"] == "m1"  # dominant by call count
 
 
 def test_aggregate_usage_empty():
     agg = aggregate_usage([])
-    assert agg == {"model": None, "tokens_in": 0, "tokens_out": 0, "usage_missing": 0}
+    assert agg == {"model": None, "tokens_in": 0, "tokens_out": 0,
+                   "tokens_cached": 0, "usage_missing": 0}
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -735,15 +766,18 @@ from morning_digest.llm import LLMUsage
 
 def aggregate_usage(records: list[LLMUsage]) -> dict:
     if not records:
-        return {"model": None, "tokens_in": 0, "tokens_out": 0, "usage_missing": 0}
+        return {"model": None, "tokens_in": 0, "tokens_out": 0,
+                "tokens_cached": 0, "usage_missing": 0}
     tokens_in = sum(r.tokens_in or 0 for r in records)
     tokens_out = sum(r.tokens_out or 0 for r in records)
+    tokens_cached = sum(r.tokens_cached or 0 for r in records)
     missing = sum(1 for r in records if r.tokens_in is None or r.tokens_out is None)
     dominant = Counter(r.model for r in records).most_common(1)[0][0]
     return {
         "model": dominant,
         "tokens_in": tokens_in,
         "tokens_out": tokens_out,
+        "tokens_cached": tokens_cached,
         "usage_missing": missing,
     }
 ```
@@ -815,6 +849,7 @@ def _fold_stage_metrics(run_meta, stage_name, outputs, latency_s, retries):
         "model": agg["model"],
         "tokens_in": agg["tokens_in"],
         "tokens_out": agg["tokens_out"],
+        "tokens_cached": agg["tokens_cached"],
         "usage_missing": agg["usage_missing"],
         "latency_s": latency_s,
         "retries": retries,
@@ -827,9 +862,8 @@ def _fold_stage_metrics(run_meta, stage_name, outputs, latency_s, retries):
     if dr is not None:
         metrics["domain_research"] = dr
     totals = metrics["totals"]
-    totals["tokens_in"] = totals.get("tokens_in", 0) + agg["tokens_in"]
-    totals["tokens_out"] = totals.get("tokens_out", 0) + agg["tokens_out"]
-    totals["usage_missing"] = totals.get("usage_missing", 0) + agg["usage_missing"]
+    for key in ("tokens_in", "tokens_out", "tokens_cached", "usage_missing"):
+        totals[key] = totals.get(key, 0) + agg[key]
     return outputs
 ```
 

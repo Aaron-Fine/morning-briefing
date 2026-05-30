@@ -50,13 +50,18 @@ guard test fails CI if a stage makes an LLM call but doesn't surface usage.
 class LLMUsage(NamedTuple):
     model: str
     provider: str            # "fireworks" | "anthropic"
-    tokens_in: int | None    # None when provider/stream didn't report usage
+    tokens_in: int | None     # None when provider/stream didn't report usage
     tokens_out: int | None
+    tokens_cached: int | None # cached portion of tokens_in; for cached-rate cost in Phase 5
 
 class LLMResult(NamedTuple):
     value: dict | str        # json_mode → dict, else str (unchanged semantics)
     usage: LLMUsage
 ```
+
+`tokens_cached` is recorded because Fireworks prices cached input separately
+(the pricing table has distinct uncached/cached rates); without capturing the
+cached split now, accurate cost derivation in Phase 5 is impossible.
 
 `call_llm(...) -> LLMResult`. Every call site changes:
 
@@ -79,12 +84,20 @@ unchanged; they now operate on the unpacked `value`.
 - `stages/seams.py:590, 611, 673` (`_call_turn_json` wrapper returns
   `(dict, usage)`)
 
-**Usage extraction by provider:**
+**Usage extraction by provider** (Fireworks shapes verified against the live API
+2026-05-30, model `minimax-m2p7`):
 - Fireworks (OpenAI-compatible): `resp.usage.prompt_tokens` /
-  `completion_tokens`. **Streaming** (used when `max_tokens > 4096`) requires
-  `stream_options={"include_usage": True}` or the final chunk omits usage — the
-  design adds this. If usage is still absent, `tokens_*` = `None`.
-- Anthropic: `resp.usage.input_tokens` / `output_tokens`.
+  `completion_tokens`, and `resp.usage.prompt_tokens_details.cached_tokens`.
+  **Streaming** (used when `max_tokens > 4096`) with
+  `stream_options={"include_usage": True}` — **confirmed working**: usage arrives
+  in a *final chunk where `choices == []` and `usage` is populated*, immediately
+  before `data: [DONE]`. Every *intermediate* chunk carries `usage: null`, so the
+  extractor must keep the last non-null `usage` seen (and must read it before the
+  existing `if not chunk.choices: continue` guard, since the usage chunk has empty
+  choices). If `include_usage` is ever unsupported by a model, `tokens_*` = `None`
+  and `usage_missing` increments — but it is supported on the endpoint today.
+- Anthropic: `resp.usage.input_tokens` / `output_tokens` (`cached_tokens` left
+  `None` — Anthropic reports cache reads under different fields not plumbed here).
 
 **Missing-usage honesty:** when `tokens_*` is `None`, aggregation counts it as 0
 toward sums but increments a `usage_missing` counter so the smoke detector shows
@@ -261,8 +274,8 @@ even if the heartbeat is disabled.
   "stages": {
     "analyze_domain": {
       "model": "minimax-m2p7", "tokens_in": 24800, "tokens_out": 3100,
-      "usage_missing": 0, "latency_s": 12.4, "retries": 0,
-      "items_in": 215, "items_out": 51
+      "tokens_cached": 1900, "usage_missing": 0, "latency_s": 12.4, "retries": 0,
+      "items_out": {"domain_analysis.items": 51}
     }
     // ... one per stage that ran
   },
