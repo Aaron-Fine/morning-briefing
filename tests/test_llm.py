@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from morning_digest.llm import _fireworks_call, _parse_response, call_llm, LLMResult, LLMUsage
+from morning_digest.llm import _fireworks_call, _parse_response, _usage_tuple, call_llm, LLMResult, LLMUsage
 
 
 class TestParseResponse:
@@ -185,6 +185,17 @@ def test_anthropic_usage(mock_client):
     out = call_llm("s", "u", {"provider": "anthropic", "model": "claude-x"}, json_mode=False, stream=False)
     assert out.value == "result text"
     assert out.usage == LLMUsage("claude-x", "anthropic", 33, 9)
+
+
+def test_usage_tuple_handles_missing_usage():
+    assert _usage_tuple(None) == (None, None, None)
+
+    class _NoDetails:
+        prompt_tokens = 5
+        completion_tokens = 2
+        # no prompt_tokens_details attribute
+
+    assert _usage_tuple(_NoDetails()) == (5, 2, None)
 
 
 class _FakeStreamResponse:

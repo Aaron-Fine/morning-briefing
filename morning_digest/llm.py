@@ -34,6 +34,7 @@ class LLMResult(NamedTuple):
     value: dict | str
     usage: LLMUsage
 
+
 # Lazy imports so the package only needs to be installed if that provider is used
 _openai_client_cache: dict = {}
 _anthropic_client_cache: dict = {}
@@ -266,7 +267,7 @@ def _call_anthropic(
     )
 
 
-def _retry_loop(fn, max_retries: int, retryable_errors: tuple, model: str) -> str:
+def _retry_loop(fn, max_retries: int, retryable_errors: tuple, model: str):
     for attempt in range(max_retries + 1):
         try:
             log.info(f"Calling LLM ({model})...")
