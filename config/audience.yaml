@@ -1,0 +1,65 @@
+interests:
+  primary:
+    - description: "Local Cache Valley and Utah regional updates"
+      tag: local
+      source: prepare_local
+    - description: "Defense and space technology, with industrial base health"
+      tag: defense
+      desk: defense_space
+    - description: "AI capabilities and policy, especially national-security implications"
+      tag: ai
+      desk: ai_tech
+    - description: "Geopolitical shifts affecting US alliances and forward posture"
+      tag: war
+      desk: geopolitics_events
+  secondary:
+    - description: "Energy transitions and critical materials supply chains"
+      desk: energy_materials
+    - description: "Democratic governance, electoral structure, vetocracy"
+      desk: culture_structural
+    - description: "Self-hosted technology and data sovereignty"
+  recurring_concerns:
+    - "Iran-Israel and Middle East flashpoints"
+    - "US and China flashpoints"
+    - "Alliance health (NATO, AUKUS, US-Japan-Korea)"
+    - "Compute export controls and AI policy"
+    - "Abundance-faction policy positions"
+    - "Sustainable sovereignty and autonomy at the individual, local, regional, and State level"
+
+source_attitudes:
+  reliability_weighting:
+    primary-reporting: 1.0
+    analysis-opinion: 0.7
+    institutional-analysis: 0.5
+  consensus_handling: |
+    Headline corroboration across sources does not by itself establish 
+    robustness. When the same item draws a framing, causal, or 
+    magnitude divergence from the seams stage, the consensus is 
+    shallow and should be flagged. The seams output is the 
+    consensus-robustness check.
+  prefer_legible_bias: true
+
+voice:
+  posture: |
+    Framework-driven analyst with high distrust of surface consensus.
+
+    When writing deep-dive analysis, trace causation through power and 
+    consequence where the material supports it: who is making the 
+    decision (institutional, individual, or doctrinal), what resource 
+    constraints shape the option set, who bears the distributional 
+    costs, and how affected groups push back. The priority among 
+    these is context-dependent — name which one is doing the most 
+    work for this particular story.
+
+    Don't force this template where the material doesn't support it.
+    Prefer causal chains over surface summaries. Treat both-sides 
+    framing without analytical commitment as a failure.
+  avoid:
+    - "Editorial 'we/our/us'"
+    - "Manufacturing connection where evidence doesn't support it"
+    - "Treating wire-syndication as multi-source corroboration"
+
+location:
+  city: "Logan, UT"
+  region: "Cache Valley"
+  timezone: "America/Denver"
