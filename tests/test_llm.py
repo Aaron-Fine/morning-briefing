@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from morning_digest.llm import _fireworks_call, _parse_response, call_llm
+from morning_digest.llm import _fireworks_call, _parse_response, call_llm, LLMResult, LLMUsage
 
 
 class TestParseResponse:
@@ -133,6 +133,60 @@ class TestCallLlm:
         mock_fireworks.assert_called_once()
 
 
+def _fireworks_resp(content, prompt_tokens=12, completion_tokens=7, cached_tokens=3):
+    # Verified shape (2026-05-30): usage has prompt_tokens_details.cached_tokens.
+    resp = MagicMock()
+    resp.choices = [MagicMock()]
+    resp.choices[0].message.content = content
+    resp.usage.prompt_tokens = prompt_tokens
+    resp.usage.completion_tokens = completion_tokens
+    resp.usage.prompt_tokens_details.cached_tokens = cached_tokens
+    return resp
+
+
+@patch("morning_digest.llm._fireworks_client")
+def test_call_llm_returns_llmresult_with_usage(mock_client):
+    mock_client.return_value.chat.completions.create.return_value = _fireworks_resp(
+        '{"ok": true}'
+    )
+    out = call_llm("sys", "user", {"provider": "fireworks", "model": "m", "max_tokens": 100}, stream=False)
+    assert isinstance(out, LLMResult)
+    assert out.value == {"ok": True}
+    assert out.usage == LLMUsage("m", "fireworks", tokens_in=12, tokens_out=7, tokens_cached=3)
+
+
+@patch("morning_digest.llm._fireworks_client")
+def test_fireworks_stream_usage_from_final_chunk(mock_client):
+    usage_chunk = MagicMock(
+        choices=[],
+        usage=MagicMock(prompt_tokens=100, completion_tokens=40,
+                        prompt_tokens_details=MagicMock(cached_tokens=12)),
+    )
+    text_chunk = MagicMock()
+    text_chunk.choices = [MagicMock()]
+    text_chunk.choices[0].delta.content = "hello"
+    text_chunk.usage = None
+    stream_cm = MagicMock()
+    stream_cm.__enter__.return_value = iter([text_chunk, usage_chunk])
+    stream_cm.__exit__.return_value = False
+    mock_client.return_value.chat.completions.create.return_value = stream_cm
+    out = call_llm("s", "u", {"provider": "fireworks", "model": "m", "max_tokens": 8000}, json_mode=False)
+    assert out.value == "hello"
+    assert out.usage.tokens_in == 100 and out.usage.tokens_out == 40
+    assert out.usage.tokens_cached == 12
+
+
+@patch("morning_digest.llm._anthropic_client")
+def test_anthropic_usage(mock_client):
+    msg = MagicMock()
+    msg.content = [MagicMock(text="result text")]
+    msg.usage = MagicMock(input_tokens=33, output_tokens=9)
+    mock_client.return_value.messages.create.return_value = msg
+    out = call_llm("s", "u", {"provider": "anthropic", "model": "claude-x"}, json_mode=False, stream=False)
+    assert out.value == "result text"
+    assert out.usage == LLMUsage("claude-x", "anthropic", 33, 9)
+
+
 class _FakeStreamResponse:
     def __init__(self, chunks):
         self._chunks = chunks
@@ -145,7 +199,7 @@ class _FakeStreamResponse:
 
 
 class _FakeChunk:
-    def __init__(self, *, content=None, reasoning_content=None, has_choices=True):
+    def __init__(self, *, content=None, reasoning_content=None, has_choices=True, usage=None):
         self.choices = [] if not has_choices else [
             MagicMock(
                 delta=MagicMock(
@@ -154,6 +208,7 @@ class _FakeChunk:
                 )
             )
         ]
+        self.usage = usage
 
 
 class TestFireworksCall:
@@ -167,9 +222,10 @@ class TestFireworksCall:
             ]
         )
 
-        result = _fireworks_call(client, {"model": "test"}, stream=True)
+        text, tokens_in, tokens_out, tokens_cached = _fireworks_call(client, {"model": "test"}, stream=True)
 
-        assert result == '{"ok": true}'
+        assert text == '{"ok": true}'
+        assert tokens_in is None and tokens_out is None and tokens_cached is None
 
     def test_stream_does_not_fallback_to_reasoning_content(self):
         client = MagicMock()
@@ -180,6 +236,6 @@ class TestFireworksCall:
             ]
         )
 
-        result = _fireworks_call(client, {"model": "test"}, stream=True)
+        text, tokens_in, tokens_out, tokens_cached = _fireworks_call(client, {"model": "test"}, stream=True)
 
-        assert result == ""
+        assert text == ""
