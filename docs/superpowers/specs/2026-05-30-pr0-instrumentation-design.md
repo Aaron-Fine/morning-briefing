@@ -204,11 +204,12 @@ is read generically from the `at_a_glance` / desk items present in `outputs`.
 
 ## Component 5 — PR-B prompt baseline (global-free, end of PR-0)
 
-A `--capture-prompts <dir>` CLI flag sets `model_config["_capture_prompts_dir"]`
-(the config dict is already passed into `call_llm`). When present, `call_llm`
-writes the exact `system_prompt` + `user_content` it is about to send to
-`<dir>/<stage>__<seq>.txt`. No globals — the capture rides on the existing
-signature.
+A `--capture-prompts <dir>` CLI flag puts the dir into the runner's `_obs`
+context (see below). When present, `call_llm` writes the exact `system_prompt` +
+`user_content` it is about to send to `<dir>/<stage>__<seq>.txt`, where `<seq>`
+is a **per-stage** counter derived from existing files on disk (not a global
+counter — that would number across stages and make the baseline diff
+non-deterministic). No globals.
 
 Procedure (run at the end of PR-0, committed as the baseline fixture):
 1. Pick a saved artifact day as the frozen upstream fixture.
@@ -220,10 +221,18 @@ PR-B re-runs the identical frozen fixture and diffs against this baseline. With
 `audience.yaml` populated with today's values, rendered prompts should be
 byte-identical; any unintended delta is a threading bug.
 
-The stage name needs to reach `call_llm` for the filename. The runner already
-knows it; thread it via `model_config["_stage_name"]` alongside the capture dir
-(set once per stage in the loop). This is metadata-only and ignored when capture
-is off.
+**The observability context channel (`_obs`).** Runner-to-`call_llm` metadata —
+stage name, optional sublabel, optional capture dir — travels in a single
+namespaced key `model_config["_obs"]` (a dict), set once per stage in the run
+loop. `call_llm` reads it with `.get` and never pops or splats it, so it cannot
+leak into a provider call. This is deliberately *not* three scattered
+`_stage_name`/`_sublabel`/`_capture_prompts_dir` keys (a landmine the day someone
+does `client.create(**model_config)`), and deliberately *not* `contextvars`
+(propagating them into `analyze_domain`'s desk `ThreadPoolExecutor` is more
+machinery than a single-user batch warrants). Given the runner→stage→`call_llm`
+flow — where the runner pre-seeds and the stage forwards `model_config`
+unchanged — a single read-only key on that already-threaded dict is the
+proportionate channel.
 
 ---
 
@@ -251,9 +260,9 @@ touch):
 - **Run loop**: extend the existing stage banner to `--- Stage N/M: name ---`.
 - **`call_llm`**: wrap the provider call in `track(f"{stage}[:{sublabel}] {model}")`;
   the done-line carries elapsed + token count. Replaces the bare
-  `Calling LLM ({model})...` log. `stage`/`sublabel` arrive via the
-  `model_config["_stage_name"]` already threaded for prompt capture (sublabel,
-  e.g. a desk key, optional).
+  `Calling LLM ({model})...` log. `stage`/`sublabel` arrive via the `_obs` context
+  key described in Component 5 (sublabel, e.g. a desk key, is optional and set by
+  `analyze_domain`'s desk worker).
 - **`analyze_domain` desk pool**: each desk wraps its work in
   `track(f"desk {desk_key}")`; completion logs a running `N/M desks done`.
 - **`enrich_articles` fetch loop**: periodic `fetched X/Y articles` on its batch

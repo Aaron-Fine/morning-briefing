@@ -21,13 +21,13 @@
 
 **Modified files:**
 - `morning_digest/llm.py` — `LLMUsage`/`LLMResult` types; usage extraction; `call_llm` returns `LLMResult`; prompt capture; progress wrap.
-- `pipeline.py` — run loop: stage banner `N/M`, reserved-key pop + fold into `run_meta["metrics"]`, item-flow, `_run_with_retry` attempt count, heartbeat lifecycle, `--capture-prompts` flag, `_stage_name`/capture-dir threading.
+- `pipeline.py` — run loop: stage banner `N/M`, reserved-key pop + fold into `run_meta["metrics"]`, item-flow, `_run_with_retry` attempt count, heartbeat lifecycle, `--capture-prompts` flag, `_obs` context threading.
 - `cross_domain/stage.py`, `stages/seams.py`, `stages/analyze_domain.py`, `stages/compress.py`, `stages/coverage_gaps.py`, `stages/prepare_spiritual_weekly.py`, `stages/enrich_articles/canonical.py` — unpack `LLMResult`, collect + surface `llm_usage`.
 - `cross_domain/parse.py`, `stages/analyze_domain.py` — surface `override_counts`.
 - `tests/conftest.py` — `llm_result()` helper.
 - ~11 test files — mechanical mock updates.
 
-**Note on `_stage_name` / capture dir:** the runner sets `model_config["_stage_name"]` and (when capturing) `model_config["_capture_prompts_dir"]` once per stage. `call_llm` reads both; they are metadata-only and ignored when absent.
+**Note on the `_obs` context:** the runner sets a single `model_config["_obs"]` dict — `{"stage": <name>, "capture_dir"?: <path>}` — once per stage; `analyze_domain`'s desk worker merges in `"sublabel"`. `call_llm` reads it with `.get`, never pops or splats it into a provider call. It is metadata-only and ignored when absent. (Rationale — why one namespaced key, not three scattered keys, and not contextvars — is in the spec, Component 5.)
 
 ---
 
@@ -630,7 +630,7 @@ def test_call_llm_emits_progress(mock_client, caplog):
     mock_client.return_value.chat.completions.create.return_value = resp
     with caplog.at_level(logging.INFO):
         call_llm("s", "u", {"provider": "fireworks", "model": "m", "max_tokens": 100,
-                            "_stage_name": "seams"}, stream=False)
+                            "_obs": {"stage": "seams"}}, stream=False)
     msgs = " ".join(r.message for r in caplog.records)
     assert "seams" in msgs and "m" in msgs
 ```
@@ -648,9 +648,18 @@ from morning_digest import progress
 ```
 Replace the body of `call_llm` after `provider = ...`:
 ```python
-    stage = model_config.get("_stage_name", "llm")
-    sublabel = model_config.get("_sublabel")
-    label = f"{stage}:{sublabel} {model_config.get('model', '?')}" if sublabel else f"{stage} {model_config.get('model', '?')}"
+    # Observability context rides in a single namespaced, read-only key set by the
+    # runner. It is never popped or splatted into a provider call (call_llm builds
+    # create_kwargs explicitly), so it cannot leak into the SDK. We deliberately do
+    # NOT use three scattered _stage_name/_sublabel/_capture keys (landmine if a
+    # future caller does client.create(**model_config)); and not contextvars,
+    # because propagating them into analyze_domain's desk ThreadPoolExecutor costs
+    # more machinery than this single-user batch warrants.
+    obs = model_config.get("_obs") or {}
+    stage = obs.get("stage", "llm")
+    sublabel = obs.get("sublabel")
+    model = model_config.get("model", "?")
+    label = f"{stage}:{sublabel} {model}" if sublabel else f"{stage} {model}"
     with progress.track(label):
         if provider == "anthropic":
             return _call_anthropic(system_prompt, user_content, model_config, max_retries, json_mode, stream)
@@ -680,22 +689,25 @@ Wrap the loop body in `try/finally` so `heartbeat.stop()` always runs (place `he
 ```
 where `stage_idx` is `enumerate(stage_manifest, 1)`. Update the loop to `for stage_idx, stage_cfg in enumerate(stage_manifest, 1):`.
 
-- [ ] **Step 6: Set `_stage_name` into model_config per stage**
+- [ ] **Step 6: Seed the `_obs` context into model_config per stage**
 
 In the loop, after `model_config = _get_stage_model_config(...)` (line 696):
 ```python
         if isinstance(model_config, dict):
-            model_config = {**model_config, "_stage_name": stage_name}
+            model_config = {**model_config, "_obs": {"stage": stage_name}}
 ```
+(Task 11 extends this `_obs` dict with `capture_dir` when `--capture-prompts` is set.)
 
 - [ ] **Step 7: Add per-desk track() in analyze_domain**
 
-In `stages/analyze_domain.py`, the per-desk worker that calls `call_llm` (around line 674): wrap the desk work in `progress.track(f"desk {desk_key}")` and pass `_sublabel`:
+In `stages/analyze_domain.py`, the per-desk worker that calls `call_llm` (around line 674): wrap the desk work in `progress.track(f"desk {domain_key}")` and merge `sublabel` into `_obs`:
 ```python
     from morning_digest import progress
     with progress.track(f"desk {domain_key}"):
-        # set sublabel so the LLM line is attributed to the desk
-        mc = {**(model_config or {}), "_sublabel": domain_key}
+        # Merge sublabel into the runner-seeded _obs so the LLM line is attributed
+        # to the desk while preserving stage/capture_dir.
+        base = model_config or {}
+        mc = {**base, "_obs": {**(base.get("_obs") or {}), "sublabel": domain_key}}
         result, _usage = call_llm(system_prompt, user_content, mc, ...)
 ```
 (Use the actual desk-key variable name in scope; `domain_key` per `_DOMAIN_CONFIGS`.)
@@ -925,22 +937,39 @@ For each stage, collect the `_usage` values (renamed from the `_` discards in Ta
 `stages/analyze_domain.py` — each desk worker returns its usage; `_run_all_domains` aggregates the per-desk usages into a list returned under `llm_usage` in the stage outputs.
 `stages/seams.py`, `stages/coverage_gaps.py`, `stages/prepare_spiritual_weekly.py`, `stages/enrich_articles/canonical.py` (its caller stage) — same pattern: accumulate `usage` objects, return `"llm_usage": [...]`.
 
-- [ ] **Step 7: Add the guard test**
+- [ ] **Step 7: Add REAL behavioral guards (not a source grep)**
+
+A string grep proves nothing (passes on a comment). Instead, assert that a stage actually *returns* populated `llm_usage`. Add a real test for the multi-call stage in `tests/test_cross_domain.py` (it has a well-understood input shape):
 
 ```python
-import importlib, inspect
+from cross_domain import stage as xd_stage
+from morning_digest.llm import LLMUsage
 
-LLM_STAGES = ["compress", "coverage_gaps", "seams", "analyze_domain", "prepare_spiritual_weekly"]
 
-def test_llm_stages_declare_usage_key():
-    # Static guard: each stage module that imports call_llm references "llm_usage".
-    for name in LLM_STAGES:
-        src = inspect.getsource(importlib.import_module(f"stages.{name}"))
-        assert "llm_usage" in src, f"{name} imports call_llm but never surfaces llm_usage"
-    # cross_domain lives in its own package
-    src = inspect.getsource(importlib.import_module("cross_domain.stage"))
-    assert "llm_usage" in src
+@patch("cross_domain.stage.call_llm")
+def test_cross_domain_surfaces_llm_usage(mock_llm):
+    mock_llm.side_effect = [
+        llm_result({"deep_dives": [], "worth_reading": [], "cross_domain_connections": []},
+                   tokens_in=900, tokens_out=120),   # plan turn
+        llm_result({"at_a_glance": [], "deep_dives": [], "worth_reading": [],
+                    "cross_domain_connections": []}, tokens_in=1500, tokens_out=300),  # execute turn
+    ]
+    ctx = {"domain_analysis": {"econ": {"items": [{"item_id": "e1", "headline": "h"}]}},
+           "seam_data": {}, "raw_sources": {"rss": []}}
+    outputs = xd_stage.run(ctx, {"digest": {}, "cross_domain": {}}, {"provider": "fireworks", "model": "m"})
+    usage = outputs["llm_usage"]
+    assert len(usage) == 2 and all(isinstance(u, LLMUsage) for u in usage)
+    assert usage[0].tokens_in == 900 and usage[1].tokens_out == 300
 ```
+
+Then, as part of Task 8 Step 6, add **one line** to an existing happy-path test in each remaining LLM stage's test file — these tests already build valid context and mock `call_llm`, so the assertion is real, not static:
+- `tests/test_compress.py`: in the successful-run test, `assert outputs["llm_usage"]`.
+- `tests/test_coverage_gaps.py`: same.
+- `tests/test_seams.py`: in a successful per-item/annotation run test, `assert outputs["llm_usage"]`.
+- `tests/test_analyze_domain.py`: in a successful desk-run test, `assert outputs["llm_usage"]` (one entry per desk that ran).
+- `tests/test_prepare_spiritual_weekly.py`: same.
+
+This guards the contract behaviorally: a stage that adds an LLM call but forgets to surface usage fails a real assertion on real output.
 
 - [ ] **Step 8: Run suite**
 
@@ -953,6 +982,94 @@ Expected: PASS.
 git add pipeline.py stages/ cross_domain/ tests/test_pr0_instrumentation.py
 git commit -m "feat(metrics): per-stage LLM usage folded into run_meta.metrics"
 ```
+
+---
+
+## Task 8.5: Golden characterization test for `_validated_output` (do BEFORE Task 9)
+
+Task 9 rewrites the tag/tag_label loop inside `_validated_output` to add counting. PR-0 promises "no behavior change," so we pin the current output *before* touching it. This golden test captures today's behavior; Task 9 must keep it green.
+
+**Files:**
+- Create: `tests/golden/cross_domain_validated.json` (captured fixture)
+- Test: `tests/test_cross_domain.py`
+
+- [ ] **Step 1: Add the test with a representative input that exercises the overrides**
+
+```python
+import json
+from pathlib import Path
+from cross_domain.parse import _validated_output
+
+# Input chosen to trigger every override: off-vocab tag ("AI"), a
+# widely-reported claim backed by a single domain (source_depth recompute),
+# and a deep dive. Keep this STATIC — it is the characterization input.
+_GOLDEN_INPUT = {
+    "at_a_glance": [
+        {"item_id": "g1", "tag": "AI", "tag_label": "bogus",
+         "source_depth": "widely-reported", "headline": "h1",
+         "facts": "f", "analysis": "a",
+         "links": [{"url": "https://reuters.com/x"}]},
+    ],
+    "deep_dives": [
+        {"headline": "Deep one", "source_depth": "corroborated", "body": "b",
+         "further_reading": [{"url": "https://apnews.com/y"}]},
+    ],
+    "cross_domain_connections": [],
+    "worth_reading": [],
+}
+_GOLDEN_DOMAIN_ANALYSIS = {"econ": {"market_context": "ctx"}}
+_GOLDEN_RAW = {"rss": [{"url": "https://reuters.com/x"}, {"url": "https://apnews.com/y"}]}
+_GOLDEN_CONFIG = {"digest": {"at_a_glance": {"max_items": 7}}}
+
+_GOLDEN_PATH = Path(__file__).parent / "golden" / "cross_domain_validated.json"
+
+
+def _strip_internal(result: dict) -> dict:
+    out = json.loads(json.dumps(result))  # deep copy + JSON-normalize
+    out.pop("_override_counts", None)
+    out.pop("_source_depth_downgrades", None)
+    return out
+
+
+def test_validated_output_matches_golden():
+    import copy
+    result = _validated_output(
+        copy.deepcopy(_GOLDEN_INPUT),
+        _GOLDEN_DOMAIN_ANALYSIS, _GOLDEN_RAW, _GOLDEN_CONFIG,
+    )
+    golden = json.loads(_GOLDEN_PATH.read_text())
+    assert _strip_internal(result) == golden
+```
+
+- [ ] **Step 2: Capture the golden by running the test once in "record" mode**
+
+Run this one-off snippet (not committed) to write the golden file from current behavior:
+```bash
+mkdir -p tests/golden
+python -c "
+import json, copy
+from tests.test_cross_domain import _GOLDEN_INPUT, _GOLDEN_DOMAIN_ANALYSIS, _GOLDEN_RAW, _GOLDEN_CONFIG, _strip_internal
+from cross_domain.parse import _validated_output
+r = _validated_output(copy.deepcopy(_GOLDEN_INPUT), _GOLDEN_DOMAIN_ANALYSIS, _GOLDEN_RAW, _GOLDEN_CONFIG)
+open('tests/golden/cross_domain_validated.json','w').write(json.dumps(_strip_internal(r), indent=2, sort_keys=True))
+print('golden captured')
+"
+```
+Expected: prints `golden captured`; `tests/golden/cross_domain_validated.json` now holds current `_validated_output` output (tag normalized `AI`→`ai`, source_depth recomputed to `single-source`, etc.).
+
+- [ ] **Step 3: Run the test to verify it passes against the just-captured golden**
+
+Run: `pytest tests/test_cross_domain.py::test_validated_output_matches_golden -v`
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add tests/golden/cross_domain_validated.json tests/test_cross_domain.py
+git commit -m "test: golden characterization for _validated_output (pre-refactor)"
+```
+
+After Task 9's refactor, this test must still pass unchanged. If it fails, the "observe-only" promise is broken — inspect the diff and fix the refactor (not the golden).
 
 ---
 
@@ -994,7 +1111,7 @@ In `cross_domain/parse.py` `_validated_output`, build a counts dict:
 ```python
     counts = result.setdefault("_override_counts", {
         "normalize_tag": 0, "tag_label": 0, "recompute_source_depth": 0,
-        "ensure_primary_glance_coverage": 0,
+        "ensure_primary_glance_coverage": 0, "overlap_downgrade": 0,
     })
     for item in result["at_a_glance"]:
         raw_tag = item.get("tag", "")
@@ -1013,10 +1130,17 @@ After `_ensure_primary_glance_coverage` (line 612), count additions:
     result["at_a_glance"] = _ensure_primary_glance_coverage(result["at_a_glance"], domain_analysis, config)
     counts["ensure_primary_glance_coverage"] += len(result["at_a_glance"]) - before
 ```
-After `_downgrade_same_outlet_depth`/`_downgrade_overlap_depth` (line 632-633), derive recompute count from the existing downgrades list:
+After `_downgrade_same_outlet_depth`/`_downgrade_overlap_depth` (line 632-633), derive the counts from the existing downgrades list — but **filter by reason**. Both passes append to `_source_depth_downgrades`; the phrase-overlap pass tags its entries with `reason == "phrase_overlap_with_at_a_glance"`, the same-outlet recompute pass adds no `reason`. Counting the whole list would conflate two distinct overrides:
 ```python
-    counts["recompute_source_depth"] += len(result.get("_source_depth_downgrades", []))
+    downgrades = result.get("_source_depth_downgrades", [])
+    counts["recompute_source_depth"] += sum(
+        1 for d in downgrades if d.get("reason") != "phrase_overlap_with_at_a_glance"
+    )
+    counts["overlap_downgrade"] = counts.get("overlap_downgrade", 0) + sum(
+        1 for d in downgrades if d.get("reason") == "phrase_overlap_with_at_a_glance"
+    )
 ```
+(`overlap_downgrade` is a sixth override outside PR-A's named five, but it's a real one — counting it separately keeps the recompute_source_depth evidence clean for PR-A's keep/delete call and surfaces overlap-downgrade activity honestly.) Add `"overlap_downgrade": 0` to the initial `counts` dict.
 
 - [ ] **Step 4: Surface override_counts from the cross_domain stage**
 
@@ -1040,10 +1164,10 @@ def test_runner_folds_override_counts():
 
 (The fold logic from Task 8 Step 3 already accumulates `override_counts`; this test just locks it in.)
 
-- [ ] **Step 7: Run suite**
+- [ ] **Step 7: Run suite — golden test MUST still pass**
 
-Run: `pytest -q`
-Expected: PASS.
+Run: `pytest tests/test_cross_domain.py::test_validated_output_matches_golden -v && pytest -q`
+Expected: PASS. The golden test is the proof that rewriting the tag/tag_label loop did not change behavior. If it fails, inspect the diff and fix the refactor — do **not** regenerate the golden.
 
 - [ ] **Step 8: Commit**
 
@@ -1140,11 +1264,12 @@ def test_capture_prompts_writes_files(mock_client, tmp_path):
     resp.usage.completion_tokens = 1
     mock_client.return_value.chat.completions.create.return_value = resp
     mc = {"provider": "fireworks", "model": "m", "max_tokens": 100,
-          "_stage_name": "seams", "_capture_prompts_dir": str(tmp_path)}
+          "_obs": {"stage": "seams", "capture_dir": str(tmp_path)}}
     call_llm("SYSTEM-XYZ", "USER-ABC", mc, stream=False)
-    files = list(tmp_path.glob("seams__*.txt"))
-    assert files
-    content = files[0].read_text()
+    call_llm("SYSTEM-2", "USER-2", mc, stream=False)  # second call → per-stage seq 02
+    files = sorted(p.name for p in tmp_path.glob("seams__*.txt"))
+    assert files == ["seams__01.txt", "seams__02.txt"]   # per-stage counter, not global
+    content = (tmp_path / "seams__01.txt").read_text()
     assert "SYSTEM-XYZ" in content and "USER-ABC" in content
 ```
 
@@ -1155,24 +1280,24 @@ Expected: FAIL — no files written.
 
 - [ ] **Step 3: Implement capture in call_llm**
 
-In `call_llm`, inside the `with progress.track(label):` block, before dispatch:
+In `call_llm`, inside the `with progress.track(label):` block, before dispatch (note `obs`/`stage` are already in scope from Task 6 Step 3):
 ```python
-    capture_dir = model_config.get("_capture_prompts_dir")
-    if capture_dir:
-        _capture_prompt(capture_dir, stage, system_prompt, user_content)
+        capture_dir = obs.get("capture_dir")
+        if capture_dir:
+            _capture_prompt(capture_dir, stage, system_prompt, user_content)
 ```
-Add a module-level counter + writer:
+Add the writer with a **per-stage, filesystem-derived** sequence — no global counter, no reset, deterministic per stage:
 ```python
-import itertools
 from pathlib import Path
-
-_capture_seq = itertools.count(1)
 
 
 def _capture_prompt(capture_dir: str, stage: str, system_prompt: str, user_content: str) -> None:
     d = Path(capture_dir)
     d.mkdir(parents=True, exist_ok=True)
-    n = next(_capture_seq)
+    # Per-stage sequence from existing files on disk — a global itertools counter
+    # would number across stages (seams__03.txt for the 1st seams call) and make
+    # the PR-B baseline diff non-deterministic. Deriving from disk is stateless.
+    n = len(list(d.glob(f"{stage}__*.txt"))) + 1
     (d / f"{stage}__{n:02d}.txt").write_text(
         f"=== SYSTEM ===\n{system_prompt}\n\n=== USER ===\n{user_content}\n",
         encoding="utf-8",
@@ -1191,13 +1316,13 @@ In `pipeline.py` `main()` add:
     parser.add_argument("--capture-prompts", type=str, default=None,
                         help="Dump exact rendered prompts per stage to this dir (PR-B baseline)")
 ```
-Pass `capture_prompts` into `run_pipeline(...)` (add the param, default `None`). In the loop where `_stage_name` is set into `model_config` (Task 6 Step 6), also set the capture dir:
+Pass `capture_prompts` into `run_pipeline(...)` (add the param, default `None`). Replace the `_obs` seeding from Task 6 Step 6 so it also carries the capture dir:
 ```python
         if isinstance(model_config, dict):
-            extra = {"_stage_name": stage_name}
+            obs = {"stage": stage_name}
             if capture_prompts:
-                extra["_capture_prompts_dir"] = capture_prompts
-            model_config = {**model_config, **extra}
+                obs["capture_dir"] = capture_prompts
+            model_config = {**model_config, "_obs": obs}
 ```
 
 - [ ] **Step 6: Run suite**
