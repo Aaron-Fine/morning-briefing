@@ -303,6 +303,13 @@ the smoke-detector rendering arrive in Phase 5; PR-0 only produces the data.
   start/stop lifecycle is tested for clean shutdown, and `interval <= 0` disables.
 - All provider calls mocked; no live LLM.
 
+**Test-churn mitigation.** Changing `call_llm`'s return type breaks ~60 existing
+mock sites across 11 test files (they return bare dicts via `side_effect`). A
+`tests/conftest.py` helper `llm_result(value, tokens_in=…, tokens_out=…)` wraps a
+value in an `LLMResult` so the updates are a mechanical
+`[d1, d2]` → `[llm_result(d1), llm_result(d2)]`; usage-asserting tests pass real
+token counts.
+
 ## Out of scope for PR-0 (carried by later PRs)
 
 - Dollar-cost rendering and the smoke-detector view (Phase 5).
