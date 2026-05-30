@@ -40,9 +40,9 @@ def _call_turn_json(
     user_content: str,
     model_config: dict | None,
     turn_name: str,
-) -> dict:
+) -> tuple[dict, object]:
     try:
-        return call_llm(
+        value, usage = call_llm(
             prompt,
             user_content,
             model_config,
@@ -50,11 +50,12 @@ def _call_turn_json(
             json_mode=True,
             stream=True,
         )
+        return value, usage
     except Exception as exc:
         log.warning(
             f"cross_domain: {turn_name} turn failed with streaming, retrying once: {exc}"
         )
-        return call_llm(
+        value, usage = call_llm(
             prompt,
             user_content,
             model_config,
@@ -62,6 +63,7 @@ def _call_turn_json(
             json_mode=True,
             stream=False,
         )
+        return value, usage
 
 
 def run(
@@ -103,7 +105,7 @@ def run(
             log.info("Stage: cross_domain — reusing same-day cross_domain_plan")
         else:
             log.info("Stage: cross_domain — running Turn 1 planning...")
-            cross_domain_plan = _call_turn_json(
+            cross_domain_plan, _usage = _call_turn_json(
                 plan_prompt(deep_dive_count, worth_reading_count, connection_count),
                 _plan_user_content(
                     domain_analysis,
@@ -131,7 +133,7 @@ def run(
         )
 
         log.info("Stage: cross_domain — running Turn 2 execution...")
-        result = _call_turn_json(
+        result, _usage = _call_turn_json(
             execute_prompt(deep_dive_count, worth_reading_count),
             _execute_user_content(
                 domain_analysis,

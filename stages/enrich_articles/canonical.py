@@ -92,7 +92,7 @@ def _canonical_summary(
         f"{source_text}"
     )
     try:
-        summary = call_llm(
+        summary, _usage = call_llm(
             system_prompt,
             user_content,
             model_config,

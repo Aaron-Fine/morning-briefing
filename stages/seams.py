@@ -584,10 +584,10 @@ def _call_turn_json(
     model_config: dict | None,
     turn_name: str,
     fallback_shape: dict,
-) -> dict:
+) -> tuple[dict, object]:
     """Call a seams turn, preferring provider JSON mode before raw repair paths."""
     try:
-        result = call_llm(
+        result, usage = call_llm(
             prompt,
             user_content,
             model_config,
@@ -596,19 +596,20 @@ def _call_turn_json(
             stream=False,
         )
         if isinstance(result, dict):
-            return result
+            return result, usage
         if isinstance(result, str):
-            return _parse_turn_json(result)
+            return _parse_turn_json(result), usage
     except Exception as exc:
         log.warning(
             f"seams: {turn_name} turn failed with provider JSON mode, "
             f"falling back to raw parse: {exc}"
         )
 
+    last_usage = None
     raw_attempts: list[str] = []
     for stream in (True, False):
         try:
-            raw = call_llm(
+            raw, last_usage = call_llm(
                 prompt,
                 user_content,
                 model_config,
@@ -618,8 +619,8 @@ def _call_turn_json(
             )
             raw_attempts.append(raw)
             if isinstance(raw, dict):
-                return raw
-            return _parse_turn_json(raw)
+                return raw, last_usage
+            return _parse_turn_json(raw), last_usage
         except Exception as exc:
             if stream:
                 log.warning(
@@ -638,7 +639,7 @@ def _call_turn_json(
         except Exception as exc:
             log.warning(f"seams: {turn_name} JSON repair failed: {exc}")
 
-    return dict(fallback_shape)
+    return dict(fallback_shape), last_usage
 
 
 def _parse_turn_json(raw: str) -> dict:
@@ -659,7 +660,7 @@ def _repair_turn_json(
     model_config: dict | None,
     turn_name: str,
     fallback_shape: dict,
-) -> dict:
+) -> tuple[dict, object]:
     repair_config = dict(model_config or {})
     repair_config["max_tokens"] = min(repair_config.get("max_tokens", 4000), 4000)
     repair_request = f"""Repair this malformed {turn_name} JSON into valid JSON.
@@ -670,7 +671,7 @@ Target shape:
 Malformed JSON:
 {raw}
 """
-    return call_llm(
+    value, usage = call_llm(
         _JSON_REPAIR_PROMPT,
         repair_request,
         repair_config,
@@ -678,6 +679,7 @@ Malformed JSON:
         json_mode=True,
         stream=False,
     )
+    return value, usage
 
 
 def _empty_seam_result() -> dict:
@@ -727,7 +729,7 @@ def run(
 
     try:
         log.info("Stage: seams — detecting per-item annotations...")
-        result = _call_turn_json(
+        result, _usage = _call_turn_json(
             _ANNOTATION_PROMPT,
             _annotation_user_content(
                 domain_summary,

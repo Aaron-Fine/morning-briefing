@@ -124,7 +124,7 @@ def generate_weekly_guide(
     if path.exists() and not force:
         return path
 
-    guide = call_llm(
+    guide, _usage = call_llm(
         _GUIDE_SYSTEM_PROMPT,
         _guide_user_content(lesson),
         model_config,
@@ -294,7 +294,7 @@ USER STUDY GUIDE:
 Return the weekly spiritual artifact as JSON."""
 
     try:
-        raw = call_llm(
+        raw, _usage = call_llm(
             _SYSTEM_PROMPT,
             user_content,
             model_config,

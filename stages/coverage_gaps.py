@@ -203,7 +203,7 @@ def run(
     )
 
     try:
-        result = call_llm(
+        result, _usage = call_llm(
             system_prompt,
             user_content,
             model_config,

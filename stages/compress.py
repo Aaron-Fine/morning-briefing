@@ -42,7 +42,7 @@ def _compress_one(video: dict, model_config: dict) -> dict:
 
     compressed = ""
     try:
-        compressed = call_llm(
+        compressed, _usage = call_llm(
             _SYSTEM_PROMPT,
             user_content,
             model_config,
