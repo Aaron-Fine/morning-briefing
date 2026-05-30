@@ -15,6 +15,13 @@ Three classes of metric, all flowing **up the call stack** (no global mutable
 collector): per-stage LLM usage, override-firing counts, and item-flow counts.
 All land in a new `metrics` block inside the existing `run_meta.json`.
 
+PR-0 also adds **runtime observability** — live, mid-run feedback about what is
+executing and what we are waiting on, because today a run can sit silent for
+minutes (parallel desks, long LLM calls, article fetches) with no signal of
+progress vs. hang. This is the live face of the same wait boundaries the metrics
+instrument: one touch per boundary, two outputs (a progress log line + the
+recorded metric). See Component 6.
+
 ## Principle
 
 Make the right thing the easy thing. Data rides with return values, so it is
@@ -32,7 +39,6 @@ guard test fails CI if a stage makes an LLM call but doesn't surface usage.
   save-on-fatal-exit path.
 - No behavior change. Overrides still fire exactly as today; PR-0 only *counts*
   when they mutate. PR-A removes the overrides and their counters together.
-- No live-LLM tests. Provider responses are mocked.
 
 ---
 
@@ -121,6 +127,8 @@ run_meta["metrics"]["stages"][stage_name] = {
 }
 ```
 
+Note: mark speculative or future use keys with a TODO in the code for future stages to update as needed. 
+
 `retries` requires `_run_with_retry` to report attempt count back to the loop
 (today it only logs). Minimal change: return `(outputs, attempts)` or stash the
 count where the loop can read it.
@@ -206,6 +214,46 @@ is off.
 
 ---
 
+## Component 6 — Runtime observability (live progress + heartbeat)
+
+Live mid-run feedback over stdlib `logging` at INFO, so it works identically in
+a terminal, under cron, and in Docker logs — no TTY assumptions, no new
+dependency. Two pieces: per-boundary progress lines, and a heartbeat watchdog
+that proves the run is alive.
+
+**`morning_digest/progress.py`** provides:
+- A thread-safe **in-flight registry**: `label -> started_at`. Parallel desks
+  register concurrently, so access is lock-guarded.
+- A **`track(label)` context manager**: on enter, registers the op and logs
+  `<label>: start`; on exit, deregisters and logs `<label>: done {elapsed}s`.
+  This is the single wait-boundary primitive.
+- A **heartbeat daemon thread**, started at pipeline start and stopped in a
+  `finally` at pipeline end. Every `heartbeat_interval_s` (config, default 15;
+  `<= 0` disables) it logs one line summarizing the current in-flight set:
+  `[hb] waiting on N op(s): <labels> ({longest_elapsed}s)`. Quiet when nothing
+  is in flight. Daemon so it can never block process exit.
+
+**Wait points instrumented** (these are the same boundaries Components 1–3
+touch):
+- **Run loop**: extend the existing stage banner to `--- Stage N/M: name ---`.
+- **`call_llm`**: wrap the provider call in `track(f"{stage}[:{sublabel}] {model}")`;
+  the done-line carries elapsed + token count. Replaces the bare
+  `Calling LLM ({model})...` log. `stage`/`sublabel` arrive via the
+  `model_config["_stage_name"]` already threaded for prompt capture (sublabel,
+  e.g. a desk key, optional).
+- **`analyze_domain` desk pool**: each desk wraps its work in
+  `track(f"desk {desk_key}")`; completion logs a running `N/M desks done`.
+- **`enrich_articles` fetch loop**: periodic `fetched X/Y articles` on its batch
+  boundary.
+
+**Separation of concerns:** `track()` owns *liveness* (logs + heartbeat
+registration + wall-clock timing); the `LLMResult.usage` return owns *metrics*
+(tokens/model). They co-locate at `call_llm` but neither depends on the other —
+runtime observability works even if a provider omits usage, and metrics fold up
+even if the heartbeat is disabled.
+
+---
+
 ## Data shape (full `run_meta.metrics`)
 
 ```jsonc
@@ -248,6 +296,11 @@ the smoke-detector rendering arrive in Phase 5; PR-0 only produces the data.
 - Generic item-flow derivation from representative `outputs`.
 - `--capture-prompts` writes the expected files with exact prompt content; no-op
   when the flag is absent.
+- `progress.track()` registers/deregisters and logs start + `done {elapsed}s`;
+  in-flight registry is correct under concurrent register/deregister. The
+  heartbeat *message-formatting* function is tested directly (given an in-flight
+  set → expected line) so no flaky timer/sleep is needed; the daemon thread's
+  start/stop lifecycle is tested for clean shutdown, and `interval <= 0` disables.
 - All provider calls mocked; no live LLM.
 
 ## Out of scope for PR-0 (carried by later PRs)
