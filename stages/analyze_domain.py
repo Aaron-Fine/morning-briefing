@@ -57,6 +57,8 @@ from utils.prompts import load_prompt
 
 log = logging.getLogger(__name__)
 
+_ACTION_PREPENDED_REBALANCED = "prepended_rebalanced_item"
+
 # ---------------------------------------------------------------------------
 # Domain configuration: source categories and transcript channel names
 # ---------------------------------------------------------------------------
@@ -816,7 +818,7 @@ def _rebalance_categories(
             {
                 "desk": desk_key,
                 "category": cat,
-                "action": "prepended_rebalanced_item",
+                "action": _ACTION_PREPENDED_REBALANCED,
                 "item_id": synthetic_item["item_id"],
                 "raw_count": len(raw_items),
             }
@@ -919,7 +921,7 @@ def run(
         )
 
     rebalance_synthesized = sum(
-        1 for entry in rebalance_log if entry.get("action") == "prepended_rebalanced_item"
+        1 for entry in rebalance_log if entry.get("action") == _ACTION_PREPENDED_REBALANCED
     )
 
     return {

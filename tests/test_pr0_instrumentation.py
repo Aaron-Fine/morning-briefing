@@ -1,11 +1,10 @@
 import logging
 from unittest.mock import MagicMock, patch
-from morning_digest.llm import call_llm
+from morning_digest.llm import call_llm, LLMUsage
+import pipeline
 
 
 def test_runner_folds_llm_usage():
-    import pipeline
-    from morning_digest.llm import LLMUsage
     run_meta = {"metrics": {"stages": {}, "overrides": {}, "totals": {}}}
     outputs = {"foo": [1, 2, 3], "llm_usage": [LLMUsage("m", "fireworks", 100, 20, 5)]}
     remaining = pipeline._fold_stage_metrics(
@@ -20,7 +19,6 @@ def test_runner_folds_llm_usage():
 
 
 def test_runner_folds_override_counts():
-    import pipeline
     rm = {"metrics": {"stages": {}, "overrides": {}, "totals": {}}}
     pipeline._fold_stage_metrics(rm, "cross_domain",
         {"override_counts": {"normalize_tag": 3}}, latency_s=0.1, retries=0)

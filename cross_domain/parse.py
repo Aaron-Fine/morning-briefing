@@ -7,6 +7,8 @@ from utils.urls import collect_known_urls, registered_domain, url_known
 
 log = logging.getLogger(__name__)
 
+_REASON_PHRASE_OVERLAP = "phrase_overlap_with_at_a_glance"
+
 _VALID_TAGS = {
     "war",
     "domestic",
@@ -566,7 +568,7 @@ def _downgrade_overlap_depth(result: dict) -> dict:
                     "section": "deep_dives",
                     "original_depth": original,
                     "recomputed_depth": new_depth,
-                    "reason": "phrase_overlap_with_at_a_glance",
+                    "reason": _REASON_PHRASE_OVERLAP,
                     "overlap_count": len(overlap),
                     "sample_phrase": sorted(overlap)[0],
                 })
@@ -596,10 +598,14 @@ def _validated_output(
         econ = domain_analysis.get("econ", {})
         result["market_context"] = econ.get("market_context", "")
 
-    counts = result.setdefault("_override_counts", {
-        "normalize_tag": 0, "tag_label": 0, "recompute_source_depth": 0,
-        "ensure_primary_glance_coverage": 0, "overlap_downgrade": 0,
-    })
+    result["_override_counts"] = {
+        "normalize_tag": 0,
+        "tag_label": 0,
+        "recompute_source_depth": 0,
+        "ensure_primary_glance_coverage": 0,
+        "overlap_downgrade": 0,
+    }
+    counts = result["_override_counts"]
 
     known_urls = collect_known_urls(raw_sources, domain_analysis)
 
@@ -625,7 +631,7 @@ def _validated_output(
     result["at_a_glance"] = _ensure_primary_glance_coverage(
         result["at_a_glance"], domain_analysis, config
     )
-    counts["ensure_primary_glance_coverage"] += len(result["at_a_glance"]) - before
+    counts["ensure_primary_glance_coverage"] += len(result["at_a_glance"]) - before  # _ensure_primary_glance_coverage only appends; delta is items added
     for item in result["at_a_glance"]:
         item["links"] = [
             lnk
@@ -648,10 +654,10 @@ def _validated_output(
 
     downgrades = result.get("_source_depth_downgrades", [])
     counts["recompute_source_depth"] += sum(
-        1 for d in downgrades if d.get("reason") != "phrase_overlap_with_at_a_glance"
+        1 for d in downgrades if d.get("reason") != _REASON_PHRASE_OVERLAP
     )
     counts["overlap_downgrade"] += sum(
-        1 for d in downgrades if d.get("reason") == "phrase_overlap_with_at_a_glance"
+        1 for d in downgrades if d.get("reason") == _REASON_PHRASE_OVERLAP
     )
 
     digest_cfg = config.get("digest", {})

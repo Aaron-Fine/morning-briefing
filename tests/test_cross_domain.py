@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from tests.conftest import llm_result
 from morning_digest.llm import LLMUsage
 
-from cross_domain.parse import _validated_output as _vo
+from cross_domain.parse import _validated_output as _vo, _REASON_PHRASE_OVERLAP
 
 from stages.cross_domain import (
     _normalize_tag,
@@ -992,6 +992,115 @@ def test_validated_output_counts_overrides():
     assert oc["recompute_source_depth"] >= 1  # widely-reported single domain -> downgraded
 
 
+def test_validated_output_counts_tag_label():
+    """tag_label counter increments when the canonical label differs from the LLM-provided one."""
+    result = {
+        "at_a_glance": [
+            # tag normalizes to "ai"; tag_label "wrong" will be replaced by "AI"
+            {"item_id": "b", "tag": "ai", "tag_label": "wrong",
+             "source_depth": "single-source", "links": []},
+        ],
+        "deep_dives": [], "cross_domain_connections": [], "worth_reading": [],
+    }
+    out = _vo(result, {}, {}, {"digest": {}})
+    oc = out["_override_counts"]
+    assert oc["tag_label"] >= 1
+
+
+def test_validated_output_counts_ensure_primary_glance_coverage():
+    """ensure_primary_glance_coverage counter increments when a fallback item is injected."""
+    # Provide an at_a_glance with only "econ" — missing "war" / "ai" / "defense".
+    # Provide a geopolitics_events domain result with a non-deep-dive candidate tagged "war".
+    result = {
+        "at_a_glance": [
+            {"item_id": "e1", "tag": "econ", "tag_label": "Economy",
+             "source_depth": "single-source", "links": []},
+        ],
+        "deep_dives": [], "cross_domain_connections": [], "worth_reading": [],
+    }
+    domain_analysis = {
+        "geopolitics_events": {
+            "items": [
+                {
+                    "item_id": "geo1",
+                    "tag": "war",
+                    "tag_label": "Conflict",
+                    "headline": "War headline",
+                    "facts": "Some war facts.",
+                    "analysis": "Some war analysis.",
+                    "source_depth": "corroborated",
+                    "deep_dive_candidate": False,
+                    "links": [{"url": "https://aljazeera.com/war"}],
+                    "connection_hooks": [],
+                }
+            ]
+        }
+    }
+    raw = {"rss": [{"url": "https://aljazeera.com/war"}]}
+    out = _vo(result, domain_analysis, raw, {"digest": {}})
+    oc = out["_override_counts"]
+    assert oc["ensure_primary_glance_coverage"] >= 1
+
+
+def test_validated_output_counts_overlap_downgrade():
+    """overlap_downgrade counter increments when a deep_dive is downgraded due to phrase overlap.
+
+    A 12-word shared phrase produces 3 distinct 10-word windows, clearing
+    _OVERLAP_DOWNGRADE_MIN_WINDOWS (3).  The at_a_glance item and deep_dive
+    both contain the phrase, so _downgrade_overlap_depth fires and the
+    overlap_downgrade counter should be >= 1.
+
+    The deep_dive is given links from two distinct domains so _downgrade_same_outlet_depth
+    (which runs first) does NOT downgrade it — ensuring the item still has
+    source_depth "corroborated" when the overlap check runs.
+    """
+    # 12 distinct words → 3 sliding 10-word windows → triggers overlap downgrade
+    shared = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima"
+    result = {
+        "at_a_glance": [
+            {
+                "item_id": "ov1",
+                "tag": "war",
+                "tag_label": "Conflict",
+                "headline": "Overlap headline",
+                "facts": shared,
+                "analysis": "",
+                "source_depth": "corroborated",
+                "links": [{"url": "https://reuters.com/a"}, {"url": "https://apnews.com/b"}],
+            }
+        ],
+        "deep_dives": [
+            {
+                "headline": "Deep overlap",
+                "body": f"<p>{shared} and additional independent analysis text here.</p>",
+                # Two distinct domains → _downgrade_same_outlet_depth leaves this as "corroborated"
+                "source_depth": "corroborated",
+                "further_reading": [
+                    {"url": "https://reuters.com/a"},
+                    {"url": "https://bbc.co.uk/deep"},
+                ],
+            }
+        ],
+        "cross_domain_connections": [],
+        "worth_reading": [],
+    }
+    raw = {
+        "rss": [
+            {"url": "https://reuters.com/a"},
+            {"url": "https://apnews.com/b"},
+            {"url": "https://bbc.co.uk/deep"},
+        ]
+    }
+    out = _vo(result, {}, raw, {"digest": {}})
+    oc = out["_override_counts"]
+    assert oc["overlap_downgrade"] >= 1
+    # The deep_dive must have been downgraded: corroborated → single-source
+    assert out["deep_dives"][0]["source_depth"] == "single-source"
+    # Confirm the downgrade log entry uses the constant value
+    downgrades = out["_source_depth_downgrades"]
+    assert any(d["reason"] == _REASON_PHRASE_OVERLAP for d in downgrades)
+
+
 class TestOverlapDepthDowngrade:
     def test_downgrades_when_phrase_overlaps_at_a_glance(self):
         from cross_domain.parse import _downgrade_overlap_depth
@@ -1022,7 +1131,7 @@ class TestOverlapDepthDowngrade:
         assert out["deep_dives"][0]["source_depth"] == "single-source"
         downgrades = out["_source_depth_downgrades"]
         assert len(downgrades) == 1
-        assert downgrades[0]["reason"] == "phrase_overlap_with_at_a_glance"
+        assert downgrades[0]["reason"] == _REASON_PHRASE_OVERLAP
         assert downgrades[0]["overlap_count"] >= 3
 
     def test_single_window_overlap_does_not_downgrade(self):
