@@ -19,6 +19,8 @@ import os
 import time
 from typing import NamedTuple
 
+from morning_digest import progress
+
 log = logging.getLogger(__name__)
 
 
@@ -90,11 +92,19 @@ def call_llm(
     """
     provider = model_config.get("provider", "fireworks")
 
-    if provider == "anthropic":
-        return _call_anthropic(
-            system_prompt, user_content, model_config, max_retries, json_mode, stream
-        )
-    else:
+    # Observability context rides in a single namespaced, read-only key set by the
+    # runner. It is never popped or splatted into a provider call, so it cannot leak
+    # into the SDK. (Not three scattered keys, not contextvars — see spec Component 5.)
+    obs = model_config.get("_obs") or {}
+    stage = obs.get("stage", "llm")
+    sublabel = obs.get("sublabel")
+    model = model_config.get("model", "?")
+    label = f"{stage}:{sublabel} {model}" if sublabel else f"{stage} {model}"
+    with progress.track(label):
+        if provider == "anthropic":
+            return _call_anthropic(
+                system_prompt, user_content, model_config, max_retries, json_mode, stream
+            )
         return _call_fireworks(
             system_prompt, user_content, model_config, max_retries, json_mode, stream
         )
@@ -270,7 +280,6 @@ def _call_anthropic(
 def _retry_loop(fn, max_retries: int, retryable_errors: tuple, model: str):
     for attempt in range(max_retries + 1):
         try:
-            log.info(f"Calling LLM ({model})...")
             return fn()
         except retryable_errors as e:
             log.warning(f"LLM error (attempt {attempt + 1}): {e}")

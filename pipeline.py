@@ -690,132 +690,145 @@ def run_pipeline(
 
     _OUTPUT_DIR.mkdir(exist_ok=True)
 
-    for stage_cfg in stage_manifest:
-        stage_name = stage_cfg["name"]
-        stage_meta = _get_stage_meta(stage_name)
-        model_config = _get_stage_model_config(stage_cfg, stage_name=stage_name, config=config)
-        retry_config = _get_stage_retry_config(stage_cfg, config)
+    from morning_digest import progress
+    progress.reset()
+    hb_interval = config.get("pipeline", {}).get("heartbeat_interval_s", 15)
+    heartbeat = progress.Heartbeat(interval_s=hb_interval)
+    heartbeat.start()
+    total_stages = len(stage_manifest)
 
-        # --sources-only: stop after collect
-        if sources_only and stage_name != "collect":
-            break
+    try:
+        for stage_idx, stage_cfg in enumerate(stage_manifest, 1):
+            stage_name = stage_cfg["name"]
+            stage_meta = _get_stage_meta(stage_name)
+            model_config = _get_stage_model_config(stage_cfg, stage_name=stage_name, config=config)
+            retry_config = _get_stage_retry_config(stage_cfg, config)
 
-        # --dry-run: skip send
-        if dry_run and stage_name == "send":
-            log.info(f"  [dry-run] Skipping stage: {stage_name}")
-            continue
+            if isinstance(model_config, dict):
+                model_config = {**model_config, "_obs": {"stage": stage_name}}
 
-        # If running from a specific stage, load prior outputs from artifacts
-        if skip_before and stage_name != skip_before and stage_name in stage_names:
-            idx_current = stage_names.index(stage_name)
-            idx_from = stage_names.index(skip_before)
-            if idx_current < idx_from:
-                log.info(f"  Loading cached artifact for skipped stage: {stage_name}")
-                if load_dir:
-                    _load_cached_stage_outputs(stage_name, context, load_dir)
-                continue  # don't execute this stage
+            # --sources-only: stop after collect
+            if sources_only and stage_name != "collect":
+                break
 
-        _run_stage_before_hook(
-            stage_name,
-            context,
-            run_date=run_date,
-            artifact_dir=artifact_dir,
-            dry_run=dry_run,
-            load_dir=load_dir,
-            config=config,
-            stage_from=stage_from,
-            from_plan=from_plan,
-        )
+            # --dry-run: skip send
+            if dry_run and stage_name == "send":
+                log.info(f"  [dry-run] Skipping stage: {stage_name}")
+                continue
 
-        # Execute the stage
-        log.info(f"--- Stage: {stage_name} ---")
-        t_start = time.monotonic()
+            # If running from a specific stage, load prior outputs from artifacts
+            if skip_before and stage_name != skip_before and stage_name in stage_names:
+                idx_current = stage_names.index(stage_name)
+                idx_from = stage_names.index(skip_before)
+                if idx_current < idx_from:
+                    log.info(f"  Loading cached artifact for skipped stage: {stage_name}")
+                    if load_dir:
+                        _load_cached_stage_outputs(stage_name, context, load_dir)
+                    continue  # don't execute this stage
 
-        try:
-            module = _load_stage_module(stage_name)
-
-            outputs = _run_with_retry(
-                lambda m=module: m.run(
-                    context, config, model_config, stage_cfg=stage_cfg, dry_run=dry_run
-                ),
+            _run_stage_before_hook(
                 stage_name,
-                max_retries=retry_config["max_retries"],
-                backoff_base_seconds=retry_config["backoff_base_seconds"],
+                context,
+                run_date=run_date,
+                artifact_dir=artifact_dir,
+                dry_run=dry_run,
+                load_dir=load_dir,
+                config=config,
+                stage_from=stage_from,
+                from_plan=from_plan,
             )
 
-        except Exception as e:
+            # Execute the stage
+            log.info(f"--- Stage {stage_idx}/{total_stages}: {stage_name} ---")
+            t_start = time.monotonic()
+
+            try:
+                module = _load_stage_module(stage_name)
+
+                outputs = _run_with_retry(
+                    lambda m=module: m.run(
+                        context, config, model_config, stage_cfg=stage_cfg, dry_run=dry_run
+                    ),
+                    stage_name,
+                    max_retries=retry_config["max_retries"],
+                    backoff_base_seconds=retry_config["backoff_base_seconds"],
+                )
+
+            except Exception as e:
+                elapsed = time.monotonic() - t_start
+                run_meta["stage_timings"][stage_name] = round(elapsed, 2)
+
+                if stage_meta["non_critical"]:
+                    log.warning(
+                        f"Stage '{stage_name}' failed after retries (non-critical, continuing): {e}"
+                    )
+                    run_meta["stage_failures"].append(
+                        {"stage": stage_name, "error": str(e)}
+                    )
+                    # Provide safe empty outputs so downstream stages don't crash
+                    outputs = _empty_stage_output(stage_name)
+                else:
+                    log.error(f"Stage '{stage_name}' failed (critical): {e}")
+                    run_meta["stage_failures"].append(
+                        {"stage": stage_name, "error": str(e), "fatal": True}
+                    )
+                    _save_artifact(artifact_dir, "run_meta", run_meta)
+                    sys.exit(1)
+
             elapsed = time.monotonic() - t_start
             run_meta["stage_timings"][stage_name] = round(elapsed, 2)
+            log.info(f"  Stage '{stage_name}' completed in {elapsed:.1f}s")
 
-            if stage_meta["non_critical"]:
-                log.warning(
-                    f"Stage '{stage_name}' failed after retries (non-critical, continuing): {e}"
-                )
-                run_meta["stage_failures"].append(
-                    {"stage": stage_name, "error": str(e)}
-                )
-                # Provide safe empty outputs so downstream stages don't crash
-                outputs = _empty_stage_output(stage_name)
-            else:
-                log.error(f"Stage '{stage_name}' failed (critical): {e}")
-                run_meta["stage_failures"].append(
-                    {"stage": stage_name, "error": str(e), "fatal": True}
-                )
-                _save_artifact(artifact_dir, "run_meta", run_meta)
-                sys.exit(1)
+            # Merge outputs into context
+            context.update(outputs)
+            _log_stage_observability(stage_name, outputs)
 
-        elapsed = time.monotonic() - t_start
-        run_meta["stage_timings"][stage_name] = round(elapsed, 2)
-        log.info(f"  Stage '{stage_name}' completed in {elapsed:.1f}s")
+            # Persist each output artifact
+            for key, value in outputs.items():
+                if key not in ("html",):  # don't double-write html; handled below
+                    _save_artifact(artifact_dir, key, value)
 
-        # Merge outputs into context
-        context.update(outputs)
-        _log_stage_observability(stage_name, outputs)
-
-        # Persist each output artifact
-        for key, value in outputs.items():
-            if key not in ("html",):  # don't double-write html; handled below
-                _save_artifact(artifact_dir, key, value)
-
-        _run_stage_after_hook(
-            stage_name,
-            context,
-            outputs,
-            artifact_dir=artifact_dir,
-            run_date=run_date,
-            dry_run=dry_run,
-            load_dir=load_dir,
-            config=config,
-        )
-
-        # --sources-only: dump sources.json after collect and exit
-        if sources_only and stage_name == "collect":
-            out = _OUTPUT_DIR / "sources.json"
-            out.write_text(
-                json.dumps(context.get("raw_sources", {}), indent=2, default=str),
-                encoding="utf-8",
+            _run_stage_after_hook(
+                stage_name,
+                context,
+                outputs,
+                artifact_dir=artifact_dir,
+                run_date=run_date,
+                dry_run=dry_run,
+                load_dir=load_dir,
+                config=config,
             )
-            log.info(f"=== Sources written to {out} ===")
-            return
 
-    # Finalize run metadata
-    run_meta["finished_at"] = iso_now_local()
-    _save_artifact(artifact_dir, "run_meta", run_meta)
+            # --sources-only: dump sources.json after collect and exit
+            if sources_only and stage_name == "collect":
+                out = _OUTPUT_DIR / "sources.json"
+                out.write_text(
+                    json.dumps(context.get("raw_sources", {}), indent=2, default=str),
+                    encoding="utf-8",
+                )
+                log.info(f"=== Sources written to {out} ===")
+                return
 
-    # Prune old artifacts
-    _prune_artifacts(keep_days=30)
+        # Finalize run metadata
+        run_meta["finished_at"] = iso_now_local()
+        _save_artifact(artifact_dir, "run_meta", run_meta)
 
-    if dry_run:
-        log.info(
-            f"=== Dry run complete — digest saved to {_OUTPUT_DIR / 'last_digest.html'} ==="
-        )
-    else:
-        send_result = context.get("send_result", {})
-        if send_result.get("success"):
-            log.info("=== Digest sent successfully ===")
+        # Prune old artifacts
+        _prune_artifacts(keep_days=30)
+
+        if dry_run:
+            log.info(
+                f"=== Dry run complete — digest saved to {_OUTPUT_DIR / 'last_digest.html'} ==="
+            )
         else:
-            log.error("=== Pipeline completed but digest send failed ===")
-            sys.exit(1)
+            send_result = context.get("send_result", {})
+            if send_result.get("success"):
+                log.info("=== Digest sent successfully ===")
+            else:
+                log.error("=== Pipeline completed but digest send failed ===")
+                sys.exit(1)
+    finally:
+        heartbeat.stop()
 
 
 def _stage_artifact_key(stage_name: str) -> str:

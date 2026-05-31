@@ -958,18 +958,22 @@ def _run_all_domains(
         research_results: list[dict] | None = None,
         allow_research_requests: bool = False,
     ) -> tuple[str, dict]:
+        from morning_digest import progress
         domain_cfg = domain_configs[domain_key]
         log.info(f"  Analyzing domain: {domain_key} ({domain_cfg['label']})")
-        result = _run_domain_pass(
-            domain_key,
-            domain_cfg,
-            rss_items,
-            compressed_transcripts,
-            markets if domain_key == "econ" else [],
-            model_config,
-            research_results=research_results,
-            allow_research_requests=allow_research_requests,
-        )
+        with progress.track(f"desk {domain_key}"):
+            base = model_config or {}
+            mc = {**base, "_obs": {**(base.get("_obs") or {}), "sublabel": domain_key}}
+            result = _run_domain_pass(
+                domain_key,
+                domain_cfg,
+                rss_items,
+                compressed_transcripts,
+                markets if domain_key == "econ" else [],
+                mc,
+                research_results=research_results,
+                allow_research_requests=allow_research_requests,
+            )
         return domain_key, result
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
