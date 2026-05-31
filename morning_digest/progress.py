@@ -50,3 +50,30 @@ def heartbeat_line() -> str | None:
         longest = max(now - t for t in _in_flight.values())
     shown = ", ".join(labels[:5]) + ("…" if len(labels) > 5 else "")
     return f"[hb] waiting on {len(labels)} op(s): {shown} ({longest:.0f}s)"
+
+
+class Heartbeat:
+    """Daemon that logs the in-flight set every interval_s seconds."""
+
+    def __init__(self, interval_s: float = 15.0):
+        self.interval_s = interval_s
+        self._thread: threading.Thread | None = None
+        self._stop = threading.Event()
+
+    def start(self) -> None:
+        if self.interval_s <= 0:
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, name="heartbeat", daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.interval_s):
+            line = heartbeat_line()
+            if line:
+                log.info(line)
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
