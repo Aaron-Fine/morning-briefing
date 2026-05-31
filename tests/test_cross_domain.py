@@ -2,7 +2,9 @@
 
 import sys
 import os
+import copy
 import json
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -11,6 +13,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from tests.conftest import llm_result
 from morning_digest.llm import LLMUsage
+
+from cross_domain.parse import _validated_output as _vo
 
 from stages.cross_domain import (
     _normalize_tag,
@@ -852,6 +856,43 @@ class TestCrossDomainRun:
         usage = outputs["llm_usage"]
         assert len(usage) == 2 and all(isinstance(u, LLMUsage) for u in usage)
         assert usage[0].tokens_in == 900 and usage[1].tokens_out == 300
+
+
+_GOLDEN_INPUT = {
+    "at_a_glance": [
+        {"item_id": "g1", "tag": "AI", "tag_label": "bogus",
+         "source_depth": "widely-reported", "headline": "h1",
+         "facts": "f", "analysis": "a",
+         "links": [{"url": "https://reuters.com/x"}]},
+    ],
+    "deep_dives": [
+        {"headline": "Deep one", "source_depth": "corroborated", "body": "b",
+         "further_reading": [{"url": "https://apnews.com/y"}]},
+    ],
+    "cross_domain_connections": [],
+    "worth_reading": [],
+}
+_GOLDEN_DOMAIN_ANALYSIS = {"econ": {"market_context": "ctx"}}
+_GOLDEN_RAW = {"rss": [{"url": "https://reuters.com/x"}, {"url": "https://apnews.com/y"}]}
+_GOLDEN_CONFIG = {"digest": {"at_a_glance": {"max_items": 7}}}
+
+_GOLDEN_PATH = Path(__file__).parent / "golden" / "cross_domain_validated.json"
+
+
+def _strip_internal(result: dict) -> dict:
+    out = json.loads(json.dumps(result))  # deep copy + JSON-normalize
+    out.pop("_override_counts", None)
+    out.pop("_source_depth_downgrades", None)
+    return out
+
+
+def test_validated_output_matches_golden():
+    result = _vo(
+        copy.deepcopy(_GOLDEN_INPUT),
+        _GOLDEN_DOMAIN_ANALYSIS, _GOLDEN_RAW, _GOLDEN_CONFIG,
+    )
+    golden = json.loads(_GOLDEN_PATH.read_text())
+    assert _strip_internal(result) == golden
 
 
 class TestSourceDepthRecomputation:

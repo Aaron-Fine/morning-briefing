@@ -1,0 +1,33 @@
+{
+  "at_a_glance": [
+    {
+      "analysis": "a",
+      "facts": "f",
+      "headline": "h1",
+      "item_id": "g1",
+      "links": [
+        {
+          "url": "https://reuters.com/x"
+        }
+      ],
+      "source_depth": "single-source",
+      "tag": "ai",
+      "tag_label": "AI"
+    }
+  ],
+  "cross_domain_connections": [],
+  "deep_dives": [
+    {
+      "body": "b",
+      "further_reading": [
+        {
+          "url": "https://apnews.com/y"
+        }
+      ],
+      "headline": "Deep one",
+      "source_depth": "single-source"
+    }
+  ],
+  "market_context": "ctx",
+  "worth_reading": []
+}
