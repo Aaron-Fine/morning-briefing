@@ -14,7 +14,7 @@ import json
 import logging
 from pathlib import Path
 
-from morning_digest.llm import call_llm
+from morning_digest.llm import LLMUsage, call_llm
 from sources.come_follow_me import get_lesson_for_date
 from stages.spiritual_units import normalize_daily_units
 from utils.prompts import load_prompt
@@ -113,7 +113,7 @@ def generate_weekly_guide(
     model_config: dict | None,
     *,
     force: bool = False,
-) -> Path:
+) -> "tuple[Path, LLMUsage | None]":
     week_start = str(lesson.get("week_start", "")).strip()
     if not week_start:
         raise ValueError("lesson.week_start is required")
@@ -122,7 +122,7 @@ def generate_weekly_guide(
 
     path = _guide_path(week_start)
     if path.exists() and not force:
-        return path
+        return path, None
 
     guide, _guide_usage = call_llm(
         _GUIDE_SYSTEM_PROMPT,

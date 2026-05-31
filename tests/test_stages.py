@@ -100,7 +100,7 @@ class TestCompressRun:
             context,
             {"llm": {"provider": "fireworks", "model": "accounts/fireworks/models/minimax-m2p7"}},
         )
-        assert result["compressed_transcripts"] == []
+        assert result == {"compressed_transcripts": []}
 
     @patch("stages.compress.call_llm")
     def test_run_surfaces_llm_usage(self, mock_llm):
