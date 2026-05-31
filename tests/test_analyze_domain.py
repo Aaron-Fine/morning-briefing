@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.conftest import llm_result
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from stages.analyze_domain import (
@@ -281,7 +283,7 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_llm_success_returns_parsed_result(self, mock_llm):
-        mock_llm.return_value = {
+        mock_llm.return_value = llm_result({
             "items": [
                 {
                     "tag": "ai",
@@ -295,7 +297,7 @@ class TestRunDomainPass:
                     "deep_dive_rationale": None,
                 }
             ]
-        }
+        })
         cfg = _DOMAIN_CONFIGS["ai_tech"]
         result = _run_domain_pass(
             "ai_tech",
@@ -311,7 +313,7 @@ class TestRunDomainPass:
     @patch("stages.analyze_domain.call_llm")
     def test_research_requests_preserved_on_first_pass(self, mock_llm):
         url = "https://example.com/ai-tech"
-        mock_llm.return_value = {
+        mock_llm.return_value = llm_result({
             "items": [],
             "research_requests": [
                 {
@@ -322,7 +324,7 @@ class TestRunDomainPass:
                     "expected_use": "Decide whether to include",
                 }
             ],
-        }
+        })
         cfg = _DOMAIN_CONFIGS["ai_tech"]
         result = _run_domain_pass(
             "ai_tech",
@@ -338,7 +340,7 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_research_results_included_on_second_pass(self, mock_llm):
-        mock_llm.return_value = {"items": []}
+        mock_llm.return_value = llm_result({"items": []})
         cfg = _DOMAIN_CONFIGS["ai_tech"]
         _run_domain_pass(
             "ai_tech",
@@ -378,7 +380,7 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_list_result_wrapped_in_items(self, mock_llm):
-        mock_llm.return_value = [
+        mock_llm.return_value = llm_result([
             {
                 "tag": "ai",
                 "headline": "Test",
@@ -389,7 +391,7 @@ class TestRunDomainPass:
                 "links": [],
                 "deep_dive_candidate": False,
             }
-        ]
+        ])
         cfg = _DOMAIN_CONFIGS["ai_tech"]
         result = _run_domain_pass(
             "ai_tech",
@@ -404,7 +406,7 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_non_dict_result_returns_empty_items(self, mock_llm):
-        mock_llm.return_value = "not a dict"
+        mock_llm.return_value = llm_result("not a dict")
         cfg = _DOMAIN_CONFIGS["ai_tech"]
         result = _run_domain_pass(
             "ai_tech",
@@ -424,7 +426,7 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_non_list_items_returns_empty_items_with_contract_issue(self, mock_llm):
-        mock_llm.return_value = {"items": {"headline": "wrong container"}}
+        mock_llm.return_value = llm_result({"items": {"headline": "wrong container"}})
         cfg = _DOMAIN_CONFIGS["ai_tech"]
         result = _run_domain_pass(
             "ai_tech",
@@ -444,7 +446,7 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_malformed_nested_structures_are_normalized(self, mock_llm):
-        mock_llm.return_value = {
+        mock_llm.return_value = llm_result({
             "items": [
                 {
                     "tag": "ai",
@@ -459,7 +461,7 @@ class TestRunDomainPass:
                 },
                 "not an item",
             ]
-        }
+        })
         cfg = _DOMAIN_CONFIGS["ai_tech"]
         result = _run_domain_pass(
             "ai_tech",
@@ -493,7 +495,7 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_url_validation_strips_unknown_domains(self, mock_llm):
-        mock_llm.return_value = {
+        mock_llm.return_value = llm_result({
             "items": [
                 {
                     "tag": "ai",
@@ -509,7 +511,7 @@ class TestRunDomainPass:
                     "deep_dive_candidate": False,
                 }
             ]
-        }
+        })
         cfg = _DOMAIN_CONFIGS["ai_tech"]
         result = _run_domain_pass(
             "ai_tech",
@@ -525,7 +527,7 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_econ_pass_includes_market_data(self, mock_llm):
-        mock_llm.return_value = {"items": [], "market_context": "Markets up."}
+        mock_llm.return_value = llm_result({"items": [], "market_context": "Markets up."})
         cfg = _DOMAIN_CONFIGS["econ"]
         markets = [{"label": "SPY", "price": "500", "change_pct": 1.0}]
         result = _run_domain_pass(
@@ -540,7 +542,7 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_econ_missing_market_context_adds_empty_string(self, mock_llm):
-        mock_llm.return_value = {"items": []}
+        mock_llm.return_value = llm_result({"items": []})
         cfg = _DOMAIN_CONFIGS["econ"]
         result = _run_domain_pass(
             "econ",
@@ -554,7 +556,7 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_passes_transcripts_to_prompt(self, mock_llm):
-        mock_llm.return_value = {"items": []}
+        mock_llm.return_value = llm_result({"items": []})
         cfg = _DOMAIN_CONFIGS["ai_tech"]
         transcripts = [
             {"channel": "Theo - t3.gg", "title": "T1", "transcript": "Content"}
@@ -574,7 +576,7 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_passes_json_mode_and_stream(self, mock_llm):
-        mock_llm.return_value = {"items": []}
+        mock_llm.return_value = llm_result({"items": []})
         cfg = _DOMAIN_CONFIGS["ai_tech"]
         _run_domain_pass(
             "ai_tech",
@@ -811,9 +813,9 @@ class TestPerspectiveDesk:
 
     def test_run_extracts_perspective_framing(self):
         with patch("stages.analyze_domain.call_llm") as mock_llm:
-            mock_llm.return_value = {
+            mock_llm.return_value = llm_result({
                 "items": [{"headline": "Test framing", "facts": "F", "analysis": "A"}]
-            }
+            })
             context = {
                 "raw_sources": {
                     "rss": [
@@ -832,7 +834,7 @@ class TestPerspectiveDesk:
     def test_perspective_desk_handles_zero_qualifying_items(self):
         """min_items=0: empty perspective output must be tolerated, not error."""
         with patch("stages.analyze_domain.call_llm") as mock_llm:
-            mock_llm.return_value = {"items": []}
+            mock_llm.return_value = llm_result({"items": []})
             context = {
                 "raw_sources": {
                     "rss": [

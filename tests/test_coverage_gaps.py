@@ -11,6 +11,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from tests.conftest import llm_result
+
 from stages.coverage_gaps import (
     _build_domain_summary,
     _build_plan_summary,
@@ -200,7 +202,7 @@ class TestRunStage:
     @patch("stages.coverage_gaps.call_llm")
     @patch("stages.coverage_gaps._append_history")
     def test_successful_run(self, mock_history, mock_llm):
-        mock_llm.return_value = {
+        mock_llm.return_value = llm_result({
             "schema_version": 1,
             "date": "2026-04-18",
             "gaps": [
@@ -213,7 +215,7 @@ class TestRunStage:
                 }
             ],
             "recurring_patterns": [],
-        }
+        })
         result = run(self._make_context(), {}, {"provider": "fireworks"})
         assert "coverage_gaps" in result
         assert len(result["coverage_gaps"]["gaps"]) == 1
@@ -234,16 +236,16 @@ class TestRunStage:
     @patch("stages.coverage_gaps.call_llm")
     @patch("stages.coverage_gaps._append_history")
     def test_caps_gaps_at_five(self, mock_history, mock_llm):
-        mock_llm.return_value = {
+        mock_llm.return_value = llm_result({
             "gaps": [{"topic": f"Gap {i}"} for i in range(10)],
             "recurring_patterns": [],
-        }
+        })
         result = run(self._make_context(), {}, {"provider": "fireworks"})
         assert len(result["coverage_gaps"]["gaps"]) == 5
 
     @patch("stages.coverage_gaps.call_llm")
     @patch("stages.coverage_gaps._append_history")
     def test_non_dict_result_normalized(self, mock_history, mock_llm):
-        mock_llm.return_value = "not a dict"
+        mock_llm.return_value = llm_result("not a dict")
         result = run(self._make_context(), {}, {"provider": "fireworks"})
         assert result["coverage_gaps"]["gaps"] == []

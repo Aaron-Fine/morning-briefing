@@ -8,6 +8,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from stages.prepare_spiritual_weekly import run
+from tests.conftest import llm_result
 
 
 def _context():
@@ -28,7 +29,7 @@ def test_generates_weekly_artifact(mock_llm, tmp_path):
     artifact_dir = tmp_path / "artifacts"
     guide_dir.mkdir()
     (guide_dir / "2026-01-05.md").write_text("# Purpose\nServe carefully", encoding="utf-8")
-    mock_llm.return_value = {
+    mock_llm.return_value = llm_result({
         "week_start": "2026-01-05",
         "cfm_range": "Mosiah 1-3",
         "weekly_purpose": "Serve carefully",
@@ -57,7 +58,7 @@ def test_generates_weekly_artifact(mock_llm, tmp_path):
         "applications": [],
         "conspicuous_absences": [],
         "proposed_sequence": {"monday": "focus-1"},
-    }
+    })
 
     with patch("stages.prepare_spiritual_weekly._GUIDE_DIR", guide_dir):
         with patch("stages.prepare_spiritual_weekly._ARTIFACT_DIR", artifact_dir):
@@ -96,8 +97,8 @@ def test_missing_guide_auto_generates_then_builds_artifact(mock_llm, tmp_path):
     artifact_dir = tmp_path / "artifacts"
     guide_dir.mkdir()
     mock_llm.side_effect = [
-        "# Lesson Overview\nGenerated guide",
-        {
+        llm_result("# Lesson Overview\nGenerated guide"),
+        llm_result({
             "week_start": "2026-01-05",
             "cfm_range": "Mosiah 1-3",
             "weekly_purpose": "Generated purpose",
@@ -119,7 +120,7 @@ def test_missing_guide_auto_generates_then_builds_artifact(mock_llm, tmp_path):
             "applications": [],
             "conspicuous_absences": [],
             "proposed_sequence": {"monday": "focus-1"},
-        },
+        }),
     ]
 
     with patch("stages.prepare_spiritual_weekly._GUIDE_DIR", guide_dir):

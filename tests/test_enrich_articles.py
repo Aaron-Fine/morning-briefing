@@ -8,6 +8,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from stages.enrich_articles import _dedup_by_url, _looks_like_bad_llm_summary, run
+from tests.conftest import llm_result
 
 
 def _config(tmp_path, feeds=None, enrich=None):
@@ -86,7 +87,7 @@ def test_long_native_text_is_distilled_like_fetched_text(tmp_path):
         "Canonical summary with enough concrete detail to pass length checks "
         "for a long source article."
     )
-    with patch("stages.enrich_articles.canonical.call_llm", return_value=canonical):
+    with patch("stages.enrich_articles.canonical.call_llm", return_value=llm_result(canonical)):
         out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path, feeds=feeds), model)
     assert out["enriched_sources"]["rss"][0]["summary"] == canonical
     assert out["enrich_articles"]["records"][0]["source_text_origin"] == "rss_body"
@@ -125,7 +126,7 @@ def test_higher_native_threshold_ignores_cached_native_normalization(tmp_path):
         "Cached normalized summary with enough concrete detail to pass length checks "
         "for a long source article."
     )
-    with patch("stages.enrich_articles.canonical.call_llm", return_value=cached_summary):
+    with patch("stages.enrich_articles.canonical.call_llm", return_value=llm_result(cached_summary)):
         run({"raw_sources": {"rss": [dict(item)]}}, _config(tmp_path, feeds=feeds), model)
 
     with patch("stages.enrich_articles.canonical.call_llm") as llm:
@@ -191,7 +192,7 @@ def test_duplicate_gets_canonical_summary(tmp_path):
         "Canonical summary with enough concrete detail to pass length checks "
         "for a long source article."
     )
-    with patch("stages.enrich_articles.canonical.call_llm", return_value=canonical):
+    with patch("stages.enrich_articles.canonical.call_llm", return_value=llm_result(canonical)):
         out = run({"raw_sources": {"rss": items}}, _config(tmp_path), model)
     assert out["enriched_sources"]["rss"][0]["summary"] == canonical
     assert out["enriched_sources"]["rss"][1]["summary"] == canonical
@@ -233,7 +234,7 @@ def test_fetch_cap_limits_network_fetches_not_native_normalization(tmp_path):
         fetch.return_value.http_status = 500
         fetch.return_value.html = ""
         fetch.return_value.error = "boom"
-        with patch("stages.enrich_articles.canonical.call_llm", return_value=canonical):
+        with patch("stages.enrich_articles.canonical.call_llm", return_value=llm_result(canonical)):
             out = run({"raw_sources": {"rss": items}}, cfg, {"provider": "fireworks"})
     assert fetch.call_count == 1
     statuses = [r["status"] for r in out["enrich_articles"]["records"]]
@@ -442,7 +443,7 @@ def test_rejects_meta_llm_summary_for_long_source(tmp_path):
     model = {"provider": "fireworks", "model": "x"}
     with patch(
         "stages.enrich_articles.canonical.call_llm",
-        return_value="The user wants me to summarize this article.",
+        return_value=llm_result("The user wants me to summarize this article."),
     ):
         out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path, feeds=feeds), model)
     summary = out["enriched_sources"]["rss"][0]["summary"]
@@ -463,7 +464,7 @@ def test_short_llm_summary_records_rejection_reason(tmp_path):
         "_rss_body": "Full source sentence. " * 80,
     }
     model = {"provider": "fireworks", "model": "x"}
-    with patch("stages.enrich_articles.canonical.call_llm", return_value="Too short"):
+    with patch("stages.enrich_articles.canonical.call_llm", return_value=llm_result("Too short")):
         out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path, feeds=feeds), model)
     record = out["enrich_articles"]["records"][0]
     assert out["enriched_sources"]["rss"][0]["summary"].startswith("Full source sentence.")

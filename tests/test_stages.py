@@ -10,6 +10,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from tests.conftest import llm_result
+
 from stages.compress import _target_words, _compress_one, run as compress_run
 from stages.briefing_packet import (
     _first_two_sentences,
@@ -63,7 +65,7 @@ class TestCompressOne:
 
     @patch("stages.compress.call_llm")
     def test_successful_compression(self, mock_llm):
-        mock_llm.return_value = "This is a compressed summary."
+        mock_llm.return_value = llm_result("This is a compressed summary.")
         video = {
             "title": "Test Video",
             "channel": "TestChannel",

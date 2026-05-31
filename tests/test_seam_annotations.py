@@ -7,11 +7,12 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from stages.seams import run
+from tests.conftest import llm_result
 
 
 @patch("stages.seams.call_llm")
 def test_seams_returns_annotation_artifact(mock_llm):
-    mock_llm.return_value = {
+    mock_llm.return_value = llm_result({
         "per_item": [
             {
                 "item_id": "geo-1",
@@ -25,7 +26,7 @@ def test_seams_returns_annotation_artifact(mock_llm):
             }
         ],
         "cross_domain": [],
-    }
+    })
 
     result = run(
         {
@@ -53,7 +54,7 @@ def test_seams_retries_annotation_call_without_stream(mock_llm):
     mock_llm.side_effect = [
         Exception("bad json"),
         Exception("bad raw stream"),
-        {"per_item": [], "cross_domain": []},
+        llm_result({"per_item": [], "cross_domain": []}),
     ]
 
     run(
@@ -73,7 +74,7 @@ def test_seams_retries_annotation_call_without_stream(mock_llm):
 
 @patch("stages.seams.call_llm")
 def test_seams_applies_turn_overrides(mock_llm):
-    mock_llm.return_value = {"per_item": [], "cross_domain": []}
+    mock_llm.return_value = llm_result({"per_item": [], "cross_domain": []})
     stage_cfg = {
         "turns": {
             "candidates": {"max_tokens": 6000, "temperature": 0.4},

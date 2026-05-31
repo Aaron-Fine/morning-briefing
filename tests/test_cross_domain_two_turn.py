@@ -7,6 +7,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from stages.cross_domain import run
+from tests.conftest import llm_result
 
 
 def _context():
@@ -43,7 +44,7 @@ def _config():
 @patch("stages.cross_domain.call_llm")
 def test_cross_domain_returns_plan_and_output(mock_llm):
     mock_llm.side_effect = [
-        {
+        llm_result({
             "schema_version": 1,
             "cross_domain_connections": [
                 {
@@ -63,8 +64,8 @@ def test_cross_domain_returns_plan_and_output(mock_llm):
                 {"topic": "Read 3", "why_worth_reading": "Worth 3"},
             ],
             "rejected_alternatives": [{"topic": "Other", "reason": "Less important"}],
-        },
-        {
+        }),
+        llm_result({
             "at_a_glance": [],
             "deep_dives": [
                 {
@@ -86,7 +87,7 @@ def test_cross_domain_returns_plan_and_output(mock_llm):
                     "read_time": "10 min",
                 }
             ],
-        },
+        }),
     ]
 
     result = run(_context(), _config())
@@ -102,12 +103,12 @@ def test_cross_domain_returns_plan_and_output(mock_llm):
 
 @patch("stages.cross_domain.call_llm")
 def test_cross_domain_uses_existing_plan_for_from_plan(mock_llm):
-    mock_llm.return_value = {
+    mock_llm.return_value = llm_result({
         "at_a_glance": [],
         "deep_dives": [],
         "cross_domain_connections": [],
         "worth_reading": [],
-    }
+    })
     context = _context()
     context["cross_domain_plan"] = {
         "schema_version": 1,
@@ -137,19 +138,19 @@ def test_cross_domain_uses_existing_plan_for_from_plan(mock_llm):
 @patch("stages.cross_domain.call_llm")
 def test_cross_domain_applies_turn_overrides(mock_llm):
     mock_llm.side_effect = [
-        {
+        llm_result({
             "schema_version": 1,
             "cross_domain_connections": [],
             "deep_dives": [],
             "worth_reading": [],
             "rejected_alternatives": [],
-        },
-        {
+        }),
+        llm_result({
             "at_a_glance": [],
             "deep_dives": [],
             "cross_domain_connections": [],
             "worth_reading": [],
-        },
+        }),
     ]
 
     run(

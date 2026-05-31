@@ -9,6 +9,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from tests.conftest import llm_result
+
 from stages.seams import (
     _build_domain_summary,
     _build_raw_source_summary,
@@ -367,7 +369,7 @@ class TestNormalizeSeamCandidates:
 class TestSeamsRun:
     @patch("stages.seams.call_llm")
     def test_successful_run(self, mock_llm):
-        mock_llm.return_value = json.dumps({
+        mock_llm.return_value = llm_result(json.dumps({
                 "per_item": [
                     {
                         "item_id": "geopolitics-abc",
@@ -387,7 +389,7 @@ class TestSeamsRun:
                         "linked_item_ids": ["geopolitics-abc", "ai-abc"],
                     }
                 ],
-            })
+            }))
         context = {
             "domain_analysis": {
                 "geopolitics": {
@@ -463,7 +465,7 @@ class TestSeamsRun:
 
     @patch("stages.seams.call_llm")
     def test_quiet_day_detection(self, mock_llm):
-        mock_llm.return_value = json.dumps({"per_item": [], "cross_domain": []})
+        mock_llm.return_value = llm_result(json.dumps({"per_item": [], "cross_domain": []}))
         context = {
             "domain_analysis": {"geopolitics": {"items": []}},
             "raw_sources": {"rss": []},
@@ -505,7 +507,7 @@ class TestSeamsRun:
 
     @patch("stages.seams.call_llm")
     def test_missing_fields_get_defaults(self, mock_llm):
-        mock_llm.return_value = json.dumps({})
+        mock_llm.return_value = llm_result(json.dumps({}))
         context = {
             "domain_analysis": {"geopolitics": {"items": []}},
             "raw_sources": {"rss": []},
@@ -526,7 +528,7 @@ class TestSeamsRun:
 
     @patch("stages.seams.call_llm")
     def test_evidence_gate_applied(self, mock_llm):
-        mock_llm.return_value = json.dumps({
+        mock_llm.return_value = llm_result(json.dumps({
                 "per_item": [
                     {
                         "item_id": "item-1",
@@ -537,7 +539,7 @@ class TestSeamsRun:
                     }
                 ],
                 "cross_domain": [],
-            })
+            }))
         context = {
             "domain_analysis": {
                 "geopolitics": {"items": [{"item_id": "item-1", "headline": "T"}]}
@@ -567,7 +569,7 @@ class TestSeamsRun:
 
     @patch("stages.seams.call_llm")
     def test_per_item_annotations_are_capped(self, mock_llm):
-        mock_llm.return_value = {
+        mock_llm.return_value = llm_result({
             "per_item": [
                 {
                     "item_id": f"item-{i}",
@@ -582,7 +584,7 @@ class TestSeamsRun:
                 for i in range(10)
             ],
             "cross_domain": [],
-        }
+        })
         context = {
             "domain_analysis": {
                 "geopolitics": {
@@ -610,9 +612,9 @@ class TestSeamsRun:
     @patch("stages.seams.call_llm")
     def test_repair_path_salvages_truncated_annotations(self, mock_llm):
         mock_llm.side_effect = [
-            '{"per_item": [',
-            '{"per_item": [',
-            {"per_item": [], "cross_domain": []},
+            llm_result('{"per_item": ['),
+            llm_result('{"per_item": ['),
+            llm_result({"per_item": [], "cross_domain": []}),
         ]
         context = {
             "domain_analysis": {"geopolitics": {"items": []}},
@@ -634,7 +636,7 @@ class TestSeamsRun:
 
     @patch("stages.seams.call_llm")
     def test_contract_issues_are_returned_as_sidecar(self, mock_llm):
-        mock_llm.return_value = {
+        mock_llm.return_value = llm_result({
             "per_item": [
                 {
                     "item_id": "item-1",
@@ -645,7 +647,7 @@ class TestSeamsRun:
                 }
             ],
             "cross_domain": [],
-        }
+        })
         context = {
             "domain_analysis": {
                 "geopolitics": {
