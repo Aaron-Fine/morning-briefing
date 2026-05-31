@@ -29,6 +29,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from morning_digest.config import load_config
+from morning_digest import progress
 from utils.artifacts import (
     artifact_dir as _shared_artifact_dir,
     find_most_recent_dir,
@@ -42,6 +43,7 @@ log = logging.getLogger("pipeline")
 _ROOT = Path(__file__).parent
 _OUTPUT_DIR = _ROOT / "output"
 _ARTIFACTS_BASE = _OUTPUT_DIR / "artifacts"
+_DEFAULT_HEARTBEAT_INTERVAL_S = 15
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -690,9 +692,8 @@ def run_pipeline(
 
     _OUTPUT_DIR.mkdir(exist_ok=True)
 
-    from morning_digest import progress
     progress.reset()
-    hb_interval = config.get("pipeline", {}).get("heartbeat_interval_s", 15)
+    hb_interval = config.get("pipeline", {}).get("heartbeat_interval_s", _DEFAULT_HEARTBEAT_INTERVAL_S)
     heartbeat = progress.Heartbeat(interval_s=hb_interval)
     heartbeat.start()
     total_stages = len(stage_manifest)

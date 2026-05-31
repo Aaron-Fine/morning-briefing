@@ -15,4 +15,4 @@ def test_call_llm_emits_progress(mock_client, caplog):
         call_llm("s", "u", {"provider": "fireworks", "model": "m", "max_tokens": 100,
                             "_obs": {"stage": "seams"}}, stream=False)
     msgs = " ".join(r.message for r in caplog.records)
-    assert "seams" in msgs and "m" in msgs
+    assert "seams m: start" in msgs

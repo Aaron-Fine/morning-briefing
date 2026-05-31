@@ -41,6 +41,7 @@ from math import ceil
 from pathlib import Path
 from urllib.parse import urlparse
 
+from morning_digest import progress
 from morning_digest.contracts import normalize_domain_result
 from morning_digest.llm import call_llm
 from morning_digest.sanitize import sanitize_source_content
@@ -958,12 +959,13 @@ def _run_all_domains(
         research_results: list[dict] | None = None,
         allow_research_requests: bool = False,
     ) -> tuple[str, dict]:
-        from morning_digest import progress
         domain_cfg = domain_configs[domain_key]
         log.info(f"  Analyzing domain: {domain_key} ({domain_cfg['label']})")
+        # If model_config is None (non-LLM-configured stage), _obs has no "stage" and
+        # call_llm's label falls back to "llm"; sublabel still attributes the desk.
+        base = model_config or {}
+        mc = {**base, "_obs": {**(base.get("_obs") or {}), "sublabel": domain_key}}
         with progress.track(f"desk {domain_key}"):
-            base = model_config or {}
-            mc = {**base, "_obs": {**(base.get("_obs") or {}), "sublabel": domain_key}}
             result = _run_domain_pass(
                 domain_key,
                 domain_cfg,
