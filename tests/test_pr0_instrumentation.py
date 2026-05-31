@@ -3,6 +3,22 @@ from unittest.mock import MagicMock, patch
 from morning_digest.llm import call_llm
 
 
+def test_runner_folds_llm_usage():
+    import pipeline
+    from morning_digest.llm import LLMUsage
+    run_meta = {"metrics": {"stages": {}, "overrides": {}, "totals": {}}}
+    outputs = {"foo": [1, 2, 3], "llm_usage": [LLMUsage("m", "fireworks", 100, 20, 5)]}
+    remaining = pipeline._fold_stage_metrics(
+        run_meta, "seams", outputs, latency_s=1.2, retries=0
+    )
+    assert "llm_usage" not in remaining          # reserved key popped
+    stage = run_meta["metrics"]["stages"]["seams"]
+    assert stage["tokens_in"] == 100 and stage["tokens_out"] == 20
+    assert stage["tokens_cached"] == 5
+    assert stage["latency_s"] == 1.2 and stage["retries"] == 0
+    assert run_meta["metrics"]["totals"]["tokens_in"] == 100
+
+
 @patch("morning_digest.llm._fireworks_client")
 def test_call_llm_emits_progress(mock_client, caplog):
     resp = MagicMock()

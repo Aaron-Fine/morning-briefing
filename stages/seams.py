@@ -729,7 +729,7 @@ def run(
 
     try:
         log.info("Stage: seams — detecting per-item annotations...")
-        result, _usage = _call_turn_json(
+        result, annotation_usage = _call_turn_json(
             _ANNOTATION_PROMPT,
             _annotation_user_content(
                 domain_summary,
@@ -759,12 +759,14 @@ def run(
             f"  Seam annotations: {len(seam_annotations['per_item'])} per-item, "
             f"{len(seam_annotations['cross_domain'])} cross-domain"
         )
+        llm_usages = [annotation_usage] if annotation_usage is not None else []
         return {
             "seam_candidates": seam_candidates,
             "seam_scan": seam_candidates,
             "seam_annotations": seam_annotations,
             "seam_data": seam_data,
             "seam_contract_issues": seam_contract_issues,
+            "llm_usage": llm_usages,
         }
 
     except Exception as e:

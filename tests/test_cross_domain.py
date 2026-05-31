@@ -10,6 +10,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from tests.conftest import llm_result
+from morning_digest.llm import LLMUsage
 
 from stages.cross_domain import (
     _normalize_tag,
@@ -821,6 +822,36 @@ class TestCrossDomainRun:
             config = {"llm": {"provider": "fireworks"}}
             result = run(context, config)
             assert result["cross_domain_output"]["market_context"] == "Fallback context"
+
+    @patch("stages.cross_domain.call_llm")
+    def test_cross_domain_surfaces_llm_usage(self, mock_llm):
+        mock_llm.side_effect = [
+            llm_result(
+                {"deep_dives": [], "worth_reading": [], "cross_domain_connections": []},
+                tokens_in=900, tokens_out=120,
+            ),
+            llm_result(
+                {"at_a_glance": [], "deep_dives": [], "worth_reading": [],
+                 "cross_domain_connections": []},
+                tokens_in=1500, tokens_out=300,
+            ),
+        ]
+        context = {
+            "domain_analysis": {
+                "econ": {"items": [{"item_id": "e1", "headline": "h",
+                                    "facts": "f", "analysis": "a",
+                                    "source_depth": "single-source",
+                                    "connection_hooks": [], "links": [],
+                                    "deep_dive_candidate": False}]}
+            },
+            "seam_data": {},
+            "raw_sources": {"rss": []},
+        }
+        config = {"llm": {"provider": "fireworks"}, "digest": {}}
+        outputs = run(context, config)
+        usage = outputs["llm_usage"]
+        assert len(usage) == 2 and all(isinstance(u, LLMUsage) for u in usage)
+        assert usage[0].tokens_in == 900 and usage[1].tokens_out == 300
 
 
 class TestSourceDepthRecomputation:

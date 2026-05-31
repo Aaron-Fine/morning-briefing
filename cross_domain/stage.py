@@ -100,12 +100,13 @@ def run(
         )
 
     cross_domain_plan = context.get("cross_domain_plan")
+    usages = []
     try:
         if context.get("cross_domain_from_plan") and isinstance(cross_domain_plan, dict):
             log.info("Stage: cross_domain — reusing same-day cross_domain_plan")
         else:
             log.info("Stage: cross_domain — running Turn 1 planning...")
-            cross_domain_plan, _usage = _call_turn_json(
+            cross_domain_plan, plan_usage = _call_turn_json(
                 plan_prompt(deep_dive_count, worth_reading_count, connection_count),
                 _plan_user_content(
                     domain_analysis,
@@ -116,6 +117,7 @@ def run(
                 plan_config,
                 "plan",
             )
+            usages.append(plan_usage)
         cross_domain_plan, plan_issues = normalize_cross_domain_plan_artifact(
             cross_domain_plan,
             deep_dive_count=deep_dive_count,
@@ -133,7 +135,7 @@ def run(
         )
 
         log.info("Stage: cross_domain — running Turn 2 execution...")
-        result, _usage = _call_turn_json(
+        result, execute_usage = _call_turn_json(
             execute_prompt(deep_dive_count, worth_reading_count),
             _execute_user_content(
                 domain_analysis,
@@ -145,6 +147,7 @@ def run(
             execute_config,
             "execute",
         )
+        usages.append(execute_usage)
     except Exception as e:
         log.error(f"cross_domain: LLM call failed: {e}")
         return _fallback_outputs(
@@ -214,4 +217,5 @@ def run(
         "cross_domain_output": result,
         "validation_diagnostics": validation_diagnostics,
         "cross_domain_contract_issues": contract_issues,
+        "llm_usage": usages,
     }

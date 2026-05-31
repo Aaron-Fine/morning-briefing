@@ -626,7 +626,7 @@ def _run_domain_pass(
         log.warning(
             f"  analyze_domain[{domain_key}]: no source items — returning empty"
         )
-        return _empty_domain_result(domain_key, failed=False)
+        return _empty_domain_result(domain_key, failed=False), None
 
     schema = _ECON_OUTPUT_SCHEMA if domain_key == "econ" else _OUTPUT_SCHEMA
     if allow_research_requests:
@@ -672,7 +672,7 @@ def _run_domain_pass(
         )
 
     try:
-        result, _usage = call_llm(
+        result, usage = call_llm(
             system_prompt,
             user_content,
             model_config,
@@ -682,7 +682,7 @@ def _run_domain_pass(
         )
     except Exception as e:
         log.error(f"  analyze_domain[{domain_key}]: LLM call failed: {e}")
-        return _empty_domain_result(domain_key, failed=True)
+        return _empty_domain_result(domain_key, failed=True), None
 
     result, contract_issues = normalize_domain_result(result, domain_key)
     if contract_issues:
@@ -712,7 +712,7 @@ def _run_domain_pass(
         f"  analyze_domain[{domain_key}]: {len(result['items'])} items, "
         f"{sum(1 for i in result['items'] if i.get('deep_dive_candidate'))} dive candidates"
     )
-    return result
+    return result, usage
 
 
 # ---------------------------------------------------------------------------
@@ -875,11 +875,15 @@ def run(
         model_config,
         config,
     )
-    if isinstance(run_result, tuple):
+    if isinstance(run_result, tuple) and len(run_result) == 3:
+        domain_analysis, domain_research, llm_usages = run_result
+    elif isinstance(run_result, tuple):
         domain_analysis, domain_research = run_result
+        llm_usages = []
     else:
         domain_analysis = run_result
         domain_research = {}
+        llm_usages = []
 
     # Clean internal sentinels before returning
     still_failed = []
@@ -930,6 +934,7 @@ def run(
         "domain_analysis_failures": still_failed,
         "domain_analysis_contract_issues": contract_issues,
         "category_rebalance_log": rebalance_log,
+        "llm_usage": llm_usages,
     }
 
 
@@ -953,12 +958,14 @@ def _run_all_domains(
         .get("analyze_desks", _DEFAULT_MAX_PARALLEL_DESKS)
     )
 
+    all_usages: list = []
+
     def _run_one(
         domain_key: str,
         *,
         research_results: list[dict] | None = None,
         allow_research_requests: bool = False,
-    ) -> tuple[str, dict]:
+    ) -> tuple[str, dict, object]:
         domain_cfg = domain_configs[domain_key]
         log.info(f"  Analyzing domain: {domain_key} ({domain_cfg['label']})")
         # If model_config is None (non-LLM-configured stage), _obs has no "stage" and
@@ -966,7 +973,7 @@ def _run_all_domains(
         base = model_config or {}
         mc = {**base, "_obs": {**(base.get("_obs") or {}), "sublabel": domain_key}}
         with progress.track(f"desk {domain_key}"):
-            result = _run_domain_pass(
+            result, usage = _run_domain_pass(
                 domain_key,
                 domain_cfg,
                 rss_items,
@@ -976,7 +983,7 @@ def _run_all_domains(
                 research_results=research_results,
                 allow_research_requests=allow_research_requests,
             )
-        return domain_key, result
+        return domain_key, result, usage
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
@@ -990,8 +997,10 @@ def _run_all_domains(
         for future in as_completed(futures):
             domain_key = futures[future]
             try:
-                key, result = future.result()
+                key, result, usage = future.result()
                 domain_analysis[key] = result
+                if usage is not None:
+                    all_usages.append(usage)
             except Exception as e:
                 log.error(f"  analyze_domain[{domain_key}]: parallel execution failed: {e}")
                 domain_analysis[domain_key] = _empty_domain_result(domain_key, failed=True)
@@ -1006,7 +1015,7 @@ def _run_all_domains(
     )
     research_by_domain = _successful_research_by_domain(domain_research)
     if not research_by_domain:
-        return domain_analysis, domain_research
+        return domain_analysis, domain_research, all_usages
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
@@ -1022,15 +1031,17 @@ def _run_all_domains(
         for future in as_completed(futures):
             domain_key = futures[future]
             try:
-                key, result = future.result()
+                key, result, usage = future.result()
                 domain_analysis[key] = result
+                if usage is not None:
+                    all_usages.append(usage)
             except Exception as e:
                 log.error(
                     f"  analyze_domain[{domain_key}]: research pass failed: {e}"
                 )
                 domain_analysis[domain_key]["_research_pass_failed"] = True
 
-    return domain_analysis, domain_research
+    return domain_analysis, domain_research, all_usages
 
 
 def _domain_research_config(config: dict) -> dict:

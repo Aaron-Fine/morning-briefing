@@ -39,8 +39,9 @@ class TestRunWithRetry:
             call_count[0] += 1
             return "success"
 
-        result = _run_with_retry(fn, "test_stage", max_retries=2)
+        result, attempts = _run_with_retry(fn, "test_stage", max_retries=2)
         assert result == "success"
+        assert attempts == 1
         assert call_count[0] == 1
 
     def test_retries_on_failure_then_succeeds(self):
@@ -53,8 +54,9 @@ class TestRunWithRetry:
             return "success"
 
         with patch("pipeline.time.sleep"):
-            result = _run_with_retry(fn, "test_stage", max_retries=3)
+            result, attempts = _run_with_retry(fn, "test_stage", max_retries=3)
         assert result == "success"
+        assert attempts == 3
         assert call_count[0] == 3
 
     def test_raises_after_max_retries_exhausted(self):
@@ -72,8 +74,9 @@ class TestRunWithRetry:
             call_count[0] += 1
             return "ok"
 
-        result = _run_with_retry(fn, "test_stage", max_retries=0)
+        result, attempts = _run_with_retry(fn, "test_stage", max_retries=0)
         assert result == "ok"
+        assert attempts == 1
         assert call_count[0] == 1
 
     def test_max_retries_zero_raises_immediately(self):
@@ -131,8 +134,9 @@ class TestRunWithRetry:
             return "success"
 
         with patch("pipeline.time.sleep"):
-            result = _run_with_retry(fn, "test_stage", max_retries=3)
+            result, attempts = _run_with_retry(fn, "test_stage", max_retries=3)
         assert result == "success"
+        assert attempts == 3
         assert call_count[0] == 3
 
     def test_stage_name_in_error_message(self, caplog):

@@ -462,6 +462,7 @@ class TestSeamsRun:
         assert seam_data["seam_count"] == 1
         assert seam_data["quiet_day"] is True
         assert mock_llm.call_count == 1
+        assert result["llm_usage"]
 
     @patch("stages.seams.call_llm")
     def test_quiet_day_detection(self, mock_llm):

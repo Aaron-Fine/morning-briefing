@@ -150,7 +150,7 @@ class TestNewDeskRunPass:
              "deep_dive_rationale": None}
         ]})
         cfg = _DOMAIN_CONFIGS["energy_materials"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "energy_materials", cfg, self._make_rss("energy-materials"),
             [], [], self._model_config()
         )
@@ -166,7 +166,7 @@ class TestNewDeskRunPass:
              "deep_dive_rationale": None}
         ]})
         cfg = _DOMAIN_CONFIGS["culture_structural"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "culture_structural", cfg, self._make_rss("culture-structural"),
             [], [], self._model_config()
         )
@@ -181,7 +181,7 @@ class TestNewDeskRunPass:
              "deep_dive_rationale": None}
         ]})
         cfg = _DOMAIN_CONFIGS["science_biotech"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "science_biotech", cfg, self._make_rss("science-biotech"),
             [], [], self._model_config()
         )
@@ -191,7 +191,7 @@ class TestNewDeskRunPass:
     def test_no_sources_returns_empty(self):
         for desk in ["energy_materials", "culture_structural", "science_biotech"]:
             cfg = _DOMAIN_CONFIGS[desk]
-            result = _run_domain_pass(
+            result, _ = _run_domain_pass(
                 desk, cfg, [], [], [], self._model_config()
             )
             assert result == {"items": []}

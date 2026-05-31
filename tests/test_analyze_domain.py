@@ -270,7 +270,7 @@ class TestRunDomainPass:
     def test_empty_sources_returns_empty_result(self, caplog):
         cfg = _DOMAIN_CONFIGS["ai_tech"]
         with caplog.at_level(logging.WARNING):
-            result = _run_domain_pass(
+            result, _ = _run_domain_pass(
                 "ai_tech", cfg, [], [], [], self._make_model_config()
             )
         assert result == {"items": []}
@@ -278,7 +278,7 @@ class TestRunDomainPass:
 
     def test_econ_pass_includes_market_context_in_empty_result(self):
         cfg = _DOMAIN_CONFIGS["econ"]
-        result = _run_domain_pass("econ", cfg, [], [], [], self._make_model_config())
+        result, _ = _run_domain_pass("econ", cfg, [], [], [], self._make_model_config())
         assert result == {"items": [], "market_context": ""}
 
     @patch("stages.analyze_domain.call_llm")
@@ -299,7 +299,7 @@ class TestRunDomainPass:
             ]
         })
         cfg = _DOMAIN_CONFIGS["ai_tech"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "ai_tech",
             cfg,
             self._make_rss_items(),
@@ -326,7 +326,7 @@ class TestRunDomainPass:
             ],
         })
         cfg = _DOMAIN_CONFIGS["ai_tech"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "ai_tech",
             cfg,
             self._make_rss_items(),
@@ -367,7 +367,7 @@ class TestRunDomainPass:
         mock_llm.side_effect = Exception("API error")
         cfg = _DOMAIN_CONFIGS["ai_tech"]
         with caplog.at_level(logging.ERROR):
-            result = _run_domain_pass(
+            result, _ = _run_domain_pass(
                 "ai_tech",
                 cfg,
                 self._make_rss_items(),
@@ -393,7 +393,7 @@ class TestRunDomainPass:
             }
         ])
         cfg = _DOMAIN_CONFIGS["ai_tech"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "ai_tech",
             cfg,
             self._make_rss_items(),
@@ -408,7 +408,7 @@ class TestRunDomainPass:
     def test_non_dict_result_returns_empty_items(self, mock_llm):
         mock_llm.return_value = llm_result("not a dict")
         cfg = _DOMAIN_CONFIGS["ai_tech"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "ai_tech",
             cfg,
             self._make_rss_items(),
@@ -428,7 +428,7 @@ class TestRunDomainPass:
     def test_non_list_items_returns_empty_items_with_contract_issue(self, mock_llm):
         mock_llm.return_value = llm_result({"items": {"headline": "wrong container"}})
         cfg = _DOMAIN_CONFIGS["ai_tech"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "ai_tech",
             cfg,
             self._make_rss_items(),
@@ -463,7 +463,7 @@ class TestRunDomainPass:
             ]
         })
         cfg = _DOMAIN_CONFIGS["ai_tech"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "ai_tech",
             cfg,
             self._make_rss_items(),
@@ -513,7 +513,7 @@ class TestRunDomainPass:
             ]
         })
         cfg = _DOMAIN_CONFIGS["ai_tech"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "ai_tech",
             cfg,
             self._make_rss_items(),
@@ -530,7 +530,7 @@ class TestRunDomainPass:
         mock_llm.return_value = llm_result({"items": [], "market_context": "Markets up."})
         cfg = _DOMAIN_CONFIGS["econ"]
         markets = [{"label": "SPY", "price": "500", "change_pct": 1.0}]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "econ",
             cfg,
             self._make_rss_items(["econ-trade"]),
@@ -544,7 +544,7 @@ class TestRunDomainPass:
     def test_econ_missing_market_context_adds_empty_string(self, mock_llm):
         mock_llm.return_value = llm_result({"items": []})
         cfg = _DOMAIN_CONFIGS["econ"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "econ",
             cfg,
             self._make_rss_items(["econ-trade"]),
@@ -830,6 +830,7 @@ class TestPerspectiveDesk:
             assert len(result["perspective_framing"]["items"]) == 1
             assert "domain_analysis" not in result["perspective_framing"]
             assert "domain_analysis" in result
+            assert result["llm_usage"]
 
     def test_perspective_desk_handles_zero_qualifying_items(self):
         """min_items=0: empty perspective output must be tolerated, not error."""

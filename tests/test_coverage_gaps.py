@@ -220,6 +220,7 @@ class TestRunStage:
         assert "coverage_gaps" in result
         assert len(result["coverage_gaps"]["gaps"]) == 1
         mock_history.assert_called_once()
+        assert result["llm_usage"]
 
     @patch("stages.coverage_gaps.call_llm")
     @patch("stages.coverage_gaps._append_history")

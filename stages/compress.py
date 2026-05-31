@@ -26,10 +26,10 @@ def _target_words(word_count: int) -> int:
     return max(300, min(1200, target))
 
 
-def _compress_one(video: dict, model_config: dict) -> dict:
+def _compress_one(video: dict, model_config: dict) -> tuple[dict, object]:
     transcript = video.get("transcript", "")
     if not transcript:
-        return video
+        return video, None
 
     word_count = len(transcript.split())
     target = _target_words(word_count)
@@ -41,8 +41,9 @@ def _compress_one(video: dict, model_config: dict) -> dict:
     )
 
     compressed = ""
+    usage = None
     try:
-        compressed, _usage = call_llm(
+        compressed, usage = call_llm(
             _SYSTEM_PROMPT,
             user_content,
             model_config,
@@ -67,7 +68,7 @@ def _compress_one(video: dict, model_config: dict) -> dict:
     result = {k: v for k, v in video.items() if k != "transcript"}
     result["compressed_transcript"] = compressed
     result["category"] = "youtube-analysis"
-    return result
+    return result, usage
 
 
 def run(context: dict, config: dict, model_config: dict | None = None, **kwargs) -> dict:
@@ -88,6 +89,7 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
 
     log.info(f"Compressing {len(transcripts)} transcript(s) in parallel...")
     results = [None] * len(transcripts)
+    usages = []
     max_workers = int(
         config.get("pipeline", {})
         .get("concurrency", {})
@@ -102,9 +104,12 @@ def run(context: dict, config: dict, model_config: dict | None = None, **kwargs)
         for future in as_completed(future_to_idx):
             idx = future_to_idx[future]
             try:
-                results[idx] = future.result()
+                video_result, usage = future.result()
+                results[idx] = video_result
+                if usage is not None:
+                    usages.append(usage)
             except Exception as e:
                 log.error(f"  compress[{idx}]: failed: {e}")
                 results[idx] = transcripts[idx]
 
-    return {"compressed_transcripts": results}
+    return {"compressed_transcripts": results, "llm_usage": usages}

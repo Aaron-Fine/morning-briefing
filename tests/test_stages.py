@@ -54,14 +54,16 @@ class TestCompressTargetWords:
 class TestCompressOne:
     def test_empty_transcript_returns_unchanged(self):
         video = {"title": "Test", "channel": "TestChannel", "transcript": ""}
-        result = _compress_one(video, {})
+        result, usage = _compress_one(video, {})
         assert result["title"] == "Test"
         assert "compressed_transcript" not in result
+        assert usage is None
 
     def test_no_transcript_key_returns_unchanged(self):
         video = {"title": "Test", "channel": "TestChannel"}
-        result = _compress_one(video, {})
+        result, usage = _compress_one(video, {})
         assert result["title"] == "Test"
+        assert usage is None
 
     @patch("stages.compress.call_llm")
     def test_successful_compression(self, mock_llm):
@@ -71,10 +73,11 @@ class TestCompressOne:
             "channel": "TestChannel",
             "transcript": "A" * 5000,
         }
-        result = _compress_one(video, {"provider": "fireworks"})
+        result, usage = _compress_one(video, {"provider": "fireworks"})
         assert "compressed_transcript" in result
         assert "transcript" not in result
         assert result["category"] == "youtube-analysis"
+        assert usage is not None
         mock_llm.assert_called_once()
 
     @patch("stages.compress.call_llm")
@@ -85,7 +88,7 @@ class TestCompressOne:
             "channel": "TestChannel",
             "transcript": "word1 word2 word3 " * 200,
         }
-        result = _compress_one(video, {})
+        result, usage = _compress_one(video, {})
         assert "compressed_transcript" in result
         assert len(result["compressed_transcript"].split()) <= 300
 
@@ -97,11 +100,29 @@ class TestCompressRun:
             context,
             {"llm": {"provider": "fireworks", "model": "accounts/fireworks/models/minimax-m2p7"}},
         )
-        assert result == {"compressed_transcripts": []}
+        assert result["compressed_transcripts"] == []
+
+    @patch("stages.compress.call_llm")
+    def test_run_surfaces_llm_usage(self, mock_llm):
+        from tests.conftest import llm_result as _llm_result
+        mock_llm.return_value = _llm_result("summary text here")
+        context = {
+            "raw_sources": {
+                "analysis_transcripts": [
+                    {"title": "Video 1", "channel": "Ch", "transcript": "word " * 400},
+                ]
+            }
+        }
+        result = compress_run(
+            context,
+            {"llm": {"provider": "fireworks", "model": "m"}},
+            model_config={"provider": "fireworks", "model": "m"},
+        )
+        assert result["llm_usage"]
 
     @patch("stages.compress._compress_one")
     def test_processes_all_transcripts(self, mock_compress):
-        mock_compress.return_value = {"compressed": True}
+        mock_compress.return_value = ({"compressed": True}, None)
         context = {
             "raw_sources": {
                 "analysis_transcripts": [

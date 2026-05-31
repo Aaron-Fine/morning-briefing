@@ -74,6 +74,7 @@ def test_generates_weekly_artifact(mock_llm, tmp_path):
         unit["kind"] == "misuse_correction"
         for unit in written["daily_units"]
     )
+    assert result["llm_usage"]
 
 
 @patch("stages.prepare_spiritual_weekly.call_llm")

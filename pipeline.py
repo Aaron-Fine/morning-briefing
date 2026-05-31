@@ -30,6 +30,7 @@ from pathlib import Path
 
 from morning_digest.config import load_config
 from morning_digest import progress
+from morning_digest.metrics import aggregate_usage
 from utils.artifacts import (
     artifact_dir as _shared_artifact_dir,
     find_most_recent_dir,
@@ -309,6 +310,40 @@ def _log_stage_observability(stage_name: str, outputs: dict) -> None:
             )
 
 
+_RESERVED_METRIC_KEYS = ("llm_usage", "override_counts", "domain_research_metrics")
+
+
+def _fold_stage_metrics(run_meta, stage_name, outputs, latency_s, retries):
+    """Pop reserved metric keys from outputs and fold into run_meta['metrics'].
+
+    Returns the outputs dict with reserved keys removed (so they are never saved
+    as stray artifacts). Mutates run_meta['metrics'] in place.
+    """
+    metrics = run_meta.setdefault("metrics", {"stages": {}, "overrides": {}, "totals": {}})
+    usage = outputs.pop("llm_usage", []) or []
+    agg = aggregate_usage(list(usage))
+    stage_metrics = {
+        "model": agg["model"],
+        "tokens_in": agg["tokens_in"],
+        "tokens_out": agg["tokens_out"],
+        "tokens_cached": agg["tokens_cached"],
+        "usage_missing": agg["usage_missing"],
+        "latency_s": latency_s,
+        "retries": retries,
+    }
+    metrics["stages"][stage_name] = stage_metrics
+    overrides = outputs.pop("override_counts", {}) or {}
+    for k, v in overrides.items():
+        metrics["overrides"][k] = metrics["overrides"].get(k, 0) + v
+    dr = outputs.pop("domain_research_metrics", None)
+    if dr is not None:
+        metrics["domain_research"] = dr
+    totals = metrics["totals"]
+    for key in ("tokens_in", "tokens_out", "tokens_cached", "usage_missing"):
+        totals[key] = totals.get(key, 0) + agg[key]
+    return outputs
+
+
 _STAGE_METADATA = {
     "collect": {
         "artifact_key": "raw_sources",
@@ -561,7 +596,7 @@ def _run_with_retry(
 ):
     for attempt in range(max_retries + 1):
         try:
-            return fn()
+            return fn(), attempt + 1
         except Exception as e:
             if attempt < max_retries:
                 wait = 2 ** (attempt + 1) * backoff_base_seconds
@@ -680,6 +715,7 @@ def run_pipeline(
         "started_at": iso_now_local(),
         "stage_timings": {},
         "stage_failures": [],
+        "metrics": {"stages": {}, "overrides": {}, "totals": {}},
         "options": {
             "dry_run": dry_run,
             "sources_only": sources_only,
@@ -746,7 +782,7 @@ def run_pipeline(
             try:
                 module = _load_stage_module(stage_name)
 
-                outputs = _run_with_retry(
+                outputs, _last_attempts = _run_with_retry(
                     lambda m=module: m.run(
                         context, config, model_config, stage_cfg=stage_cfg, dry_run=dry_run
                     ),
@@ -758,6 +794,7 @@ def run_pipeline(
             except Exception as e:
                 elapsed = time.monotonic() - t_start
                 run_meta["stage_timings"][stage_name] = round(elapsed, 2)
+                _last_attempts = retry_config["max_retries"] + 1
 
                 if stage_meta["non_critical"]:
                     log.warning(
@@ -768,6 +805,23 @@ def run_pipeline(
                     )
                     # Provide safe empty outputs so downstream stages don't crash
                     outputs = _empty_stage_output(stage_name)
+                    context.update(outputs)
+                    _fold_stage_metrics(
+                        run_meta, stage_name, outputs,
+                        latency_s=round(elapsed, 2),
+                        retries=_last_attempts - 1,
+                    )
+                    _run_stage_after_hook(
+                        stage_name,
+                        context,
+                        outputs,
+                        artifact_dir=artifact_dir,
+                        run_date=run_date,
+                        dry_run=dry_run,
+                        load_dir=load_dir,
+                        config=config,
+                    )
+                    continue
                 else:
                     log.error(f"Stage '{stage_name}' failed (critical): {e}")
                     run_meta["stage_failures"].append(
@@ -780,9 +834,18 @@ def run_pipeline(
             run_meta["stage_timings"][stage_name] = round(elapsed, 2)
             log.info(f"  Stage '{stage_name}' completed in {elapsed:.1f}s")
 
-            # Merge outputs into context
+            # Merge outputs into context BEFORE popping reserved keys so downstream
+            # stages can still see real outputs; reserved keys are harmless in context.
             context.update(outputs)
             _log_stage_observability(stage_name, outputs)
+
+            # Pop reserved metric keys and fold into run_meta; artifact-save loop
+            # runs after the pop so reserved keys are never written as stray artifacts.
+            outputs = _fold_stage_metrics(
+                run_meta, stage_name, outputs,
+                latency_s=round(elapsed, 2),
+                retries=_last_attempts - 1,
+            )
 
             # Persist each output artifact
             for key, value in outputs.items():
