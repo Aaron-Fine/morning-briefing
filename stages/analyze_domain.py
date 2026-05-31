@@ -918,6 +918,10 @@ def run(
             f"{', '.join(still_failed)}"
         )
 
+    rebalance_synthesized = sum(
+        1 for entry in rebalance_log if entry.get("action") == "prepended_rebalanced_item"
+    )
+
     return {
         "domain_analysis": domain_analysis,
         "perspective_framing": perspective_output,
@@ -926,6 +930,7 @@ def run(
         "domain_analysis_contract_issues": contract_issues,
         "category_rebalance_log": rebalance_log,
         "llm_usage": llm_usages,
+        "override_counts": {"rebalance_categories": rebalance_synthesized},
     }
 
 

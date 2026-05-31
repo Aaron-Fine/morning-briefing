@@ -978,6 +978,20 @@ class TestSourceDepthRecomputation:
         assert out["_source_depth_downgrades"] == []
 
 
+def test_validated_output_counts_overrides():
+    result = {
+        "at_a_glance": [
+            {"item_id": "a", "tag": "AI", "tag_label": "wrong", "source_depth": "widely-reported",
+             "links": [{"url": "https://x.com/1"}]},
+        ],
+        "deep_dives": [], "cross_domain_connections": [], "worth_reading": [],
+    }
+    out = _vo(result, {}, {}, {"digest": {}})
+    oc = out["_override_counts"]
+    assert oc["normalize_tag"] >= 1          # "AI" -> "ai"
+    assert oc["recompute_source_depth"] >= 1  # widely-reported single domain -> downgraded
+
+
 class TestOverlapDepthDowngrade:
     def test_downgrades_when_phrase_overlaps_at_a_glance(self):
         from cross_domain.parse import _downgrade_overlap_depth

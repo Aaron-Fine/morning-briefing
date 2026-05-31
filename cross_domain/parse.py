@@ -596,11 +596,23 @@ def _validated_output(
         econ = domain_analysis.get("econ", {})
         result["market_context"] = econ.get("market_context", "")
 
+    counts = result.setdefault("_override_counts", {
+        "normalize_tag": 0, "tag_label": 0, "recompute_source_depth": 0,
+        "ensure_primary_glance_coverage": 0, "overlap_downgrade": 0,
+    })
+
     known_urls = collect_known_urls(raw_sources, domain_analysis)
 
     for item in result["at_a_glance"]:
-        item["tag"] = _normalize_tag(item.get("tag", ""))
-        item["tag_label"] = _TAG_LABELS.get(item["tag"], item.get("tag_label", ""))
+        raw_tag = item.get("tag", "")
+        norm = _normalize_tag(raw_tag)
+        if norm != raw_tag:
+            counts["normalize_tag"] += 1
+        item["tag"] = norm
+        new_label = _TAG_LABELS.get(item["tag"], item.get("tag_label", ""))
+        if new_label != item.get("tag_label", ""):
+            counts["tag_label"] += 1
+        item["tag_label"] = new_label
 
     for item in result["at_a_glance"]:
         item["links"] = [
@@ -609,9 +621,11 @@ def _validated_output(
             if url_known(lnk.get("url", ""), known_urls)
         ]
 
+    before = len(result["at_a_glance"])
     result["at_a_glance"] = _ensure_primary_glance_coverage(
         result["at_a_glance"], domain_analysis, config
     )
+    counts["ensure_primary_glance_coverage"] += len(result["at_a_glance"]) - before
     for item in result["at_a_glance"]:
         item["links"] = [
             lnk
@@ -631,6 +645,14 @@ def _validated_output(
     # Recompute source_depth from distinct domains before enforcing caps
     result = _downgrade_same_outlet_depth(result)
     result = _downgrade_overlap_depth(result)
+
+    downgrades = result.get("_source_depth_downgrades", [])
+    counts["recompute_source_depth"] += sum(
+        1 for d in downgrades if d.get("reason") != "phrase_overlap_with_at_a_glance"
+    )
+    counts["overlap_downgrade"] += sum(
+        1 for d in downgrades if d.get("reason") == "phrase_overlap_with_at_a_glance"
+    )
 
     digest_cfg = config.get("digest", {})
     glance_cfg = digest_cfg.get("at_a_glance", {})

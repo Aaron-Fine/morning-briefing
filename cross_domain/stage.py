@@ -177,6 +177,8 @@ def run(
     )
     result = _validated_output(result, domain_analysis, raw_sources, config)
     source_depth_downgrades = list(result.get("_source_depth_downgrades", []) or [])
+    override_counts = result.pop("_override_counts", {})
+    result.pop("_source_depth_downgrades", None)
     result = validate_stage_output(
         result,
         raw_sources,
@@ -218,4 +220,5 @@ def run(
         "validation_diagnostics": validation_diagnostics,
         "cross_domain_contract_issues": contract_issues,
         "llm_usage": usages,
+        "override_counts": override_counts,
     }
