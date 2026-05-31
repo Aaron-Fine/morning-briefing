@@ -124,7 +124,7 @@ def generate_weekly_guide(
     if path.exists() and not force:
         return path, None
 
-    guide, _guide_usage = call_llm(
+    guide, guide_usage = call_llm(
         _GUIDE_SYSTEM_PROMPT,
         _guide_user_content(lesson),
         model_config,
@@ -137,7 +137,7 @@ def generate_weekly_guide(
         raise ValueError("generated guide was empty")
 
     _write_guide(path, guide_text)
-    return path, _guide_usage
+    return path, guide_usage
 
 
 def _ensure_misuse_units(daily_units: list[dict], misuses: list[dict]) -> list[dict]:

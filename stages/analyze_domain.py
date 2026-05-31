@@ -867,7 +867,7 @@ def run(
     if not model_config:
         model_config = config.get("llm", {})
 
-    run_result = _run_all_domains(
+    domain_analysis, domain_research, llm_usages = _run_all_domains(
         domain_configs,
         rss_items,
         compressed_transcripts,
@@ -875,15 +875,6 @@ def run(
         model_config,
         config,
     )
-    if isinstance(run_result, tuple) and len(run_result) == 3:
-        domain_analysis, domain_research, llm_usages = run_result
-    elif isinstance(run_result, tuple):
-        domain_analysis, domain_research = run_result
-        llm_usages = []
-    else:
-        domain_analysis = run_result
-        domain_research = {}
-        llm_usages = []
 
     # Clean internal sentinels before returning
     still_failed = []
@@ -948,7 +939,7 @@ def _run_all_domains(
     markets: list[dict],
     model_config: dict,
     config: dict | None = None,
-) -> tuple[dict, dict]:
+) -> tuple[dict, dict, list]:
     domain_analysis: dict = {}
     config = config or {}
     research_cfg = _domain_research_config(config)

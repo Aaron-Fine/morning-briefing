@@ -310,9 +310,6 @@ def _log_stage_observability(stage_name: str, outputs: dict) -> None:
             )
 
 
-_RESERVED_METRIC_KEYS = ("llm_usage", "override_counts", "domain_research_metrics")
-
-
 def _fold_stage_metrics(run_meta, stage_name, outputs, latency_s, retries):
     """Pop reserved metric keys from outputs and fold into run_meta['metrics'].
 
@@ -806,7 +803,7 @@ def run_pipeline(
                     # Provide safe empty outputs so downstream stages don't crash
                     outputs = _empty_stage_output(stage_name)
                     context.update(outputs)
-                    _fold_stage_metrics(
+                    outputs = _fold_stage_metrics(
                         run_meta, stage_name, outputs,
                         latency_s=round(elapsed, 2),
                         retries=_last_attempts - 1,

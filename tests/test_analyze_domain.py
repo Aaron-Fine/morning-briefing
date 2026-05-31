@@ -596,10 +596,14 @@ class TestAnalyzeDomainFailures:
     def test_failed_domains_are_reported_without_domain_retry(
         self, mock_run_domain_pass, mock_run_all_domains
     ):
-        mock_run_all_domains.return_value = {
-            "ai_tech": {"items": [], "_failed": True},
-            "econ": {"items": [], "market_context": ""},
-        }
+        mock_run_all_domains.return_value = (
+            {
+                "ai_tech": {"items": [], "_failed": True},
+                "econ": {"items": [], "market_context": ""},
+            },
+            {},
+            [],
+        )
 
         result = run(
             {"raw_sources": {"rss": [], "markets": []}, "compressed_transcripts": []},
@@ -612,17 +616,21 @@ class TestAnalyzeDomainFailures:
 
     @patch("stages.analyze_domain._run_all_domains")
     def test_contract_issues_are_returned_as_sidecar(self, mock_run_all_domains):
-        mock_run_all_domains.return_value = {
-            "ai_tech": {
-                "items": [],
-                "_contract_issues": [
-                    {
-                        "path": "domain_analysis.ai_tech.items",
-                        "message": "items is not a list",
-                    }
-                ],
-            }
-        }
+        mock_run_all_domains.return_value = (
+            {
+                "ai_tech": {
+                    "items": [],
+                    "_contract_issues": [
+                        {
+                            "path": "domain_analysis.ai_tech.items",
+                            "message": "items is not a list",
+                        }
+                    ],
+                },
+            },
+            {},
+            [],
+        )
 
         result = run(
             {"raw_sources": {"rss": [], "markets": []}, "compressed_transcripts": []},
