@@ -63,6 +63,8 @@ class Heartbeat:
     def start(self) -> None:
         if self.interval_s <= 0:
             return
+        if self._thread is not None and self._thread.is_alive():
+            return  # already running; don't orphan the live thread
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, name="heartbeat", daemon=True)
         self._thread.start()

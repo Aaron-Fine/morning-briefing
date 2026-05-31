@@ -42,3 +42,12 @@ def test_heartbeat_disabled_when_interval_non_positive():
     hb.start()
     assert hb._thread is None
     hb.stop()  # no-op, must not raise
+
+
+def test_heartbeat_double_start_does_not_orphan_thread():
+    hb = progress.Heartbeat(interval_s=0.05)
+    hb.start()
+    first = hb._thread
+    hb.start()  # second start must be a no-op while running
+    assert hb._thread is first
+    hb.stop()
