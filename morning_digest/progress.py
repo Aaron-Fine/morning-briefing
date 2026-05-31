@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 
 log = logging.getLogger("morning_digest.progress")
@@ -27,7 +28,7 @@ def in_flight_labels() -> list[str]:
 
 
 @contextmanager
-def track(label: str):
+def track(label: str) -> Iterator[None]:
     start = time.monotonic()
     with _lock:
         _in_flight[label] = start

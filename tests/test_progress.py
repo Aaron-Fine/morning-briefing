@@ -4,7 +4,7 @@ from morning_digest import progress
 
 def test_track_logs_start_and_done(caplog):
     progress.reset()
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.INFO, logger="morning_digest.progress"):
         with progress.track("desk ai_tech"):
             assert progress.in_flight_labels() == ["desk ai_tech"]
     assert progress.in_flight_labels() == []
