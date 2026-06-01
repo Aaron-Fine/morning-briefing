@@ -662,14 +662,16 @@ def run_pipeline(
     lookback_hours: int | None = None,
     stage_from: str | None = None,
     from_plan: bool = False,
+    capture_prompts: str | None = None,
 ) -> None:
     """Execute the full pipeline.
 
     Args:
-        dry_run:       Skip the send stage; save HTML to output/ only.
-        sources_only:  Run only the collect stage and dump sources.json.
-        lookback_hours: Override YouTube lookback window.
-        stage_from:    If set, load prior artifacts and re-run from this stage onwards.
+        dry_run:         Skip the send stage; save HTML to output/ only.
+        sources_only:    Run only the collect stage and dump sources.json.
+        lookback_hours:  Override YouTube lookback window.
+        stage_from:      If set, load prior artifacts and re-run from this stage onwards.
+        capture_prompts: If set, dump exact rendered prompts per stage to this dir (PR-B baseline).
     """
     _setup_logging()
     log.info("=== Morning Digest pipeline starting ===")
@@ -749,7 +751,10 @@ def run_pipeline(
             retry_config = _get_stage_retry_config(stage_cfg, config)
 
             if isinstance(model_config, dict):
-                model_config = {**model_config, "_obs": {"stage": stage_name}}
+                obs = {"stage": stage_name}
+                if capture_prompts:
+                    obs["capture_dir"] = capture_prompts
+                model_config = {**model_config, "_obs": obs}
 
             # --sources-only: stop after collect
             if sources_only and stage_name != "collect":
@@ -946,6 +951,8 @@ def main() -> None:
         action="store_true",
         help="With --stage cross_domain, reuse same-day cross_domain_plan.json when readable",
     )
+    parser.add_argument("--capture-prompts", type=str, default=None,
+                        help="Dump exact rendered prompts per stage to this dir (PR-B baseline)")
     args = parser.parse_args()
 
     run_pipeline(
@@ -954,6 +961,7 @@ def main() -> None:
         lookback_hours=args.lookback_hours,
         stage_from=args.stage,
         from_plan=args.from_plan,
+        capture_prompts=args.capture_prompts,
     )
 
 

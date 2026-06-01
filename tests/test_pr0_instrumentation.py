@@ -57,3 +57,21 @@ def test_call_llm_emits_progress(mock_client, caplog):
                             "_obs": {"stage": "seams"}}, stream=False)
     msgs = " ".join(r.message for r in caplog.records)
     assert "seams m: start" in msgs
+
+
+@patch("morning_digest.llm._fireworks_client")
+def test_capture_prompts_writes_files(mock_client, tmp_path):
+    resp = MagicMock()
+    resp.choices = [MagicMock()]
+    resp.choices[0].message.content = "{}"
+    resp.usage.prompt_tokens = 1
+    resp.usage.completion_tokens = 1
+    mock_client.return_value.chat.completions.create.return_value = resp
+    mc = {"provider": "fireworks", "model": "m", "max_tokens": 100,
+          "_obs": {"stage": "seams", "capture_dir": str(tmp_path)}}
+    call_llm("SYSTEM-XYZ", "USER-ABC", mc, stream=False)
+    call_llm("SYSTEM-2", "USER-2", mc, stream=False)  # second call → per-stage seq 02
+    files = sorted(p.name for p in tmp_path.glob("seams__*.txt"))
+    assert files == ["seams__01.txt", "seams__02.txt"]   # per-stage counter, not global
+    content = (tmp_path / "seams__01.txt").read_text()
+    assert "SYSTEM-XYZ" in content and "USER-ABC" in content

@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 from typing import NamedTuple
 
 from morning_digest import progress
@@ -65,6 +66,19 @@ def _anthropic_client():
     return _anthropic_client_cache["client"]
 
 
+def _capture_prompt(capture_dir: str, stage: str, system_prompt: str, user_content: str) -> None:
+    d = Path(capture_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    # Per-stage sequence from existing files on disk — a global counter would number
+    # across stages (seams__03.txt for the 1st seams call) and make the PR-B baseline
+    # diff non-deterministic. Deriving from disk is stateless.
+    n = len(list(d.glob(f"{stage}__*.txt"))) + 1
+    (d / f"{stage}__{n:02d}.txt").write_text(
+        f"=== SYSTEM ===\n{system_prompt}\n\n=== USER ===\n{user_content}\n",
+        encoding="utf-8",
+    )
+
+
 def call_llm(
     system_prompt: str,
     user_content: str,
@@ -101,6 +115,9 @@ def call_llm(
     model = model_config.get("model", "?")
     label = f"{stage}:{sublabel} {model}" if sublabel else f"{stage} {model}"
     with progress.track(label):
+        capture_dir = obs.get("capture_dir")
+        if capture_dir:
+            _capture_prompt(capture_dir, stage, system_prompt, user_content)
         if provider == "anthropic":
             return _call_anthropic(
                 system_prompt, user_content, model_config, max_retries, json_mode, stream
