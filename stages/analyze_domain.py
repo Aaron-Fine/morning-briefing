@@ -924,6 +924,17 @@ def run(
         1 for entry in rebalance_log if entry.get("action") == _ACTION_PREPENDED_REBALANCED
     )
 
+    # Derive domain_research_metrics from the research pass results (observe-only).
+    # fired: desks that had successful fetches and triggered the second pass.
+    # articles_fetched: total fetch attempts made during research.
+    # changed_output: True when the second pass ran (research_by_domain was non-empty).
+    _research_by_domain = _successful_research_by_domain(domain_research)
+    domain_research_metrics = {
+        "fired": len(_research_by_domain),
+        "articles_fetched": len(domain_research.get("results", [])),
+        "changed_output": bool(_research_by_domain),
+    }
+
     return {
         "domain_analysis": domain_analysis,
         "perspective_framing": perspective_output,
@@ -933,6 +944,7 @@ def run(
         "category_rebalance_log": rebalance_log,
         "llm_usage": llm_usages,
         "override_counts": {"rebalance_categories": rebalance_synthesized},
+        "domain_research_metrics": domain_research_metrics,
     }
 
 

@@ -27,6 +27,23 @@ def test_runner_folds_override_counts():
     assert rm["metrics"]["overrides"] == {"normalize_tag": 4, "rebalance_categories": 2}
 
 
+def test_fold_records_items_out():
+    rm = {"metrics": {"stages": {}, "overrides": {}, "totals": {}}}
+    pipeline._fold_stage_metrics(rm, "collect",
+        {"raw_sources": {"rss": [1, 2, 3]}, "extra": [9]}, latency_s=0.1, retries=0)
+    items_out = rm["metrics"]["stages"]["collect"]["items_out"]
+    assert items_out["extra"] == 1
+    assert items_out.get("raw_sources.rss") == 3
+
+
+def test_fold_routes_domain_research():
+    rm = {"metrics": {"stages": {}, "overrides": {}, "totals": {}}}
+    pipeline._fold_stage_metrics(rm, "analyze_domain",
+        {"domain_research_metrics": {"fired": 2, "articles_fetched": 7, "changed_output": True}},
+        latency_s=0.1, retries=0)
+    assert rm["metrics"]["domain_research"] == {"fired": 2, "articles_fetched": 7, "changed_output": True}
+
+
 @patch("morning_digest.llm._fireworks_client")
 def test_call_llm_emits_progress(mock_client, caplog):
     resp = MagicMock()

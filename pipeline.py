@@ -338,6 +338,16 @@ def _fold_stage_metrics(run_meta, stage_name, outputs, latency_s, retries):
     totals = metrics["totals"]
     for key in ("tokens_in", "tokens_out", "tokens_cached", "usage_missing"):
         totals[key] = totals.get(key, 0) + agg[key]
+    items_out = {}
+    for key, value in outputs.items():
+        if isinstance(value, list):
+            items_out[key] = len(value)
+        elif isinstance(value, dict):
+            for sub, subval in value.items():
+                if isinstance(subval, list):
+                    items_out[f"{key}.{sub}"] = len(subval)
+    stage_metrics["items_out"] = items_out
+    # TODO: add items_in best-effort per spec Component 4 once a per-stage need is concrete.
     return outputs
 
 
