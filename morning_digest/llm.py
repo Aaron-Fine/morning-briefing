@@ -69,14 +69,21 @@ def _anthropic_client():
 def _capture_prompt(capture_dir: str, stage: str, system_prompt: str, user_content: str) -> None:
     d = Path(capture_dir)
     d.mkdir(parents=True, exist_ok=True)
-    # Per-stage sequence from existing files on disk — a global counter would number
-    # across stages (seams__03.txt for the 1st seams call) and make the PR-B baseline
-    # diff non-deterministic. Deriving from disk is stateless.
+    # Per-stage sequence derived from existing files on disk (no global counter —
+    # that would number across stages and make the PR-B baseline non-deterministic).
+    # Exclusive create ("x") makes the read+write atomic: desks run concurrently in
+    # analyze_domain's ThreadPoolExecutor under the same stage, so two callers can
+    # compute the same n; on collision we retry with the next number instead of
+    # silently overwriting.
+    content = f"=== SYSTEM ===\n{system_prompt}\n\n=== USER ===\n{user_content}\n"
     n = len(list(d.glob(f"{stage}__*.txt"))) + 1
-    (d / f"{stage}__{n:02d}.txt").write_text(
-        f"=== SYSTEM ===\n{system_prompt}\n\n=== USER ===\n{user_content}\n",
-        encoding="utf-8",
-    )
+    while True:
+        try:
+            with open(d / f"{stage}__{n:02d}.txt", "x", encoding="utf-8") as f:
+                f.write(content)
+            return
+        except FileExistsError:
+            n += 1
 
 
 def call_llm(

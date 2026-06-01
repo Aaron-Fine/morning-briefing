@@ -67,11 +67,33 @@ def test_capture_prompts_writes_files(mock_client, tmp_path):
     resp.usage.prompt_tokens = 1
     resp.usage.completion_tokens = 1
     mock_client.return_value.chat.completions.create.return_value = resp
-    mc = {"provider": "fireworks", "model": "m", "max_tokens": 100,
-          "_obs": {"stage": "seams", "capture_dir": str(tmp_path)}}
-    call_llm("SYSTEM-XYZ", "USER-ABC", mc, stream=False)
-    call_llm("SYSTEM-2", "USER-2", mc, stream=False)  # second call → per-stage seq 02
-    files = sorted(p.name for p in tmp_path.glob("seams__*.txt"))
-    assert files == ["seams__01.txt", "seams__02.txt"]   # per-stage counter, not global
+
+    def mc(stage):
+        return {"provider": "fireworks", "model": "m", "max_tokens": 100,
+                "_obs": {"stage": stage, "capture_dir": str(tmp_path)}}
+
+    # Interleave stages: seams, other, seams. A global counter would produce
+    # seams__01/other__02/seams__03; per-stage numbering keeps them independent.
+    call_llm("SYSTEM-XYZ", "USER-ABC", mc("seams"), stream=False)
+    call_llm("SYSTEM-O", "USER-O", mc("other"), stream=False)
+    call_llm("SYSTEM-2", "USER-2", mc("seams"), stream=False)  # second seams → seq 02
+    files = sorted(p.name for p in tmp_path.glob("*.txt"))
+    assert files == ["other__01.txt", "seams__01.txt", "seams__02.txt"]
     content = (tmp_path / "seams__01.txt").read_text()
     assert "SYSTEM-XYZ" in content and "USER-ABC" in content
+
+
+def test_capture_prompt_concurrent_no_clobber(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from morning_digest.llm import _capture_prompt
+    N = 25
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        list(ex.map(
+            lambda i: _capture_prompt(str(tmp_path), "desk", f"SYS-{i}", f"USR-{i}"),
+            range(N),
+        ))
+    files = list(tmp_path.glob("desk__*.txt"))
+    assert len(files) == N  # no silent overwrite under concurrency
+    # every distinct payload survived
+    contents = {p.read_text() for p in files}
+    assert len(contents) == N

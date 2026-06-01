@@ -951,8 +951,12 @@ def main() -> None:
         action="store_true",
         help="With --stage cross_domain, reuse same-day cross_domain_plan.json when readable",
     )
-    parser.add_argument("--capture-prompts", type=str, default=None,
-                        help="Dump exact rendered prompts per stage to this dir (PR-B baseline)")
+    parser.add_argument(
+        "--capture-prompts",
+        type=str,
+        default=None,
+        help="Dump exact rendered prompts per stage to this dir (PR-B baseline)",
+    )
     args = parser.parse_args()
 
     run_pipeline(
