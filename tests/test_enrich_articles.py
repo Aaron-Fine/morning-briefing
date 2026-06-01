@@ -91,6 +91,9 @@ def test_long_native_text_is_distilled_like_fetched_text(tmp_path):
         out = run({"raw_sources": {"rss": [item]}}, _config(tmp_path, feeds=feeds), model)
     assert out["enriched_sources"]["rss"][0]["summary"] == canonical
     assert out["enrich_articles"]["records"][0]["source_text_origin"] == "rss_body"
+    # The canonical-summary LLM call's usage must be surfaced so its tokens reach
+    # run_meta["metrics"] (regression: enrich_articles previously discarded usage).
+    assert out["llm_usage"]
 
 
 def test_native_text_can_use_higher_distillation_threshold(tmp_path):

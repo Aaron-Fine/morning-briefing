@@ -132,6 +132,26 @@ class TestCallLlm:
         )
         mock_fireworks.assert_called_once()
 
+    @patch("morning_digest.llm._capture_prompt", side_effect=OSError("disk full"))
+    @patch("morning_digest.llm._call_fireworks")
+    def test_capture_oserror_is_swallowed(self, mock_fireworks, _mock_capture, caplog):
+        """Prompt capture is best-effort: a non-FileExistsError OSError (disk
+        full, permission) must be logged and swallowed, never propagated to fail
+        a real run."""
+        mock_fireworks.return_value = "response"
+        with caplog.at_level("WARNING"):
+            result = call_llm(
+                system_prompt="test",
+                user_content="test",
+                model_config={
+                    "provider": "fireworks",
+                    "_obs": {"stage": "demo", "capture_dir": "/tmp/cap"},
+                },
+            )
+        assert result == "response"
+        mock_fireworks.assert_called_once()
+        assert any("prompt capture failed" in r.message for r in caplog.records)
+
 
 def _fireworks_resp(content, prompt_tokens=12, completion_tokens=7, cached_tokens=3):
     # Verified shape (2026-05-30): usage has prompt_tokens_details.cached_tokens.

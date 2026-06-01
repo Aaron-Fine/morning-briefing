@@ -14,7 +14,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from tests.conftest import llm_result
 from morning_digest.llm import LLMUsage
 
-from cross_domain.parse import _validated_output as _vo, _REASON_PHRASE_OVERLAP
+from cross_domain.parse import (
+    _validated_output as _vo,
+    _REASON_PHRASE_OVERLAP,
+    _fallback_outputs,
+)
 
 from stages.cross_domain import (
     _normalize_tag,
@@ -1226,3 +1230,35 @@ class TestOverlapDepthDowngrade:
         assert len(downgrades) == 1
         assert downgrades[0]["original_depth"] == "widely-reported"
         assert downgrades[0]["recomputed_depth"] == "corroborated"
+
+
+class TestFallbackOutputsNoInternalKeyLeak:
+    def test_fallback_output_has_no_underscore_keys(self):
+        """_fallback_outputs runs _validated_output (which adds internal
+        _override_counts / _source_depth_downgrades) when config is set; those
+        bookkeeping keys must be popped before the artifact is returned, so the
+        saved cross_domain_output never contains _-prefixed keys. Regression for
+        the fallback path leaking internal keys into the artifact.
+        """
+        domain_analysis = {
+            "geopolitics": {
+                "items": [
+                    {
+                        "headline": "Test",
+                        "facts": "Facts",
+                        "analysis": "Analysis",
+                        "links": [],
+                    }
+                ]
+            }
+        }
+        config = {"llm": {"provider": "fireworks"}}
+        result = _fallback_outputs(
+            domain_analysis,
+            reason="llm_error",
+            message="boom",
+            raw_sources={"rss": []},
+            config=config,
+        )
+        out = result["cross_domain_output"]
+        assert not any(k.startswith("_") for k in out)

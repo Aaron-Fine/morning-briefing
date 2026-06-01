@@ -124,7 +124,12 @@ def call_llm(
     with progress.track(label):
         capture_dir = obs.get("capture_dir")
         if capture_dir:
-            _capture_prompt(capture_dir, stage, system_prompt, user_content)
+            # Prompt capture is a dev/baseline tool and must be best-effort:
+            # a disk-full / permission OSError should never fail a real run.
+            try:
+                _capture_prompt(capture_dir, stage, system_prompt, user_content)
+            except OSError as exc:
+                log.warning("prompt capture failed for stage %s: %s", stage, exc)
         if provider == "anthropic":
             return _call_anthropic(
                 system_prompt, user_content, model_config, max_retries, json_mode, stream

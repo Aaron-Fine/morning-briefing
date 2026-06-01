@@ -394,6 +394,11 @@ def _fallback_outputs(
     output = _empty_output(domain_analysis)
     if config is not None:
         output = _validated_output(output, domain_analysis, raw_sources or {}, config)
+        # _validated_output adds internal bookkeeping keys; pop them so they are
+        # not leaked into the saved cross_domain_output artifact (mirrors the
+        # success path in stage.py).
+        output.pop("_override_counts", None)
+        output.pop("_source_depth_downgrades", None)
 
     return {
         "cross_domain_plan": cross_domain_plan or _empty_cross_domain_plan(),

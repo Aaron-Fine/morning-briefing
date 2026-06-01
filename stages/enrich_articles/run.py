@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from pathlib import Path
 
+from morning_digest.llm import LLMUsage
 from sources.article_cache import ArticleCache
 from sources.article_content import (
     best_native_text,
@@ -159,6 +160,9 @@ def run(
     )
     system_prompt = load_prompt("enrich_article_system.md")
     status_records = list(skipped_records)
+    # Collected in the main thread only (from completed futures), so this is
+    # race-free even though _normalize_one runs in worker threads.
+    llm_usages: list[LLMUsage] = []
     max_parallel = int(
         config.get("pipeline", {})
         .get("concurrency", {})
@@ -184,7 +188,10 @@ def run(
         for future in as_completed(futures):
             item = futures[future]
             try:
-                status_records.append(future.result())
+                record, usage = future.result()
+                status_records.append(record)
+                if usage is not None:
+                    llm_usages.append(usage)
             except Exception as exc:
                 log.error(f"enrich_articles: failed for {item.get('url')}: {exc}")
                 status_records.append(_record(item, "exception", str(exc)))
@@ -212,6 +219,7 @@ def run(
                 "outcomes": tier_outcomes,
             },
         },
+        "llm_usage": llm_usages,
     }
 
 
@@ -248,7 +256,12 @@ def _normalize_one(
     limiter: _HostLimiter,
     system_prompt: str,
     model_config: dict | None,
-) -> dict:
+) -> tuple[dict, LLMUsage | None]:
+    """Return ``(status_record, normalizer_usage_or_None)``.
+
+    The usage is threaded back so the stage ``run()`` can aggregate it in the
+    main thread (race-free) and surface it as ``llm_usage``.
+    """
     original_summary = item.get("summary", "") or ""
     source = item.get("source", "")
     url = item.get("url", "")
@@ -263,7 +276,7 @@ def _normalize_one(
             "",
             source_text_origin=native_origin,
             native_length=native_length,
-        )
+        ), None
 
     cached = cache.get(url)
     if cached is not None:
@@ -289,7 +302,7 @@ def _normalize_one(
             cached_summary_statuses = {"ok", "normalizer_fallback", "llm_failed"}
             if cached.status in cached_summary_statuses and cached.canonical_summary:
                 item["summary"] = cached.canonical_summary
-            return record
+            return record, None
 
     attempt = resolve_source_text(
         url=url,
@@ -322,7 +335,7 @@ def _normalize_one(
             native_length=native_length,
             fetched_length=attempt.fetched_length,
             http_status=attempt.http_status,
-        )
+        ), None
 
     source_text = attempt.text
     origin = attempt.origin
@@ -338,7 +351,7 @@ def _normalize_one(
             source_text_origin=origin,
             native_length=native_length,
             http_status=http_status,
-        )
+        ), None
 
     canonical = _canonical_summary(
         source_text,
@@ -360,7 +373,7 @@ def _normalize_one(
             http_status=http_status,
             fallback_reason=canonical.fallback_reason,
             rejected_summary_preview=canonical.rejected_summary_preview,
-        )
+        ), canonical.usage
 
     item["summary"] = canonical.summary
     raw_length = len(source_text)
@@ -387,7 +400,7 @@ def _normalize_one(
         http_status=http_status,
         fallback_reason=canonical.fallback_reason,
         rejected_summary_preview=canonical.rejected_summary_preview,
-    )
+    ), canonical.usage
 
 
 def _canonical_cfg_for_origin(enrich_cfg: dict, origin: str) -> dict:

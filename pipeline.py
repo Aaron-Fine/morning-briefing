@@ -815,14 +815,22 @@ def run_pipeline(
                     run_meta["stage_failures"].append(
                         {"stage": stage_name, "error": str(e)}
                     )
+                    log.info(f"  Stage '{stage_name}' completed in {elapsed:.1f}s")
                     # Provide safe empty outputs so downstream stages don't crash
                     outputs = _empty_stage_output(stage_name)
                     context.update(outputs)
+                    _log_stage_observability(stage_name, outputs)
                     outputs = _fold_stage_metrics(
                         run_meta, stage_name, outputs,
                         latency_s=round(elapsed, 2),
                         retries=_last_attempts - 1,
                     )
+                    # Persist each (empty) output artifact, mirroring the success
+                    # path, so a later --stage rerun's _load_artifact finds the
+                    # empty dict rather than None.
+                    for key, value in outputs.items():
+                        if key not in ("html",):
+                            _save_artifact(artifact_dir, key, value)
                     _run_stage_after_hook(
                         stage_name,
                         context,
