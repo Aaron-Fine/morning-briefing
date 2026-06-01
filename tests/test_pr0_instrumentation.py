@@ -33,7 +33,7 @@ def test_fold_records_items_out():
         {"raw_sources": {"rss": [1, 2, 3]}, "extra": [9]}, latency_s=0.1, retries=0)
     items_out = rm["metrics"]["stages"]["collect"]["items_out"]
     assert items_out["extra"] == 1
-    assert items_out.get("raw_sources.rss") == 3
+    assert items_out["raw_sources.rss"] == 3
 
 
 def test_fold_routes_domain_research():

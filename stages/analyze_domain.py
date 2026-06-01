@@ -927,12 +927,14 @@ def run(
     # Derive domain_research_metrics from the research pass results (observe-only).
     # fired: desks that had successful fetches and triggered the second pass.
     # articles_fetched: total fetch attempts made during research.
-    # changed_output: True when the second pass ran (research_by_domain was non-empty).
-    _research_by_domain = _successful_research_by_domain(domain_research)
+    # changed_output: proxy — True when the second pass ran (non-empty
+    #   research_by_domain); does NOT verify the digest output actually differed
+    #   from the first-pass result.
+    research_by_domain = _successful_research_by_domain(domain_research)
     domain_research_metrics = {
-        "fired": len(_research_by_domain),
+        "fired": len(research_by_domain),
         "articles_fetched": len(domain_research.get("results", [])),
-        "changed_output": bool(_research_by_domain),
+        "changed_output": bool(research_by_domain),
     }
 
     return {

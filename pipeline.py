@@ -342,7 +342,7 @@ def _fold_stage_metrics(run_meta, stage_name, outputs, latency_s, retries):
     for key, value in outputs.items():
         if isinstance(value, list):
             items_out[key] = len(value)
-        elif isinstance(value, dict):
+        elif isinstance(value, dict):  # one level only; deeper nesting is intentionally skipped
             for sub, subval in value.items():
                 if isinstance(subval, list):
                     items_out[f"{key}.{sub}"] = len(subval)
