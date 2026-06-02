@@ -1262,3 +1262,76 @@ class TestFallbackOutputsNoInternalKeyLeak:
         )
         out = result["cross_domain_output"]
         assert not any(k.startswith("_") for k in out)
+
+
+class TestContractIssueLogging:
+    """Malformed LLM output shape (recorded as contract issues) must be visible
+    in the logs, not only buried in the persisted artifact."""
+
+    def _context(self):
+        return {
+            "domain_analysis": {
+                "geopolitics": {
+                    "items": [
+                        {
+                            "headline": "Test",
+                            "facts": "Facts",
+                            "analysis": "Analysis",
+                            "links": [],
+                        }
+                    ]
+                }
+            },
+            "seam_data": {},
+            "raw_sources": {"rss": []},
+        }
+
+    @patch("stages.cross_domain.call_llm")
+    def test_missing_output_sections_logged(self, mock_llm, caplog):
+        mock_llm.side_effect = [
+            llm_result({
+                "schema_version": 1,
+                "cross_domain_connections": [],
+                "deep_dives": [],
+                "worth_reading": [],
+                "rejected_alternatives": [],
+            }),
+            # execute output omits deep_dives, cross_domain_connections, worth_reading
+            llm_result({
+                "at_a_glance": [
+                    {"tag": "war", "headline": "Test", "facts": "F",
+                     "analysis": "A", "source_depth": "single-source", "links": []}
+                ],
+            }),
+        ]
+        with caplog.at_level("WARNING", logger="cross_domain.stage"):
+            result = run(self._context(), {"llm": {"provider": "fireworks"}})
+
+        # Still produces a valid contract (non-blocking)...
+        assert result["cross_domain_output"]["at_a_glance"][0]["tag"] == "war"
+        # ...and the drift is both recorded and logged.
+        assert any("missing" in i["message"].lower()
+                   for i in result["cross_domain_contract_issues"])
+        assert "contract" in caplog.text.lower()
+
+    @patch("stages.cross_domain.call_llm")
+    def test_clean_output_logs_no_contract_warning(self, mock_llm, caplog):
+        mock_llm.side_effect = [
+            llm_result({
+                "schema_version": 1,
+                "cross_domain_connections": [],
+                "deep_dives": [],
+                "worth_reading": [],
+                "rejected_alternatives": [],
+            }),
+            llm_result({
+                "at_a_glance": [],
+                "deep_dives": [],
+                "cross_domain_connections": [],
+                "worth_reading": [],
+                "market_context": "ctx",
+            }),
+        ]
+        with caplog.at_level("WARNING", logger="cross_domain.stage"):
+            run(self._context(), {"llm": {"provider": "fireworks"}})
+        assert "contract" not in caplog.text.lower()

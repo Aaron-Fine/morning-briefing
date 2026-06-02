@@ -310,8 +310,23 @@ def _parse_open_meteo(raw: dict, tz: str) -> dict:
     current = raw.get("current", {})
     daily = raw.get("daily", {})
 
+    # high_f/low_f read temperature arrays by the same index as time. If the API
+    # returns those arrays shorter than (or absent from) time, indexing by the
+    # time length would crash. Bound the loop to the shortest required array so a
+    # malformed response yields a partial (or empty) forecast instead of raising.
+    times = daily.get("time", [])
+    highs = daily.get("temperature_2m_max", [])
+    lows = daily.get("temperature_2m_min", [])
+    n_days = min(7, len(times), len(highs), len(lows))
+    if n_days < min(7, len(times)):
+        log.warning(
+            f"weather: Open-Meteo daily arrays malformed/mismatched "
+            f"(time={len(times)}, max={len(highs)}, min={len(lows)}); "
+            f"using {n_days} day(s)"
+        )
+
     forecast = []
-    for i in range(min(7, len(daily.get("time", [])))):
+    for i in range(n_days):
         day_date = datetime.strptime(daily["time"][i], "%Y-%m-%d")
         wmo = daily.get("weather_code", [0] * 7)[i]
         forecast.append(

@@ -175,6 +175,15 @@ def run(
     contract_issues.extend(
         {"artifact": "cross_domain_output", **issue} for issue in output_issues
     )
+    if contract_issues:
+        sample = "; ".join(
+            f"{issue.get('path', issue.get('artifact', '?'))}: {issue.get('message', '')}"
+            for issue in contract_issues[:5]
+        )
+        log.warning(
+            f"cross_domain: {len(contract_issues)} contract issue(s) in LLM output "
+            f"(shape drift, defaulted): {sample}"
+        )
     result = _validated_output(result, domain_analysis, raw_sources, config)
     source_depth_downgrades = list(result.get("_source_depth_downgrades", []) or [])
     override_counts = result.pop("_override_counts", {})

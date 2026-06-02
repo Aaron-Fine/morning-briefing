@@ -239,3 +239,51 @@ class TestRssCategoryRoutingContract:
             "Configured RSS categories without an active consumer: "
             f"{sorted(rss_categories - consumed)}"
         )
+
+
+class TestCrossDomainOutputMissingSections:
+    """A required section that is absent (not merely empty) is LLM shape drift
+    and must be reported as a contract issue, not silently defaulted to []."""
+
+    def _issue_paths(self, issues):
+        return {issue["path"] for issue in issues}
+
+    def test_missing_required_section_records_issue(self):
+        from morning_digest.contracts import normalize_cross_domain_output_artifact
+
+        raw = {
+            "at_a_glance": [],
+            "deep_dives": [],
+            "cross_domain_connections": [],
+            # worth_reading absent
+        }
+        _, issues = normalize_cross_domain_output_artifact(raw)
+        missing = [i for i in issues if "missing" in i["message"].lower()]
+        assert any("worth_reading" in i["path"] for i in missing)
+
+    def test_all_sections_present_but_empty_records_no_missing_issue(self):
+        from morning_digest.contracts import normalize_cross_domain_output_artifact
+
+        raw = {
+            "at_a_glance": [],
+            "deep_dives": [],
+            "cross_domain_connections": [],
+            "worth_reading": [],
+        }
+        _, issues = normalize_cross_domain_output_artifact(raw)
+        assert not [i for i in issues if "missing" in i["message"].lower()]
+
+    def test_empty_artifact_flags_all_required_sections(self):
+        from morning_digest.contracts import normalize_cross_domain_output_artifact
+
+        _, issues = normalize_cross_domain_output_artifact({})
+        missing_paths = {
+            i["path"] for i in issues if "missing" in i["message"].lower()
+        }
+        for section in (
+            "at_a_glance",
+            "deep_dives",
+            "cross_domain_connections",
+            "worth_reading",
+        ):
+            assert any(section in p for p in missing_paths), section

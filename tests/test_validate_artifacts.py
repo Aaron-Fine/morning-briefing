@@ -45,10 +45,13 @@ def test_validate_optional_cross_domain_artifacts_reports_shape_issue(tmp_path):
 
     issues = validate_optional_cross_domain_artifacts(tmp_path)
 
-    assert issues == [
-        {
-            "artifact": "cross_domain_output",
-            "path": "cross_domain_output.at_a_glance[0].links",
-            "message": "links is not a list",
-        }
-    ]
+    assert {
+        "artifact": "cross_domain_output",
+        "path": "cross_domain_output.at_a_glance[0].links",
+        "message": "links is not a list",
+    } in issues
+    # The deep_dives/cross_domain_connections/worth_reading sections are absent
+    # here and are now reported as shape drift rather than silently defaulted.
+    assert any(
+        i["message"] == "required section missing; defaulted to empty" for i in issues
+    )

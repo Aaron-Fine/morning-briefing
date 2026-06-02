@@ -858,6 +858,23 @@ def normalize_cross_domain_output_artifact(raw: Any) -> tuple[dict, list[dict]]:
         "market_context",
         "worth_reading",
     }
+    # A section that is entirely absent (vs. present-but-empty) means the model
+    # ignored the output schema — surface it as drift instead of silently
+    # defaulting to []. market_context is excluded: it is legitimately derived
+    # from the econ desk downstream when the model omits it.
+    for section in (
+        "at_a_glance",
+        "deep_dives",
+        "cross_domain_connections",
+        "worth_reading",
+    ):
+        if section not in raw:
+            issues.append(
+                ContractIssue(
+                    f"cross_domain_output.{section}",
+                    "required section missing; defaulted to empty",
+                )
+            )
     normalized = {
         **_extra_fields(raw, known),
         "at_a_glance": _normalize_at_a_glance_entries(

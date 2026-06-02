@@ -43,8 +43,17 @@ def fetch_markets(config: dict) -> list[dict]:
             consecutive_failures += 1
             continue
 
-        price = q.get("c", 0)
-        change = q.get("dp", 0)
+        # Finnhub returns c=0 / dp=null for unknown symbols or a degraded API.
+        # Treat a missing/zero price (or null change) as no valid quote rather
+        # than emitting a fake $0.00 line. dp == 0.0 is a real flat day — keep it.
+        price = q.get("c")
+        change = q.get("dp")
+        if not price or change is None:
+            log.warning(
+                f"Markets: no valid quote for {symbol} "
+                f"(price={price!r}, change={change!r}), skipping"
+            )
+            continue
 
         is_index = symbol.startswith("^")
         if price > 1000:

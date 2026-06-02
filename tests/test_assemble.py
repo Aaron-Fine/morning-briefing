@@ -599,13 +599,16 @@ class TestAssembleRun:
         assert result["template_data"]["at_a_glance"][0]["headline"] == (
             "Domain fallback"
         )
-        assert result["assemble_contract_issues"] == [
-            {
-                "artifact": "cross_domain_output",
-                "path": "cross_domain_output.at_a_glance",
-                "message": "at_a_glance is not a list",
-            }
-        ]
+        assert {
+            "artifact": "cross_domain_output",
+            "path": "cross_domain_output.at_a_glance",
+            "message": "at_a_glance is not a list",
+        } in result["assemble_contract_issues"]
+        # The other required sections are absent here and are now reported as drift.
+        assert any(
+            i["message"] == "required section missing; defaulted to empty"
+            for i in result["assemble_contract_issues"]
+        )
         assert result["digest_json"]["assemble_contract_issues"] == (
             result["assemble_contract_issues"]
         )

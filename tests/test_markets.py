@@ -101,6 +101,49 @@ class TestFetchMarkets:
 
     @patch("sources.markets.http_get_json")
     @patch.dict(os.environ, {"FINNHUB_API_KEY": "test_key"})
+    def test_skips_symbol_with_missing_price(self, mock_get, caplog):
+        # A 200 response without "c" must not become a fake $0.00 quote.
+        mock_get.return_value = {"dp": 1.0}
+
+        config = {"markets": {"symbols": [{"symbol": "^GSPC", "label": "S&P 500"}]}}
+        result = fetch_markets(config)
+        assert result == []
+        assert "^GSPC" in caplog.text
+
+    @patch("sources.markets.http_get_json")
+    @patch.dict(os.environ, {"FINNHUB_API_KEY": "test_key"})
+    def test_skips_symbol_with_zero_price(self, mock_get):
+        # Finnhub returns c=0 / dp=null for unknown symbols or a degraded API.
+        mock_get.return_value = {"c": 0, "dp": None}
+
+        config = {"markets": {"symbols": [{"symbol": "BADSYM", "label": "Bad"}]}}
+        result = fetch_markets(config)
+        assert result == []
+
+    @patch("sources.markets.http_get_json")
+    @patch.dict(os.environ, {"FINNHUB_API_KEY": "test_key"})
+    def test_keeps_flat_day_with_zero_change(self, mock_get):
+        # A real flat day (valid price, dp == 0.0) must be kept, not skipped.
+        mock_get.return_value = {"c": 5000.00, "dp": 0.0}
+
+        config = {"markets": {"symbols": [{"symbol": "^GSPC", "label": "S&P 500"}]}}
+        result = fetch_markets(config)
+        assert len(result) == 1
+        assert result[0]["change_pct"] == 0.0
+        assert result[0]["direction"] == "up"
+
+    @patch("sources.markets.http_get_json")
+    @patch.dict(os.environ, {"FINNHUB_API_KEY": "test_key"})
+    def test_skips_symbol_with_null_change(self, mock_get):
+        # dp present but null must not crash round() — skip as no valid quote.
+        mock_get.return_value = {"c": 5000.00, "dp": None}
+
+        config = {"markets": {"symbols": [{"symbol": "^GSPC", "label": "S&P 500"}]}}
+        result = fetch_markets(config)
+        assert result == []
+
+    @patch("sources.markets.http_get_json")
+    @patch.dict(os.environ, {"FINNHUB_API_KEY": "test_key"})
     def test_multiple_symbols(self, mock_get):
         def _response(*args, **kwargs):
             symbol = kwargs.get("params", {}).get("symbol", "")

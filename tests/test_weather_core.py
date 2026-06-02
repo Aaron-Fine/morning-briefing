@@ -282,3 +282,57 @@ class TestWmoCodes:
         for code, text in _WMO_CODES.items():
             assert isinstance(text, str)
             assert len(text) > 0
+
+
+class TestParseOpenMeteo:
+    """Tests for _parse_open_meteo parallel-array handling."""
+
+    def _well_formed(self, days=3):
+        return {
+            "current": {
+                "temperature_2m": 50.0,
+                "weather_code": 0,
+                "wind_speed_10m": 5.0,
+                "relative_humidity_2m": 40,
+            },
+            "daily": {
+                "time": [f"2026-06-0{i + 1}" for i in range(days)],
+                "temperature_2m_max": [70.0] * days,
+                "temperature_2m_min": [50.0] * days,
+                "precipitation_probability_max": [10] * days,
+                "weather_code": [0] * days,
+                "wind_speed_10m_max": [8.0] * days,
+                "wind_direction_10m_dominant": [180] * days,
+            },
+        }
+
+    def test_well_formed_parses_all_days(self):
+        from sources.weather import _parse_open_meteo
+
+        result = _parse_open_meteo(self._well_formed(3), "America/Denver")
+        assert len(result["forecast"]) == 3
+        assert result["forecast"][0]["high_f"] == 70
+        assert result["forecast"][0]["low_f"] == 50
+
+    def test_missing_temperature_arrays_returns_empty_forecast(self, caplog):
+        from sources.weather import _parse_open_meteo
+
+        raw = self._well_formed(3)
+        del raw["daily"]["temperature_2m_max"]
+        del raw["daily"]["temperature_2m_min"]
+
+        result = _parse_open_meteo(raw, "America/Denver")  # must not raise
+        assert result["forecast"] == []
+        assert "malformed" in caplog.text.lower() or "mismatch" in caplog.text.lower()
+
+    def test_mismatched_lengths_bounds_to_shortest(self, caplog):
+        from sources.weather import _parse_open_meteo
+
+        raw = self._well_formed(3)
+        # API returned 3 days of time but only 2 of temperatures.
+        raw["daily"]["temperature_2m_max"] = [70.0, 71.0]
+        raw["daily"]["temperature_2m_min"] = [50.0, 51.0]
+
+        result = _parse_open_meteo(raw, "America/Denver")  # must not raise
+        assert len(result["forecast"]) == 2
+        assert "malformed" in caplog.text.lower() or "mismatch" in caplog.text.lower()
