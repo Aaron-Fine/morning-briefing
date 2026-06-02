@@ -1,6 +1,12 @@
 """Shared test fixtures and configuration."""
 
 import pytest
+from morning_digest.llm import LLMResult, LLMUsage
+
+
+def llm_result(value, tokens_in=10, tokens_out=5, model="test-model", provider="fireworks"):
+    """Wrap a mock LLM value in an LLMResult for call_llm mocks."""
+    return LLMResult(value, LLMUsage(model, provider, tokens_in, tokens_out))
 
 
 @pytest.fixture

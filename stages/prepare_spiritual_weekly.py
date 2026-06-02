@@ -14,7 +14,7 @@ import json
 import logging
 from pathlib import Path
 
-from morning_digest.llm import call_llm
+from morning_digest.llm import LLMUsage, call_llm
 from sources.come_follow_me import get_lesson_for_date
 from stages.spiritual_units import normalize_daily_units
 from utils.prompts import load_prompt
@@ -113,7 +113,7 @@ def generate_weekly_guide(
     model_config: dict | None,
     *,
     force: bool = False,
-) -> Path:
+) -> "tuple[Path, LLMUsage | None]":
     week_start = str(lesson.get("week_start", "")).strip()
     if not week_start:
         raise ValueError("lesson.week_start is required")
@@ -122,9 +122,9 @@ def generate_weekly_guide(
 
     path = _guide_path(week_start)
     if path.exists() and not force:
-        return path
+        return path, None
 
-    guide = call_llm(
+    guide, guide_usage = call_llm(
         _GUIDE_SYSTEM_PROMPT,
         _guide_user_content(lesson),
         model_config,
@@ -137,7 +137,7 @@ def generate_weekly_guide(
         raise ValueError("generated guide was empty")
 
     _write_guide(path, guide_text)
-    return path
+    return path, guide_usage
 
 
 def _ensure_misuse_units(daily_units: list[dict], misuses: list[dict]) -> list[dict]:
@@ -262,13 +262,16 @@ def run(
         return {"spiritual_weekly": existing}
 
     guide_path = _guide_path(week_start)
+    llm_usages = []
     if not guide_path.exists():
         # User-authored guides at state/spiritual/weekly/{week_start}.md are the
         # happy path. This LLM generation is an intentional fallback for weeks
         # when the guide wasn't uploaded in time — do not remove it without
         # replacing the ergonomic it covers.
         try:
-            guide_path = generate_weekly_guide(lesson, model_config)
+            guide_path, guide_usage = generate_weekly_guide(lesson, model_config)
+            if guide_usage is not None:
+                llm_usages.append(guide_usage)
             log.info(f"prepare_spiritual_weekly: generated guide {guide_path.name}")
         except Exception as exc:
             log.warning(f"prepare_spiritual_weekly: guide generation failed: {exc}")
@@ -294,7 +297,7 @@ USER STUDY GUIDE:
 Return the weekly spiritual artifact as JSON."""
 
     try:
-        raw = call_llm(
+        raw, usage = call_llm(
             _SYSTEM_PROMPT,
             user_content,
             model_config,
@@ -302,10 +305,11 @@ Return the weekly spiritual artifact as JSON."""
             json_mode=True,
             stream=True,
         )
+        llm_usages.append(usage)
         artifact = _validate_artifact(raw, lesson)
     except Exception as exc:
         log.warning(f"prepare_spiritual_weekly: LLM call failed: {exc}")
         artifact = _minimal_artifact(lesson, f"llm failed: {exc}")
 
     _write_artifact(path, artifact)
-    return {"spiritual_weekly": artifact}
+    return {"spiritual_weekly": artifact, "llm_usage": llm_usages}

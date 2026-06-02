@@ -7,8 +7,11 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.conftest import llm_result
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from morning_digest.llm import LLMUsage
 from stages.analyze_domain import (
     _collect_research_requests,
     _filter_rss,
@@ -16,6 +19,7 @@ from stages.analyze_domain import (
     _fmt_rss_items,
     _fmt_transcripts,
     _fmt_markets,
+    _run_domain_research,
     _successful_research_by_domain,
     _empty_domain_result,
     _resolve_domain_configs,
@@ -268,7 +272,7 @@ class TestRunDomainPass:
     def test_empty_sources_returns_empty_result(self, caplog):
         cfg = _DOMAIN_CONFIGS["ai_tech"]
         with caplog.at_level(logging.WARNING):
-            result = _run_domain_pass(
+            result, _ = _run_domain_pass(
                 "ai_tech", cfg, [], [], [], self._make_model_config()
             )
         assert result == {"items": []}
@@ -276,12 +280,12 @@ class TestRunDomainPass:
 
     def test_econ_pass_includes_market_context_in_empty_result(self):
         cfg = _DOMAIN_CONFIGS["econ"]
-        result = _run_domain_pass("econ", cfg, [], [], [], self._make_model_config())
+        result, _ = _run_domain_pass("econ", cfg, [], [], [], self._make_model_config())
         assert result == {"items": [], "market_context": ""}
 
     @patch("stages.analyze_domain.call_llm")
     def test_llm_success_returns_parsed_result(self, mock_llm):
-        mock_llm.return_value = {
+        mock_llm.return_value = llm_result({
             "items": [
                 {
                     "tag": "ai",
@@ -295,9 +299,9 @@ class TestRunDomainPass:
                     "deep_dive_rationale": None,
                 }
             ]
-        }
+        })
         cfg = _DOMAIN_CONFIGS["ai_tech"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "ai_tech",
             cfg,
             self._make_rss_items(),
@@ -311,7 +315,7 @@ class TestRunDomainPass:
     @patch("stages.analyze_domain.call_llm")
     def test_research_requests_preserved_on_first_pass(self, mock_llm):
         url = "https://example.com/ai-tech"
-        mock_llm.return_value = {
+        mock_llm.return_value = llm_result({
             "items": [],
             "research_requests": [
                 {
@@ -322,9 +326,9 @@ class TestRunDomainPass:
                     "expected_use": "Decide whether to include",
                 }
             ],
-        }
+        })
         cfg = _DOMAIN_CONFIGS["ai_tech"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "ai_tech",
             cfg,
             self._make_rss_items(),
@@ -338,7 +342,7 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_research_results_included_on_second_pass(self, mock_llm):
-        mock_llm.return_value = {"items": []}
+        mock_llm.return_value = llm_result({"items": []})
         cfg = _DOMAIN_CONFIGS["ai_tech"]
         _run_domain_pass(
             "ai_tech",
@@ -365,7 +369,7 @@ class TestRunDomainPass:
         mock_llm.side_effect = Exception("API error")
         cfg = _DOMAIN_CONFIGS["ai_tech"]
         with caplog.at_level(logging.ERROR):
-            result = _run_domain_pass(
+            result, _ = _run_domain_pass(
                 "ai_tech",
                 cfg,
                 self._make_rss_items(),
@@ -378,7 +382,7 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_list_result_wrapped_in_items(self, mock_llm):
-        mock_llm.return_value = [
+        mock_llm.return_value = llm_result([
             {
                 "tag": "ai",
                 "headline": "Test",
@@ -389,9 +393,9 @@ class TestRunDomainPass:
                 "links": [],
                 "deep_dive_candidate": False,
             }
-        ]
+        ])
         cfg = _DOMAIN_CONFIGS["ai_tech"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "ai_tech",
             cfg,
             self._make_rss_items(),
@@ -404,9 +408,9 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_non_dict_result_returns_empty_items(self, mock_llm):
-        mock_llm.return_value = "not a dict"
+        mock_llm.return_value = llm_result("not a dict")
         cfg = _DOMAIN_CONFIGS["ai_tech"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "ai_tech",
             cfg,
             self._make_rss_items(),
@@ -424,9 +428,9 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_non_list_items_returns_empty_items_with_contract_issue(self, mock_llm):
-        mock_llm.return_value = {"items": {"headline": "wrong container"}}
+        mock_llm.return_value = llm_result({"items": {"headline": "wrong container"}})
         cfg = _DOMAIN_CONFIGS["ai_tech"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "ai_tech",
             cfg,
             self._make_rss_items(),
@@ -444,7 +448,7 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_malformed_nested_structures_are_normalized(self, mock_llm):
-        mock_llm.return_value = {
+        mock_llm.return_value = llm_result({
             "items": [
                 {
                     "tag": "ai",
@@ -459,9 +463,9 @@ class TestRunDomainPass:
                 },
                 "not an item",
             ]
-        }
+        })
         cfg = _DOMAIN_CONFIGS["ai_tech"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "ai_tech",
             cfg,
             self._make_rss_items(),
@@ -493,7 +497,7 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_url_validation_strips_unknown_domains(self, mock_llm):
-        mock_llm.return_value = {
+        mock_llm.return_value = llm_result({
             "items": [
                 {
                     "tag": "ai",
@@ -509,9 +513,9 @@ class TestRunDomainPass:
                     "deep_dive_candidate": False,
                 }
             ]
-        }
+        })
         cfg = _DOMAIN_CONFIGS["ai_tech"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "ai_tech",
             cfg,
             self._make_rss_items(),
@@ -525,10 +529,10 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_econ_pass_includes_market_data(self, mock_llm):
-        mock_llm.return_value = {"items": [], "market_context": "Markets up."}
+        mock_llm.return_value = llm_result({"items": [], "market_context": "Markets up."})
         cfg = _DOMAIN_CONFIGS["econ"]
         markets = [{"label": "SPY", "price": "500", "change_pct": 1.0}]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "econ",
             cfg,
             self._make_rss_items(["econ-trade"]),
@@ -540,9 +544,9 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_econ_missing_market_context_adds_empty_string(self, mock_llm):
-        mock_llm.return_value = {"items": []}
+        mock_llm.return_value = llm_result({"items": []})
         cfg = _DOMAIN_CONFIGS["econ"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "econ",
             cfg,
             self._make_rss_items(["econ-trade"]),
@@ -554,7 +558,7 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_passes_transcripts_to_prompt(self, mock_llm):
-        mock_llm.return_value = {"items": []}
+        mock_llm.return_value = llm_result({"items": []})
         cfg = _DOMAIN_CONFIGS["ai_tech"]
         transcripts = [
             {"channel": "Theo - t3.gg", "title": "T1", "transcript": "Content"}
@@ -574,7 +578,7 @@ class TestRunDomainPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_passes_json_mode_and_stream(self, mock_llm):
-        mock_llm.return_value = {"items": []}
+        mock_llm.return_value = llm_result({"items": []})
         cfg = _DOMAIN_CONFIGS["ai_tech"]
         _run_domain_pass(
             "ai_tech",
@@ -594,10 +598,14 @@ class TestAnalyzeDomainFailures:
     def test_failed_domains_are_reported_without_domain_retry(
         self, mock_run_domain_pass, mock_run_all_domains
     ):
-        mock_run_all_domains.return_value = {
-            "ai_tech": {"items": [], "_failed": True},
-            "econ": {"items": [], "market_context": ""},
-        }
+        mock_run_all_domains.return_value = (
+            {
+                "ai_tech": {"items": [], "_failed": True},
+                "econ": {"items": [], "market_context": ""},
+            },
+            {},
+            [],
+        )
 
         result = run(
             {"raw_sources": {"rss": [], "markets": []}, "compressed_transcripts": []},
@@ -610,17 +618,21 @@ class TestAnalyzeDomainFailures:
 
     @patch("stages.analyze_domain._run_all_domains")
     def test_contract_issues_are_returned_as_sidecar(self, mock_run_all_domains):
-        mock_run_all_domains.return_value = {
-            "ai_tech": {
-                "items": [],
-                "_contract_issues": [
-                    {
-                        "path": "domain_analysis.ai_tech.items",
-                        "message": "items is not a list",
-                    }
-                ],
-            }
-        }
+        mock_run_all_domains.return_value = (
+            {
+                "ai_tech": {
+                    "items": [],
+                    "_contract_issues": [
+                        {
+                            "path": "domain_analysis.ai_tech.items",
+                            "message": "items is not a list",
+                        }
+                    ],
+                },
+            },
+            {},
+            [],
+        )
 
         result = run(
             {"raw_sources": {"rss": [], "markets": []}, "compressed_transcripts": []},
@@ -685,6 +697,35 @@ class TestDomainResearch:
         assert requests[0]["source"] == "Open"
         assert requests[1]["status"] == "rejected_unknown_url"
         assert "research_requests" not in domain_analysis["ai_tech"]
+
+    @patch("stages.analyze_domain._normalize_one")
+    def test_run_domain_research_unpacks_normalize_one_tuple(self, mock_normalize, tmp_path):
+        # Regression: _normalize_one returns (record, usage); _run_domain_research
+        # must unpack it. A bare-tuple record crashes on record.get(...). Only a
+        # real full run with a selected research request exercises this path.
+        mock_normalize.return_value = (
+            {"status": "ok", "native_length": 5, "fetched_length": 10,
+             "source_text_origin": "fetched"},
+            LLMUsage("m", "fireworks", 1, 1),
+        )
+        rss_items = [{
+            "category": "ai-tech", "source": "Open", "title": "Open article",
+            "url": "https://example.com/open", "summary": "s",
+        }]
+        domain_analysis = {"ai_tech": {"items": [], "research_requests": [
+            {"url": "https://example.com/open", "claim": "c",
+             "reason": "thin", "priority": "high"},
+        ]}}
+        config = {"domain_research": {"enabled": True}, "enrich_articles": {},
+                  "rss": {"feeds": []}, "_test_cache_dir": str(tmp_path)}
+        research_cfg = {"enabled": True, "max_requests_per_desk": 2,
+                        "max_requests_total": 10, "allow_browser_fetch": False}
+        artifact = _run_domain_research(
+            domain_analysis, {"ai_tech": _DOMAIN_CONFIGS["ai_tech"]},
+            rss_items, config, {}, research_cfg,
+        )
+        assert artifact["results"][0]["status"] == "ok"
+        mock_normalize.assert_called_once()
 
     def test_collect_research_requests_enforces_caps(self):
         rss_items = [
@@ -811,9 +852,9 @@ class TestPerspectiveDesk:
 
     def test_run_extracts_perspective_framing(self):
         with patch("stages.analyze_domain.call_llm") as mock_llm:
-            mock_llm.return_value = {
+            mock_llm.return_value = llm_result({
                 "items": [{"headline": "Test framing", "facts": "F", "analysis": "A"}]
-            }
+            })
             context = {
                 "raw_sources": {
                     "rss": [
@@ -828,11 +869,12 @@ class TestPerspectiveDesk:
             assert len(result["perspective_framing"]["items"]) == 1
             assert "domain_analysis" not in result["perspective_framing"]
             assert "domain_analysis" in result
+            assert result["llm_usage"]
 
     def test_perspective_desk_handles_zero_qualifying_items(self):
         """min_items=0: empty perspective output must be tolerated, not error."""
         with patch("stages.analyze_domain.call_llm") as mock_llm:
-            mock_llm.return_value = {"items": []}
+            mock_llm.return_value = llm_result({"items": []})
             context = {
                 "raw_sources": {
                     "rss": [

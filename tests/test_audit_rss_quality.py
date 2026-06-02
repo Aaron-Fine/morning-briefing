@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -83,9 +84,12 @@ def test_load_artifacts_empty_root_returns_empty_list(tmp_path):
 
 
 def test_load_artifacts_reads_raw_and_enrichment(tmp_path):
+    # Date must be relative to now: load_artifacts filters to the last
+    # window_days against the real clock, so a hardcoded date would age out.
+    recent = (datetime.now(timezone.utc) - timedelta(days=1)).date().isoformat()
     _write_artifact(
         tmp_path,
-        "2026-04-19",
+        recent,
         [{"source": "A", "summary": "x"}],
         [{"source": "A", "status": "ok"}],
     )

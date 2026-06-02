@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
-from morning_digest.llm import call_llm
+from morning_digest.llm import LLMUsage, call_llm
 from morning_digest.sanitize import sanitize_source_content
 from sources.article_content import needs_distillation
 
@@ -29,6 +29,9 @@ class _CanonicalResult:
     error: str = ""
     fallback_reason: str = ""
     rejected_summary_preview: str = ""
+    # LLM usage from the normalizer call, when one was made. None when the
+    # summary was produced without an LLM call (pass-through / fallback paths).
+    usage: LLMUsage | None = None
 
 
 def _meta_markers(enrich_cfg: dict | None) -> tuple[str, ...]:
@@ -92,7 +95,7 @@ def _canonical_summary(
         f"{source_text}"
     )
     try:
-        summary = call_llm(
+        summary, usage = call_llm(
             system_prompt,
             user_content,
             model_config,
@@ -114,6 +117,7 @@ def _canonical_summary(
             source_text,
             max_chars,
             "empty_response",
+            usage=usage,
         )
     rejection_reason = _llm_summary_rejection_reason(summary, source_text, markers)
     if rejection_reason:
@@ -122,8 +126,9 @@ def _canonical_summary(
             max_chars,
             rejection_reason,
             rejected_summary=summary,
+            usage=usage,
         )
-    return _CanonicalResult(summary, "ok")
+    return _CanonicalResult(summary, "ok", usage=usage)
 
 
 def _fallback_canonical_result(
@@ -133,6 +138,7 @@ def _fallback_canonical_result(
     *,
     error: str = "",
     rejected_summary: str = "",
+    usage: LLMUsage | None = None,
 ) -> _CanonicalResult:
     """Return a usable source-derived summary when normalizer output is unusable."""
     summary = sanitize_source_content(source_text, max_chars=max_chars)
@@ -144,6 +150,7 @@ def _fallback_canonical_result(
             error or f"normalizer fallback: {fallback_reason}",
             fallback_reason=fallback_reason,
             rejected_summary_preview=rejected_preview,
+            usage=usage,
         )
     return _CanonicalResult(
         "",
@@ -151,4 +158,5 @@ def _fallback_canonical_result(
         error or f"normalizer failed: {fallback_reason}",
         fallback_reason=fallback_reason,
         rejected_summary_preview=rejected_preview,
+        usage=usage,
     )

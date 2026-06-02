@@ -41,6 +41,7 @@ from math import ceil
 from pathlib import Path
 from urllib.parse import urlparse
 
+from morning_digest import progress
 from morning_digest.contracts import normalize_domain_result
 from morning_digest.llm import call_llm
 from morning_digest.sanitize import sanitize_source_content
@@ -55,6 +56,8 @@ from stages.enrich_articles.scheduling import _HostLimiter
 from utils.prompts import load_prompt
 
 log = logging.getLogger(__name__)
+
+_ACTION_PREPENDED_REBALANCED = "prepended_rebalanced_item"
 
 # ---------------------------------------------------------------------------
 # Domain configuration: source categories and transcript channel names
@@ -625,7 +628,7 @@ def _run_domain_pass(
         log.warning(
             f"  analyze_domain[{domain_key}]: no source items — returning empty"
         )
-        return _empty_domain_result(domain_key, failed=False)
+        return _empty_domain_result(domain_key, failed=False), None
 
     schema = _ECON_OUTPUT_SCHEMA if domain_key == "econ" else _OUTPUT_SCHEMA
     if allow_research_requests:
@@ -671,7 +674,7 @@ def _run_domain_pass(
         )
 
     try:
-        result = call_llm(
+        result, usage = call_llm(
             system_prompt,
             user_content,
             model_config,
@@ -681,7 +684,7 @@ def _run_domain_pass(
         )
     except Exception as e:
         log.error(f"  analyze_domain[{domain_key}]: LLM call failed: {e}")
-        return _empty_domain_result(domain_key, failed=True)
+        return _empty_domain_result(domain_key, failed=True), None
 
     result, contract_issues = normalize_domain_result(result, domain_key)
     if contract_issues:
@@ -711,7 +714,7 @@ def _run_domain_pass(
         f"  analyze_domain[{domain_key}]: {len(result['items'])} items, "
         f"{sum(1 for i in result['items'] if i.get('deep_dive_candidate'))} dive candidates"
     )
-    return result
+    return result, usage
 
 
 # ---------------------------------------------------------------------------
@@ -815,7 +818,7 @@ def _rebalance_categories(
             {
                 "desk": desk_key,
                 "category": cat,
-                "action": "prepended_rebalanced_item",
+                "action": _ACTION_PREPENDED_REBALANCED,
                 "item_id": synthetic_item["item_id"],
                 "raw_count": len(raw_items),
             }
@@ -866,7 +869,7 @@ def run(
     if not model_config:
         model_config = config.get("llm", {})
 
-    run_result = _run_all_domains(
+    domain_analysis, domain_research, llm_usages = _run_all_domains(
         domain_configs,
         rss_items,
         compressed_transcripts,
@@ -874,11 +877,6 @@ def run(
         model_config,
         config,
     )
-    if isinstance(run_result, tuple):
-        domain_analysis, domain_research = run_result
-    else:
-        domain_analysis = run_result
-        domain_research = {}
 
     # Clean internal sentinels before returning
     still_failed = []
@@ -922,6 +920,23 @@ def run(
             f"{', '.join(still_failed)}"
         )
 
+    rebalance_synthesized = sum(
+        1 for entry in rebalance_log if entry.get("action") == _ACTION_PREPENDED_REBALANCED
+    )
+
+    # Derive domain_research_metrics from the research pass results (observe-only).
+    # fired: desks that had successful fetches and triggered the second pass.
+    # articles_fetched: total fetch attempts made during research.
+    # changed_output: proxy — True when the second pass ran (non-empty
+    #   research_by_domain); does NOT verify the digest output actually differed
+    #   from the first-pass result.
+    research_by_domain = _successful_research_by_domain(domain_research)
+    domain_research_metrics = {
+        "fired": len(research_by_domain),
+        "articles_fetched": len(domain_research.get("results", [])),
+        "changed_output": bool(research_by_domain),
+    }
+
     return {
         "domain_analysis": domain_analysis,
         "perspective_framing": perspective_output,
@@ -929,6 +944,9 @@ def run(
         "domain_analysis_failures": still_failed,
         "domain_analysis_contract_issues": contract_issues,
         "category_rebalance_log": rebalance_log,
+        "llm_usage": llm_usages,
+        "override_counts": {"rebalance_categories": rebalance_synthesized},
+        "domain_research_metrics": domain_research_metrics,
     }
 
 
@@ -942,7 +960,7 @@ def _run_all_domains(
     markets: list[dict],
     model_config: dict,
     config: dict | None = None,
-) -> tuple[dict, dict]:
+) -> tuple[dict, dict, list]:
     domain_analysis: dict = {}
     config = config or {}
     research_cfg = _domain_research_config(config)
@@ -952,25 +970,32 @@ def _run_all_domains(
         .get("analyze_desks", _DEFAULT_MAX_PARALLEL_DESKS)
     )
 
+    all_usages: list = []
+
     def _run_one(
         domain_key: str,
         *,
         research_results: list[dict] | None = None,
         allow_research_requests: bool = False,
-    ) -> tuple[str, dict]:
+    ) -> tuple[str, dict, object]:
         domain_cfg = domain_configs[domain_key]
         log.info(f"  Analyzing domain: {domain_key} ({domain_cfg['label']})")
-        result = _run_domain_pass(
-            domain_key,
-            domain_cfg,
-            rss_items,
-            compressed_transcripts,
-            markets if domain_key == "econ" else [],
-            model_config,
-            research_results=research_results,
-            allow_research_requests=allow_research_requests,
-        )
-        return domain_key, result
+        # If model_config is None (non-LLM-configured stage), _obs has no "stage" and
+        # call_llm's label falls back to "llm"; sublabel still attributes the desk.
+        base = model_config or {}
+        mc = {**base, "_obs": {**(base.get("_obs") or {}), "sublabel": domain_key}}
+        with progress.track(f"desk {domain_key}"):
+            result, usage = _run_domain_pass(
+                domain_key,
+                domain_cfg,
+                rss_items,
+                compressed_transcripts,
+                markets if domain_key == "econ" else [],
+                mc,
+                research_results=research_results,
+                allow_research_requests=allow_research_requests,
+            )
+        return domain_key, result, usage
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
@@ -984,8 +1009,10 @@ def _run_all_domains(
         for future in as_completed(futures):
             domain_key = futures[future]
             try:
-                key, result = future.result()
+                key, result, usage = future.result()
                 domain_analysis[key] = result
+                if usage is not None:
+                    all_usages.append(usage)
             except Exception as e:
                 log.error(f"  analyze_domain[{domain_key}]: parallel execution failed: {e}")
                 domain_analysis[domain_key] = _empty_domain_result(domain_key, failed=True)
@@ -1000,7 +1027,7 @@ def _run_all_domains(
     )
     research_by_domain = _successful_research_by_domain(domain_research)
     if not research_by_domain:
-        return domain_analysis, domain_research
+        return domain_analysis, domain_research, all_usages
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
@@ -1016,15 +1043,17 @@ def _run_all_domains(
         for future in as_completed(futures):
             domain_key = futures[future]
             try:
-                key, result = future.result()
+                key, result, usage = future.result()
                 domain_analysis[key] = result
+                if usage is not None:
+                    all_usages.append(usage)
             except Exception as e:
                 log.error(
                     f"  analyze_domain[{domain_key}]: research pass failed: {e}"
                 )
                 domain_analysis[domain_key]["_research_pass_failed"] = True
 
-    return domain_analysis, domain_research
+    return domain_analysis, domain_research, all_usages
 
 
 def _domain_research_config(config: dict) -> dict:
@@ -1088,7 +1117,10 @@ def _run_domain_research(
         item = deepcopy(request["_source_item"])
         feed_conf = feeds_by_name.get(item.get("source"), {})
         native_text, native_origin = best_native_text(item)
-        record = _normalize_one(
+        # _normalize_one returns (record, usage); the research-pass canonical
+        # summary usage is not surfaced into run_meta metrics today (only the
+        # desk-pass LLM usage is). Unpack and discard to keep the record a dict.
+        record, _research_usage = _normalize_one(
             item,
             feed_conf,
             http_fetch_allowed=True,

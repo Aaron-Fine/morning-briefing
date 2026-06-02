@@ -7,6 +7,8 @@ from utils.urls import collect_known_urls, registered_domain, url_known
 
 log = logging.getLogger(__name__)
 
+_REASON_PHRASE_OVERLAP = "phrase_overlap_with_at_a_glance"
+
 _VALID_TAGS = {
     "war",
     "domestic",
@@ -392,6 +394,11 @@ def _fallback_outputs(
     output = _empty_output(domain_analysis)
     if config is not None:
         output = _validated_output(output, domain_analysis, raw_sources or {}, config)
+        # _validated_output adds internal bookkeeping keys; pop them so they are
+        # not leaked into the saved cross_domain_output artifact (mirrors the
+        # success path in stage.py).
+        output.pop("_override_counts", None)
+        output.pop("_source_depth_downgrades", None)
 
     return {
         "cross_domain_plan": cross_domain_plan or _empty_cross_domain_plan(),
@@ -566,7 +573,7 @@ def _downgrade_overlap_depth(result: dict) -> dict:
                     "section": "deep_dives",
                     "original_depth": original,
                     "recomputed_depth": new_depth,
-                    "reason": "phrase_overlap_with_at_a_glance",
+                    "reason": _REASON_PHRASE_OVERLAP,
                     "overlap_count": len(overlap),
                     "sample_phrase": sorted(overlap)[0],
                 })
@@ -596,11 +603,27 @@ def _validated_output(
         econ = domain_analysis.get("econ", {})
         result["market_context"] = econ.get("market_context", "")
 
+    result["_override_counts"] = {
+        "normalize_tag": 0,
+        "tag_label": 0,
+        "recompute_source_depth": 0,
+        "ensure_primary_glance_coverage": 0,
+        "overlap_downgrade": 0,
+    }
+    counts = result["_override_counts"]
+
     known_urls = collect_known_urls(raw_sources, domain_analysis)
 
     for item in result["at_a_glance"]:
-        item["tag"] = _normalize_tag(item.get("tag", ""))
-        item["tag_label"] = _TAG_LABELS.get(item["tag"], item.get("tag_label", ""))
+        raw_tag = item.get("tag", "")
+        norm = _normalize_tag(raw_tag)
+        if norm != raw_tag:
+            counts["normalize_tag"] += 1
+        item["tag"] = norm
+        new_label = _TAG_LABELS.get(item["tag"], item.get("tag_label", ""))
+        if new_label != item.get("tag_label", ""):
+            counts["tag_label"] += 1
+        item["tag_label"] = new_label
 
     for item in result["at_a_glance"]:
         item["links"] = [
@@ -609,9 +632,11 @@ def _validated_output(
             if url_known(lnk.get("url", ""), known_urls)
         ]
 
+    before = len(result["at_a_glance"])
     result["at_a_glance"] = _ensure_primary_glance_coverage(
         result["at_a_glance"], domain_analysis, config
     )
+    counts["ensure_primary_glance_coverage"] += len(result["at_a_glance"]) - before  # _ensure_primary_glance_coverage only appends; delta is items added
     for item in result["at_a_glance"]:
         item["links"] = [
             lnk
@@ -631,6 +656,14 @@ def _validated_output(
     # Recompute source_depth from distinct domains before enforcing caps
     result = _downgrade_same_outlet_depth(result)
     result = _downgrade_overlap_depth(result)
+
+    downgrades = result.get("_source_depth_downgrades", [])
+    counts["recompute_source_depth"] += sum(
+        1 for d in downgrades if d.get("reason") != _REASON_PHRASE_OVERLAP
+    )
+    counts["overlap_downgrade"] += sum(
+        1 for d in downgrades if d.get("reason") == _REASON_PHRASE_OVERLAP
+    )
 
     digest_cfg = config.get("digest", {})
     glance_cfg = digest_cfg.get("at_a_glance", {})

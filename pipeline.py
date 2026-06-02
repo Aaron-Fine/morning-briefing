@@ -29,6 +29,8 @@ from datetime import timedelta
 from pathlib import Path
 
 from morning_digest.config import load_config
+from morning_digest import progress
+from morning_digest.metrics import aggregate_usage
 from utils.artifacts import (
     artifact_dir as _shared_artifact_dir,
     find_most_recent_dir,
@@ -42,6 +44,7 @@ log = logging.getLogger("pipeline")
 _ROOT = Path(__file__).parent
 _OUTPUT_DIR = _ROOT / "output"
 _ARTIFACTS_BASE = _OUTPUT_DIR / "artifacts"
+_DEFAULT_HEARTBEAT_INTERVAL_S = 15
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -307,6 +310,47 @@ def _log_stage_observability(stage_name: str, outputs: dict) -> None:
             )
 
 
+def _fold_stage_metrics(run_meta, stage_name, outputs, latency_s, retries):
+    """Pop reserved metric keys from outputs and fold into run_meta['metrics'].
+
+    Returns the outputs dict with reserved keys removed (so they are never saved
+    as stray artifacts). Mutates run_meta['metrics'] in place.
+    """
+    metrics = run_meta.setdefault("metrics", {"stages": {}, "overrides": {}, "totals": {}})
+    usage = outputs.pop("llm_usage", []) or []
+    agg = aggregate_usage(list(usage))
+    stage_metrics = {
+        "model": agg["model"],
+        "tokens_in": agg["tokens_in"],
+        "tokens_out": agg["tokens_out"],
+        "tokens_cached": agg["tokens_cached"],
+        "usage_missing": agg["usage_missing"],
+        "latency_s": latency_s,
+        "retries": retries,
+    }
+    metrics["stages"][stage_name] = stage_metrics
+    overrides = outputs.pop("override_counts", {}) or {}
+    for k, v in overrides.items():
+        metrics["overrides"][k] = metrics["overrides"].get(k, 0) + v
+    dr = outputs.pop("domain_research_metrics", None)
+    if dr is not None:
+        metrics["domain_research"] = dr
+    totals = metrics["totals"]
+    for key in ("tokens_in", "tokens_out", "tokens_cached", "usage_missing"):
+        totals[key] = totals.get(key, 0) + agg[key]
+    items_out = {}
+    for key, value in outputs.items():
+        if isinstance(value, list):
+            items_out[key] = len(value)
+        elif isinstance(value, dict):  # one level only; deeper nesting is intentionally skipped
+            for sub, subval in value.items():
+                if isinstance(subval, list):
+                    items_out[f"{key}.{sub}"] = len(subval)
+    stage_metrics["items_out"] = items_out
+    # TODO: add items_in best-effort per spec Component 4 once a per-stage need is concrete.
+    return outputs
+
+
 _STAGE_METADATA = {
     "collect": {
         "artifact_key": "raw_sources",
@@ -559,7 +603,7 @@ def _run_with_retry(
 ):
     for attempt in range(max_retries + 1):
         try:
-            return fn()
+            return fn(), attempt + 1
         except Exception as e:
             if attempt < max_retries:
                 wait = 2 ** (attempt + 1) * backoff_base_seconds
@@ -618,14 +662,16 @@ def run_pipeline(
     lookback_hours: int | None = None,
     stage_from: str | None = None,
     from_plan: bool = False,
+    capture_prompts: str | None = None,
 ) -> None:
     """Execute the full pipeline.
 
     Args:
-        dry_run:       Skip the send stage; save HTML to output/ only.
-        sources_only:  Run only the collect stage and dump sources.json.
-        lookback_hours: Override YouTube lookback window.
-        stage_from:    If set, load prior artifacts and re-run from this stage onwards.
+        dry_run:         Skip the send stage; save HTML to output/ only.
+        sources_only:    Run only the collect stage and dump sources.json.
+        lookback_hours:  Override YouTube lookback window.
+        stage_from:      If set, load prior artifacts and re-run from this stage onwards.
+        capture_prompts: If set, dump exact rendered prompts per stage to this dir (PR-B baseline).
     """
     _setup_logging()
     log.info("=== Morning Digest pipeline starting ===")
@@ -678,6 +724,7 @@ def run_pipeline(
         "started_at": iso_now_local(),
         "stage_timings": {},
         "stage_failures": [],
+        "metrics": {"stages": {}, "overrides": {}, "totals": {}},
         "options": {
             "dry_run": dry_run,
             "sources_only": sources_only,
@@ -690,132 +737,182 @@ def run_pipeline(
 
     _OUTPUT_DIR.mkdir(exist_ok=True)
 
-    for stage_cfg in stage_manifest:
-        stage_name = stage_cfg["name"]
-        stage_meta = _get_stage_meta(stage_name)
-        model_config = _get_stage_model_config(stage_cfg, stage_name=stage_name, config=config)
-        retry_config = _get_stage_retry_config(stage_cfg, config)
+    progress.reset()
+    hb_interval = config.get("pipeline", {}).get("heartbeat_interval_s", _DEFAULT_HEARTBEAT_INTERVAL_S)
+    heartbeat = progress.Heartbeat(interval_s=hb_interval)
+    heartbeat.start()
+    total_stages = len(stage_manifest)
 
-        # --sources-only: stop after collect
-        if sources_only and stage_name != "collect":
-            break
+    try:
+        for stage_idx, stage_cfg in enumerate(stage_manifest, 1):
+            stage_name = stage_cfg["name"]
+            stage_meta = _get_stage_meta(stage_name)
+            model_config = _get_stage_model_config(stage_cfg, stage_name=stage_name, config=config)
+            retry_config = _get_stage_retry_config(stage_cfg, config)
 
-        # --dry-run: skip send
-        if dry_run and stage_name == "send":
-            log.info(f"  [dry-run] Skipping stage: {stage_name}")
-            continue
+            if isinstance(model_config, dict):
+                obs = {"stage": stage_name}
+                if capture_prompts:
+                    obs["capture_dir"] = capture_prompts
+                model_config = {**model_config, "_obs": obs}
 
-        # If running from a specific stage, load prior outputs from artifacts
-        if skip_before and stage_name != skip_before and stage_name in stage_names:
-            idx_current = stage_names.index(stage_name)
-            idx_from = stage_names.index(skip_before)
-            if idx_current < idx_from:
-                log.info(f"  Loading cached artifact for skipped stage: {stage_name}")
-                if load_dir:
-                    _load_cached_stage_outputs(stage_name, context, load_dir)
-                continue  # don't execute this stage
+            # --sources-only: stop after collect
+            if sources_only and stage_name != "collect":
+                break
 
-        _run_stage_before_hook(
-            stage_name,
-            context,
-            run_date=run_date,
-            artifact_dir=artifact_dir,
-            dry_run=dry_run,
-            load_dir=load_dir,
-            config=config,
-            stage_from=stage_from,
-            from_plan=from_plan,
-        )
+            # --dry-run: skip send
+            if dry_run and stage_name == "send":
+                log.info(f"  [dry-run] Skipping stage: {stage_name}")
+                continue
 
-        # Execute the stage
-        log.info(f"--- Stage: {stage_name} ---")
-        t_start = time.monotonic()
+            # If running from a specific stage, load prior outputs from artifacts
+            if skip_before and stage_name != skip_before and stage_name in stage_names:
+                idx_current = stage_names.index(stage_name)
+                idx_from = stage_names.index(skip_before)
+                if idx_current < idx_from:
+                    log.info(f"  Loading cached artifact for skipped stage: {stage_name}")
+                    if load_dir:
+                        _load_cached_stage_outputs(stage_name, context, load_dir)
+                    continue  # don't execute this stage
 
-        try:
-            module = _load_stage_module(stage_name)
-
-            outputs = _run_with_retry(
-                lambda m=module: m.run(
-                    context, config, model_config, stage_cfg=stage_cfg, dry_run=dry_run
-                ),
+            _run_stage_before_hook(
                 stage_name,
-                max_retries=retry_config["max_retries"],
-                backoff_base_seconds=retry_config["backoff_base_seconds"],
+                context,
+                run_date=run_date,
+                artifact_dir=artifact_dir,
+                dry_run=dry_run,
+                load_dir=load_dir,
+                config=config,
+                stage_from=stage_from,
+                from_plan=from_plan,
             )
 
-        except Exception as e:
+            # Execute the stage
+            log.info(f"--- Stage {stage_idx}/{total_stages}: {stage_name} ---")
+            t_start = time.monotonic()
+
+            try:
+                module = _load_stage_module(stage_name)
+
+                outputs, _last_attempts = _run_with_retry(
+                    lambda m=module: m.run(
+                        context, config, model_config, stage_cfg=stage_cfg, dry_run=dry_run
+                    ),
+                    stage_name,
+                    max_retries=retry_config["max_retries"],
+                    backoff_base_seconds=retry_config["backoff_base_seconds"],
+                )
+
+            except Exception as e:
+                elapsed = time.monotonic() - t_start
+                run_meta["stage_timings"][stage_name] = round(elapsed, 2)
+                _last_attempts = retry_config["max_retries"] + 1
+
+                if stage_meta["non_critical"]:
+                    log.warning(
+                        f"Stage '{stage_name}' failed after retries (non-critical, continuing): {e}"
+                    )
+                    run_meta["stage_failures"].append(
+                        {"stage": stage_name, "error": str(e)}
+                    )
+                    log.info(f"  Stage '{stage_name}' completed in {elapsed:.1f}s")
+                    # Provide safe empty outputs so downstream stages don't crash
+                    outputs = _empty_stage_output(stage_name)
+                    context.update(outputs)
+                    _log_stage_observability(stage_name, outputs)
+                    outputs = _fold_stage_metrics(
+                        run_meta, stage_name, outputs,
+                        latency_s=round(elapsed, 2),
+                        retries=_last_attempts - 1,
+                    )
+                    # Persist each (empty) output artifact, mirroring the success
+                    # path, so a later --stage rerun's _load_artifact finds the
+                    # empty dict rather than None.
+                    for key, value in outputs.items():
+                        if key not in ("html",):
+                            _save_artifact(artifact_dir, key, value)
+                    _run_stage_after_hook(
+                        stage_name,
+                        context,
+                        outputs,
+                        artifact_dir=artifact_dir,
+                        run_date=run_date,
+                        dry_run=dry_run,
+                        load_dir=load_dir,
+                        config=config,
+                    )
+                    continue
+                else:
+                    log.error(f"Stage '{stage_name}' failed (critical): {e}")
+                    run_meta["stage_failures"].append(
+                        {"stage": stage_name, "error": str(e), "fatal": True}
+                    )
+                    _save_artifact(artifact_dir, "run_meta", run_meta)
+                    sys.exit(1)
+
             elapsed = time.monotonic() - t_start
             run_meta["stage_timings"][stage_name] = round(elapsed, 2)
+            log.info(f"  Stage '{stage_name}' completed in {elapsed:.1f}s")
 
-            if stage_meta["non_critical"]:
-                log.warning(
-                    f"Stage '{stage_name}' failed after retries (non-critical, continuing): {e}"
-                )
-                run_meta["stage_failures"].append(
-                    {"stage": stage_name, "error": str(e)}
-                )
-                # Provide safe empty outputs so downstream stages don't crash
-                outputs = _empty_stage_output(stage_name)
-            else:
-                log.error(f"Stage '{stage_name}' failed (critical): {e}")
-                run_meta["stage_failures"].append(
-                    {"stage": stage_name, "error": str(e), "fatal": True}
-                )
-                _save_artifact(artifact_dir, "run_meta", run_meta)
-                sys.exit(1)
+            # Merge outputs into context BEFORE popping reserved keys so downstream
+            # stages can still see real outputs; reserved keys are harmless in context.
+            context.update(outputs)
+            _log_stage_observability(stage_name, outputs)
 
-        elapsed = time.monotonic() - t_start
-        run_meta["stage_timings"][stage_name] = round(elapsed, 2)
-        log.info(f"  Stage '{stage_name}' completed in {elapsed:.1f}s")
-
-        # Merge outputs into context
-        context.update(outputs)
-        _log_stage_observability(stage_name, outputs)
-
-        # Persist each output artifact
-        for key, value in outputs.items():
-            if key not in ("html",):  # don't double-write html; handled below
-                _save_artifact(artifact_dir, key, value)
-
-        _run_stage_after_hook(
-            stage_name,
-            context,
-            outputs,
-            artifact_dir=artifact_dir,
-            run_date=run_date,
-            dry_run=dry_run,
-            load_dir=load_dir,
-            config=config,
-        )
-
-        # --sources-only: dump sources.json after collect and exit
-        if sources_only and stage_name == "collect":
-            out = _OUTPUT_DIR / "sources.json"
-            out.write_text(
-                json.dumps(context.get("raw_sources", {}), indent=2, default=str),
-                encoding="utf-8",
+            # Pop reserved metric keys and fold into run_meta; artifact-save loop
+            # runs after the pop so reserved keys are never written as stray artifacts.
+            outputs = _fold_stage_metrics(
+                run_meta, stage_name, outputs,
+                latency_s=round(elapsed, 2),
+                retries=_last_attempts - 1,
             )
-            log.info(f"=== Sources written to {out} ===")
-            return
 
-    # Finalize run metadata
-    run_meta["finished_at"] = iso_now_local()
-    _save_artifact(artifact_dir, "run_meta", run_meta)
+            # Persist each output artifact
+            for key, value in outputs.items():
+                if key not in ("html",):  # don't double-write html; handled below
+                    _save_artifact(artifact_dir, key, value)
 
-    # Prune old artifacts
-    _prune_artifacts(keep_days=30)
+            _run_stage_after_hook(
+                stage_name,
+                context,
+                outputs,
+                artifact_dir=artifact_dir,
+                run_date=run_date,
+                dry_run=dry_run,
+                load_dir=load_dir,
+                config=config,
+            )
 
-    if dry_run:
-        log.info(
-            f"=== Dry run complete — digest saved to {_OUTPUT_DIR / 'last_digest.html'} ==="
-        )
-    else:
-        send_result = context.get("send_result", {})
-        if send_result.get("success"):
-            log.info("=== Digest sent successfully ===")
+            # --sources-only: dump sources.json after collect and exit
+            if sources_only and stage_name == "collect":
+                out = _OUTPUT_DIR / "sources.json"
+                out.write_text(
+                    json.dumps(context.get("raw_sources", {}), indent=2, default=str),
+                    encoding="utf-8",
+                )
+                log.info(f"=== Sources written to {out} ===")
+                return
+
+        # Finalize run metadata
+        run_meta["finished_at"] = iso_now_local()
+        _save_artifact(artifact_dir, "run_meta", run_meta)
+
+        # Prune old artifacts
+        _prune_artifacts(keep_days=30)
+
+        if dry_run:
+            log.info(
+                f"=== Dry run complete — digest saved to {_OUTPUT_DIR / 'last_digest.html'} ==="
+            )
         else:
-            log.error("=== Pipeline completed but digest send failed ===")
-            sys.exit(1)
+            send_result = context.get("send_result", {})
+            if send_result.get("success"):
+                log.info("=== Digest sent successfully ===")
+            else:
+                log.error("=== Pipeline completed but digest send failed ===")
+                sys.exit(1)
+    finally:
+        heartbeat.stop()
 
 
 def _stage_artifact_key(stage_name: str) -> str:
@@ -862,6 +959,12 @@ def main() -> None:
         action="store_true",
         help="With --stage cross_domain, reuse same-day cross_domain_plan.json when readable",
     )
+    parser.add_argument(
+        "--capture-prompts",
+        type=str,
+        default=None,
+        help="Dump exact rendered prompts per stage to this dir (PR-B baseline)",
+    )
     args = parser.parse_args()
 
     run_pipeline(
@@ -870,6 +973,7 @@ def main() -> None:
         lookback_hours=args.lookback_hours,
         stage_from=args.stage,
         from_plan=args.from_plan,
+        capture_prompts=args.capture_prompts,
     )
 
 

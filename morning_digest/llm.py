@@ -17,8 +17,26 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
+from typing import NamedTuple
+
+from morning_digest import progress
 
 log = logging.getLogger(__name__)
+
+
+class LLMUsage(NamedTuple):
+    model: str
+    provider: str
+    tokens_in: int | None
+    tokens_out: int | None
+    tokens_cached: int | None = None   # cached portion of tokens_in (Fireworks prompt_tokens_details)
+
+
+class LLMResult(NamedTuple):
+    value: dict | str
+    usage: LLMUsage
+
 
 # Lazy imports so the package only needs to be installed if that provider is used
 _openai_client_cache: dict = {}
@@ -48,6 +66,26 @@ def _anthropic_client():
     return _anthropic_client_cache["client"]
 
 
+def _capture_prompt(capture_dir: str, stage: str, system_prompt: str, user_content: str) -> None:
+    d = Path(capture_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    # Per-stage sequence derived from existing files on disk (no global counter —
+    # that would number across stages and make the PR-B baseline non-deterministic).
+    # Exclusive create ("x") makes the read+write atomic: desks run concurrently in
+    # analyze_domain's ThreadPoolExecutor under the same stage, so two callers can
+    # compute the same n; on collision we retry with the next number instead of
+    # silently overwriting.
+    content = f"=== SYSTEM ===\n{system_prompt}\n\n=== USER ===\n{user_content}\n"
+    n = len(list(d.glob(f"{stage}__*.txt"))) + 1
+    while True:
+        try:
+            with open(d / f"{stage}__{n:02d}.txt", "x", encoding="utf-8") as f:
+                f.write(content)
+            return
+        except FileExistsError:
+            n += 1
+
+
 def call_llm(
     system_prompt: str,
     user_content: str,
@@ -55,8 +93,8 @@ def call_llm(
     max_retries: int = 2,
     json_mode: bool = True,
     stream: bool = True,
-) -> dict | str:
-    """Call an LLM and return parsed response.
+) -> "LLMResult":
+    """Call an LLM and return parsed response with usage metadata.
 
     Args:
         system_prompt: The system/instruction prompt.
@@ -67,18 +105,35 @@ def call_llm(
         stream:        If True, use streaming (better for long responses).
 
     Returns:
-        Parsed dict if json_mode=True, raw string otherwise.
+        LLMResult(value, usage) — value is parsed dict if json_mode=True, raw string otherwise;
+        usage is an LLMUsage NamedTuple with token counts.
 
     Raises:
         On non-retryable API errors or after all retries exhausted.
     """
     provider = model_config.get("provider", "fireworks")
 
-    if provider == "anthropic":
-        return _call_anthropic(
-            system_prompt, user_content, model_config, max_retries, json_mode, stream
-        )
-    else:
+    # Observability context rides in a single namespaced, read-only key set by the
+    # runner. It is never popped or splatted into a provider call, so it cannot leak
+    # into the SDK. (Not three scattered keys, not contextvars — see spec Component 5.)
+    obs = model_config.get("_obs") or {}
+    stage = obs.get("stage", "llm")
+    sublabel = obs.get("sublabel")
+    model = model_config.get("model", "?")
+    label = f"{stage}:{sublabel} {model}" if sublabel else f"{stage} {model}"
+    with progress.track(label):
+        capture_dir = obs.get("capture_dir")
+        if capture_dir:
+            # Prompt capture is a dev/baseline tool and must be best-effort:
+            # a disk-full / permission OSError should never fail a real run.
+            try:
+                _capture_prompt(capture_dir, stage, system_prompt, user_content)
+            except OSError as exc:
+                log.warning("prompt capture failed for stage %s: %s", stage, exc)
+        if provider == "anthropic":
+            return _call_anthropic(
+                system_prompt, user_content, model_config, max_retries, json_mode, stream
+            )
         return _call_fireworks(
             system_prompt, user_content, model_config, max_retries, json_mode, stream
         )
@@ -91,7 +146,7 @@ def _call_fireworks(
     max_retries: int,
     json_mode: bool,
     stream: bool,
-) -> dict | str:
+) -> "LLMResult":
     import openai
 
     client = _fireworks_client()
@@ -122,23 +177,48 @@ def _call_fireworks(
         openai.APIConnectionError,
         openai.APITimeoutError,
     )
-    raw = _retry_loop(
+    raw, tokens_in, tokens_out, tokens_cached = _retry_loop(
         lambda: _fireworks_call(client, create_kwargs, stream),
         max_retries,
         retryable,
         model,
     )
-    return _parse_response(raw, json_mode, model)
+    return LLMResult(
+        _parse_response(raw, json_mode, model),
+        LLMUsage(model, "fireworks", tokens_in, tokens_out, tokens_cached),
+    )
 
 
-def _fireworks_call(client, create_kwargs: dict, stream: bool) -> str:
+def _usage_tuple(usage):
+    """Extract (tokens_in, tokens_out, tokens_cached) from a Fireworks usage object.
+
+    Verified live 2026-05-30: usage.prompt_tokens / completion_tokens, and
+    usage.prompt_tokens_details.cached_tokens (cached_tokens=0 when none).
+    """
+    if not usage:
+        return None, None, None
+    details = getattr(usage, "prompt_tokens_details", None)
+    cached = getattr(details, "cached_tokens", None) if details else None
+    return (
+        getattr(usage, "prompt_tokens", None),
+        getattr(usage, "completion_tokens", None),
+        cached,
+    )
+
+
+def _fireworks_call(client, create_kwargs: dict, stream: bool):
     if stream:
-        kwargs = {**create_kwargs, "stream": True}
+        kwargs = {**create_kwargs, "stream": True, "stream_options": {"include_usage": True}}
         content_chunks: list[str] = []
         saw_reasoning_content = False
         empty_count = 0
+        tokens_in = tokens_out = tokens_cached = None
         with client.chat.completions.create(**kwargs) as resp:
             for chunk in resp:
+                # usage arrives on a FINAL chunk with choices == []; intermediate
+                # chunks carry usage == null. Read BEFORE the empty-choices guard.
+                if getattr(chunk, "usage", None):
+                    tokens_in, tokens_out, tokens_cached = _usage_tuple(chunk.usage)
                 if not chunk.choices:
                     empty_count += 1
                     if empty_count > 500:
@@ -159,11 +239,13 @@ def _fireworks_call(client, create_kwargs: dict, stream: bool) -> str:
                 "Fireworks stream: reasoning_content received without assistant content; "
                 "ignoring reasoning trace"
             )
-        return text
+        return text, tokens_in, tokens_out, tokens_cached
     else:
         kwargs = {**create_kwargs, "stream": False}
         resp = client.chat.completions.create(**kwargs)
-        return (resp.choices[0].message.content or "").strip()
+        text = (resp.choices[0].message.content or "").strip()
+        tokens_in, tokens_out, tokens_cached = _usage_tuple(getattr(resp, "usage", None))
+        return text, tokens_in, tokens_out, tokens_cached
 
 
 def _call_anthropic(
@@ -173,7 +255,7 @@ def _call_anthropic(
     max_retries: int,
     json_mode: bool,
     stream: bool = True,
-) -> dict | str:
+) -> "LLMResult":
     import anthropic
 
     client = _anthropic_client()
@@ -195,32 +277,38 @@ def _call_anthropic(
     if not _no_sampling:
         create_kwargs["temperature"] = temperature
 
-    def _do_call() -> str:
+    def _do_call():
         if stream:
             with client.messages.stream(**create_kwargs) as s:
-                return s.get_final_text().strip()
+                text = s.get_final_text().strip()
+                msg = s.get_final_message()
+                u = getattr(msg, "usage", None)
+                return text, getattr(u, "input_tokens", None), getattr(u, "output_tokens", None)
         else:
             resp = client.messages.create(**create_kwargs)
-            return resp.content[0].text.strip()
+            u = getattr(resp, "usage", None)
+            return resp.content[0].text.strip(), getattr(u, "input_tokens", None), getattr(u, "output_tokens", None)
 
     retryable = (
         anthropic.APIStatusError,
         anthropic.APIConnectionError,
         anthropic.APITimeoutError,
     )
-    raw = _retry_loop(
+    raw, tokens_in, tokens_out = _retry_loop(
         _do_call,
         max_retries,
         retryable,
         model,
     )
-    return _parse_response(raw, json_mode, model)
+    return LLMResult(
+        _parse_response(raw, json_mode, model),
+        LLMUsage(model=model, provider="anthropic", tokens_in=tokens_in, tokens_out=tokens_out),
+    )
 
 
-def _retry_loop(fn, max_retries: int, retryable_errors: tuple, model: str) -> str:
+def _retry_loop(fn, max_retries: int, retryable_errors: tuple, model: str):
     for attempt in range(max_retries + 1):
         try:
-            log.info(f"Calling LLM ({model})...")
             return fn()
         except retryable_errors as e:
             log.warning(f"LLM error (attempt {attempt + 1}): {e}")

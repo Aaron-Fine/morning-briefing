@@ -8,6 +8,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from tests.conftest import llm_result
+
 from stages.analyze_domain import (
     _filter_rss,
     _empty_domain_result,
@@ -141,14 +143,14 @@ class TestNewDeskRunPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_energy_materials_pass_returns_items(self, mock_llm):
-        mock_llm.return_value = {"items": [
+        mock_llm.return_value = llm_result({"items": [
             {"tag": "energy", "headline": "Grid strain", "facts": "F",
              "analysis": "A", "source_depth": "single-source",
              "connection_hooks": [], "links": [], "deep_dive_candidate": False,
              "deep_dive_rationale": None}
-        ]}
+        ]})
         cfg = _DOMAIN_CONFIGS["energy_materials"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "energy_materials", cfg, self._make_rss("energy-materials"),
             [], [], self._model_config()
         )
@@ -157,14 +159,14 @@ class TestNewDeskRunPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_culture_structural_pass_returns_items(self, mock_llm):
-        mock_llm.return_value = {"items": [
+        mock_llm.return_value = llm_result({"items": [
             {"tag": "domestic", "headline": "Trust shift", "facts": "F",
              "analysis": "A", "source_depth": "single-source",
              "connection_hooks": [], "links": [], "deep_dive_candidate": False,
              "deep_dive_rationale": None}
-        ]}
+        ]})
         cfg = _DOMAIN_CONFIGS["culture_structural"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "culture_structural", cfg, self._make_rss("culture-structural"),
             [], [], self._model_config()
         )
@@ -172,14 +174,14 @@ class TestNewDeskRunPass:
 
     @patch("stages.analyze_domain.call_llm")
     def test_science_biotech_pass_returns_items(self, mock_llm):
-        mock_llm.return_value = {"items": [
+        mock_llm.return_value = llm_result({"items": [
             {"tag": "biotech", "headline": "Gene therapy", "facts": "F",
              "analysis": "A", "source_depth": "single-source",
              "connection_hooks": [], "links": [], "deep_dive_candidate": False,
              "deep_dive_rationale": None}
-        ]}
+        ]})
         cfg = _DOMAIN_CONFIGS["science_biotech"]
-        result = _run_domain_pass(
+        result, _ = _run_domain_pass(
             "science_biotech", cfg, self._make_rss("science-biotech"),
             [], [], self._model_config()
         )
@@ -189,7 +191,7 @@ class TestNewDeskRunPass:
     def test_no_sources_returns_empty(self):
         for desk in ["energy_materials", "culture_structural", "science_biotech"]:
             cfg = _DOMAIN_CONFIGS[desk]
-            result = _run_domain_pass(
+            result, _ = _run_domain_pass(
                 desk, cfg, [], [], [], self._model_config()
             )
             assert result == {"items": []}

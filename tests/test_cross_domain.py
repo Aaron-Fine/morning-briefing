@@ -2,12 +2,23 @@
 
 import sys
 import os
+import copy
 import json
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from tests.conftest import llm_result
+from morning_digest.llm import LLMUsage
+
+from cross_domain.parse import (
+    _validated_output as _vo,
+    _REASON_PHRASE_OVERLAP,
+    _fallback_outputs,
+)
 
 from stages.cross_domain import (
     _normalize_tag,
@@ -285,14 +296,14 @@ class TestCrossDomainRun:
     @patch("stages.cross_domain.call_llm")
     def test_successful_run(self, mock_llm):
         mock_llm.side_effect = [
-            {
+            llm_result({
                 "schema_version": 1,
                 "cross_domain_connections": [],
                 "deep_dives": [{"topic": "Test topic", "angle": "Angle", "why_selected": "Why"}],
                 "worth_reading": [{"topic": "Long read", "why_worth_reading": "Because"}],
                 "rejected_alternatives": [{"topic": "Other", "reason": "Lower priority"}],
-            },
-            {
+            }),
+            llm_result({
                 "at_a_glance": [
                     {
                         "tag": "war",
@@ -307,7 +318,7 @@ class TestCrossDomainRun:
                 "cross_domain_connections": [],
                 "worth_reading": [],
                 "market_context": "Test context",
-            },
+            }),
         ]
         context = {
             "domain_analysis": {
@@ -387,14 +398,14 @@ class TestCrossDomainRun:
     @patch("stages.cross_domain.call_llm")
     def test_non_dict_llm_output_returns_full_contract(self, mock_llm):
         mock_llm.side_effect = [
-            {
+            llm_result({
                 "schema_version": 1,
                 "cross_domain_connections": [],
                 "deep_dives": [],
                 "worth_reading": [],
                 "rejected_alternatives": [],
-            },
-            "not a dict",
+            }),
+            llm_result("not a dict"),
         ]
         context = {
             "domain_analysis": {
@@ -425,19 +436,19 @@ class TestCrossDomainRun:
     @patch("stages.cross_domain.call_llm")
     def test_contract_issues_are_returned_as_sidecar(self, mock_llm):
         mock_llm.side_effect = [
-            {
+            llm_result({
                 "schema_version": 1,
                 "cross_domain_connections": "bad",
                 "deep_dives": ["bad"],
                 "worth_reading": [],
                 "rejected_alternatives": [],
-            },
-            {
+            }),
+            llm_result({
                 "at_a_glance": [{"headline": "Fallback", "links": "bad"}],
                 "deep_dives": "bad",
                 "cross_domain_connections": [],
                 "worth_reading": [],
-            },
+            }),
         ]
         context = {
             "domain_analysis": {
@@ -498,19 +509,19 @@ class TestCrossDomainRun:
                 }
             )
         mock_llm.side_effect = [
-            {
+            llm_result({
                 "schema_version": 1,
                 "cross_domain_connections": [],
                 "deep_dives": [{"topic": "Test topic", "angle": "Angle", "why_selected": "Why"}],
                 "worth_reading": [{"topic": "Long read", "why_worth_reading": "Because"}],
                 "rejected_alternatives": [{"topic": "Other", "reason": "Lower priority"}],
-            },
-            {
+            }),
+            llm_result({
                 "at_a_glance": items,
                 "deep_dives": [],
                 "cross_domain_connections": [],
                 "worth_reading": [],
-            },
+            }),
         ]
         context = {
             "domain_analysis": {"geopolitics": {"items": [{"headline": "Test"}]}},
@@ -527,14 +538,14 @@ class TestCrossDomainRun:
     @patch("stages.cross_domain.call_llm")
     def test_primary_glance_coverage_added_when_execution_omits_ai(self, mock_llm):
         mock_llm.side_effect = [
-            {
+            llm_result({
                 "schema_version": 1,
                 "cross_domain_connections": [],
                 "deep_dives": [],
                 "worth_reading": [],
                 "rejected_alternatives": [],
-            },
-            {
+            }),
+            llm_result({
                 "at_a_glance": [
                     {
                         "item_id": "war-1",
@@ -549,7 +560,7 @@ class TestCrossDomainRun:
                 "deep_dives": [],
                 "cross_domain_connections": [],
                 "worth_reading": [],
-            },
+            }),
         ]
         context = {
             "domain_analysis": {
@@ -590,14 +601,14 @@ class TestCrossDomainRun:
     @patch("stages.cross_domain.call_llm")
     def test_url_validation_filters_unknown_domains(self, mock_llm):
         mock_llm.side_effect = [
-            {
+            llm_result({
                 "schema_version": 1,
                 "cross_domain_connections": [],
                 "deep_dives": [{"topic": "Test topic", "angle": "Angle", "why_selected": "Why"}],
                 "worth_reading": [{"topic": "Long read", "why_worth_reading": "Because"}],
                 "rejected_alternatives": [{"topic": "Other", "reason": "Lower priority"}],
-            },
-            {
+            }),
+            llm_result({
                 "at_a_glance": [
                     {
                         "tag": "war",
@@ -614,7 +625,7 @@ class TestCrossDomainRun:
                 "deep_dives": [],
                 "cross_domain_connections": [],
                 "worth_reading": [],
-            },
+            }),
         ]
         context = {
             "domain_analysis": {"geopolitics": {"items": [{"headline": "Test"}]}},
@@ -632,14 +643,14 @@ class TestCrossDomainRun:
     @patch("stages.cross_domain.call_llm")
     def test_url_validation_rejects_known_domain_unknown_path(self, mock_llm):
         mock_llm.side_effect = [
-            {
+            llm_result({
                 "schema_version": 1,
                 "cross_domain_connections": [],
                 "deep_dives": [],
                 "worth_reading": [],
                 "rejected_alternatives": [],
-            },
-            {
+            }),
+            llm_result({
                 "at_a_glance": [
                     {
                         "tag": "war",
@@ -655,7 +666,7 @@ class TestCrossDomainRun:
                 "deep_dives": [],
                 "cross_domain_connections": [],
                 "worth_reading": [],
-            },
+            }),
         ]
         context = {
             "domain_analysis": {"geopolitics": {"items": [{"headline": "Test"}]}},
@@ -672,14 +683,14 @@ class TestCrossDomainRun:
     @patch("stages.cross_domain.call_llm")
     def test_final_validation_keeps_domain_analysis_link(self, mock_llm):
         mock_llm.side_effect = [
-            {
+            llm_result({
                 "schema_version": 1,
                 "cross_domain_connections": [],
                 "deep_dives": [],
                 "worth_reading": [],
                 "rejected_alternatives": [],
-            },
-            {
+            }),
+            llm_result({
                 "at_a_glance": [
                     {
                         "tag": "ai",
@@ -695,7 +706,7 @@ class TestCrossDomainRun:
                 "deep_dives": [],
                 "cross_domain_connections": [],
                 "worth_reading": [],
-            },
+            }),
         ]
         context = {
             "domain_analysis": {
@@ -719,14 +730,14 @@ class TestCrossDomainRun:
     @patch("stages.cross_domain.call_llm")
     def test_worth_reading_url_validation(self, mock_llm):
         mock_llm.side_effect = [
-            {
+            llm_result({
                 "schema_version": 1,
                 "cross_domain_connections": [],
                 "deep_dives": [{"topic": "Test topic", "angle": "Angle", "why_selected": "Why"}],
                 "worth_reading": [{"topic": "Long read", "why_worth_reading": "Because"}],
                 "rejected_alternatives": [{"topic": "Other", "reason": "Lower priority"}],
-            },
-            {
+            }),
+            llm_result({
                 "at_a_glance": [],
                 "deep_dives": [],
                 "cross_domain_connections": [],
@@ -739,7 +750,7 @@ class TestCrossDomainRun:
                         "read_time": "10 min",
                     }
                 ],
-            },
+            }),
         ]
         context = {
             "domain_analysis": {"geopolitics": {"items": [{"headline": "Test"}]}},
@@ -755,14 +766,14 @@ class TestCrossDomainRun:
         """Test that unknown tags get normalized to domestic."""
         with patch("stages.cross_domain.call_llm") as mock_llm:
             mock_llm.side_effect = [
-                {
+                llm_result({
                     "schema_version": 1,
                     "cross_domain_connections": [],
                     "deep_dives": [{"topic": "Test topic", "angle": "Angle", "why_selected": "Why"}],
                     "worth_reading": [{"topic": "Long read", "why_worth_reading": "Because"}],
                     "rejected_alternatives": [{"topic": "Other", "reason": "Lower priority"}],
-                },
-                {
+                }),
+                llm_result({
                     "at_a_glance": [
                         {
                             "tag": "unknown_tag",
@@ -776,7 +787,7 @@ class TestCrossDomainRun:
                     "deep_dives": [],
                     "cross_domain_connections": [],
                     "worth_reading": [],
-                },
+                }),
             ]
             context = {
                 "domain_analysis": {"geopolitics": {"items": [{"headline": "Test"}]}},
@@ -791,19 +802,19 @@ class TestCrossDomainRun:
         """Test that market_context falls back to econ domain analysis."""
         with patch("stages.cross_domain.call_llm") as mock_llm:
             mock_llm.side_effect = [
-                {
+                llm_result({
                     "schema_version": 1,
                     "cross_domain_connections": [],
                     "deep_dives": [{"topic": "Test topic", "angle": "Angle", "why_selected": "Why"}],
                     "worth_reading": [{"topic": "Long read", "why_worth_reading": "Because"}],
                     "rejected_alternatives": [{"topic": "Other", "reason": "Lower priority"}],
-                },
-                {
+                }),
+                llm_result({
                     "at_a_glance": [],
                     "deep_dives": [],
                     "cross_domain_connections": [],
                     "worth_reading": [],
-                },
+                }),
             ]
             context = {
                 "domain_analysis": {
@@ -819,6 +830,73 @@ class TestCrossDomainRun:
             config = {"llm": {"provider": "fireworks"}}
             result = run(context, config)
             assert result["cross_domain_output"]["market_context"] == "Fallback context"
+
+    @patch("stages.cross_domain.call_llm")
+    def test_cross_domain_surfaces_llm_usage(self, mock_llm):
+        mock_llm.side_effect = [
+            llm_result(
+                {"deep_dives": [], "worth_reading": [], "cross_domain_connections": []},
+                tokens_in=900, tokens_out=120,
+            ),
+            llm_result(
+                {"at_a_glance": [], "deep_dives": [], "worth_reading": [],
+                 "cross_domain_connections": []},
+                tokens_in=1500, tokens_out=300,
+            ),
+        ]
+        context = {
+            "domain_analysis": {
+                "econ": {"items": [{"item_id": "e1", "headline": "h",
+                                    "facts": "f", "analysis": "a",
+                                    "source_depth": "single-source",
+                                    "connection_hooks": [], "links": [],
+                                    "deep_dive_candidate": False}]}
+            },
+            "seam_data": {},
+            "raw_sources": {"rss": []},
+        }
+        config = {"llm": {"provider": "fireworks"}, "digest": {}}
+        outputs = run(context, config)
+        usage = outputs["llm_usage"]
+        assert len(usage) == 2 and all(isinstance(u, LLMUsage) for u in usage)
+        assert usage[0].tokens_in == 900 and usage[1].tokens_out == 300
+
+
+_GOLDEN_INPUT = {
+    "at_a_glance": [
+        {"item_id": "g1", "tag": "AI", "tag_label": "bogus",
+         "source_depth": "widely-reported", "headline": "h1",
+         "facts": "f", "analysis": "a",
+         "links": [{"url": "https://reuters.com/x"}]},
+    ],
+    "deep_dives": [
+        {"headline": "Deep one", "source_depth": "corroborated", "body": "b",
+         "further_reading": [{"url": "https://apnews.com/y"}]},
+    ],
+    "cross_domain_connections": [],
+    "worth_reading": [],
+}
+_GOLDEN_DOMAIN_ANALYSIS = {"econ": {"market_context": "ctx"}}
+_GOLDEN_RAW = {"rss": [{"url": "https://reuters.com/x"}, {"url": "https://apnews.com/y"}]}
+_GOLDEN_CONFIG = {"digest": {"at_a_glance": {"max_items": 7}}}
+
+_GOLDEN_PATH = Path(__file__).parent / "golden" / "cross_domain_validated.json"
+
+
+def _strip_internal(result: dict) -> dict:
+    out = json.loads(json.dumps(result))  # deep copy + JSON-normalize
+    out.pop("_override_counts", None)
+    out.pop("_source_depth_downgrades", None)
+    return out
+
+
+def test_validated_output_matches_golden():
+    result = _vo(
+        copy.deepcopy(_GOLDEN_INPUT),
+        _GOLDEN_DOMAIN_ANALYSIS, _GOLDEN_RAW, _GOLDEN_CONFIG,
+    )
+    golden = json.loads(_GOLDEN_PATH.read_text())
+    assert _strip_internal(result) == golden
 
 
 class TestSourceDepthRecomputation:
@@ -904,6 +982,129 @@ class TestSourceDepthRecomputation:
         assert out["_source_depth_downgrades"] == []
 
 
+def test_validated_output_counts_overrides():
+    result = {
+        "at_a_glance": [
+            {"item_id": "a", "tag": "AI", "tag_label": "wrong", "source_depth": "widely-reported",
+             "links": [{"url": "https://x.com/1"}]},
+        ],
+        "deep_dives": [], "cross_domain_connections": [], "worth_reading": [],
+    }
+    out = _vo(result, {}, {}, {"digest": {}})
+    oc = out["_override_counts"]
+    assert oc["normalize_tag"] >= 1          # "AI" -> "ai"
+    assert oc["recompute_source_depth"] >= 1  # widely-reported single domain -> downgraded
+
+
+def test_validated_output_counts_tag_label():
+    """tag_label counter increments when the canonical label differs from the LLM-provided one."""
+    result = {
+        "at_a_glance": [
+            # tag normalizes to "ai"; tag_label "wrong" will be replaced by "AI"
+            {"item_id": "b", "tag": "ai", "tag_label": "wrong",
+             "source_depth": "single-source", "links": []},
+        ],
+        "deep_dives": [], "cross_domain_connections": [], "worth_reading": [],
+    }
+    out = _vo(result, {}, {}, {"digest": {}})
+    oc = out["_override_counts"]
+    assert oc["tag_label"] >= 1
+
+
+def test_validated_output_counts_ensure_primary_glance_coverage():
+    """ensure_primary_glance_coverage counter increments when a fallback item is injected."""
+    # Provide an at_a_glance with only "econ" — missing "war" / "ai" / "defense".
+    # Provide a geopolitics_events domain result with a non-deep-dive candidate tagged "war".
+    result = {
+        "at_a_glance": [
+            {"item_id": "e1", "tag": "econ", "tag_label": "Economy",
+             "source_depth": "single-source", "links": []},
+        ],
+        "deep_dives": [], "cross_domain_connections": [], "worth_reading": [],
+    }
+    domain_analysis = {
+        "geopolitics_events": {
+            "items": [
+                {
+                    "item_id": "geo1",
+                    "tag": "war",
+                    "tag_label": "Conflict",
+                    "headline": "War headline",
+                    "facts": "Some war facts.",
+                    "analysis": "Some war analysis.",
+                    "source_depth": "corroborated",
+                    "deep_dive_candidate": False,
+                    "links": [{"url": "https://aljazeera.com/war"}],
+                    "connection_hooks": [],
+                }
+            ]
+        }
+    }
+    raw = {"rss": [{"url": "https://aljazeera.com/war"}]}
+    out = _vo(result, domain_analysis, raw, {"digest": {}})
+    oc = out["_override_counts"]
+    assert oc["ensure_primary_glance_coverage"] >= 1
+
+
+def test_validated_output_counts_overlap_downgrade():
+    """overlap_downgrade counter increments when a deep_dive is downgraded due to phrase overlap.
+
+    A 12-word shared phrase produces 3 distinct 10-word windows, clearing
+    _OVERLAP_DOWNGRADE_MIN_WINDOWS (3).  The at_a_glance item and deep_dive
+    both contain the phrase, so _downgrade_overlap_depth fires and the
+    overlap_downgrade counter should be >= 1.
+
+    The deep_dive is given links from two distinct domains so _downgrade_same_outlet_depth
+    (which runs first) does NOT downgrade it — ensuring the item still has
+    source_depth "corroborated" when the overlap check runs.
+    """
+    # 12 distinct words → 3 sliding 10-word windows → triggers overlap downgrade
+    shared = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima"
+    result = {
+        "at_a_glance": [
+            {
+                "item_id": "ov1",
+                "tag": "war",
+                "tag_label": "Conflict",
+                "headline": "Overlap headline",
+                "facts": shared,
+                "analysis": "",
+                "source_depth": "corroborated",
+                "links": [{"url": "https://reuters.com/a"}, {"url": "https://apnews.com/b"}],
+            }
+        ],
+        "deep_dives": [
+            {
+                "headline": "Deep overlap",
+                "body": f"<p>{shared} and additional independent analysis text here.</p>",
+                # Two distinct domains → _downgrade_same_outlet_depth leaves this as "corroborated"
+                "source_depth": "corroborated",
+                "further_reading": [
+                    {"url": "https://reuters.com/a"},
+                    {"url": "https://bbc.co.uk/deep"},
+                ],
+            }
+        ],
+        "cross_domain_connections": [],
+        "worth_reading": [],
+    }
+    raw = {
+        "rss": [
+            {"url": "https://reuters.com/a"},
+            {"url": "https://apnews.com/b"},
+            {"url": "https://bbc.co.uk/deep"},
+        ]
+    }
+    out = _vo(result, {}, raw, {"digest": {}})
+    oc = out["_override_counts"]
+    assert oc["overlap_downgrade"] >= 1
+    # The deep_dive must have been downgraded: corroborated → single-source
+    assert out["deep_dives"][0]["source_depth"] == "single-source"
+    # Confirm the downgrade log entry uses the constant value
+    downgrades = out["_source_depth_downgrades"]
+    assert any(d["reason"] == _REASON_PHRASE_OVERLAP for d in downgrades)
+
+
 class TestOverlapDepthDowngrade:
     def test_downgrades_when_phrase_overlaps_at_a_glance(self):
         from cross_domain.parse import _downgrade_overlap_depth
@@ -934,7 +1135,7 @@ class TestOverlapDepthDowngrade:
         assert out["deep_dives"][0]["source_depth"] == "single-source"
         downgrades = out["_source_depth_downgrades"]
         assert len(downgrades) == 1
-        assert downgrades[0]["reason"] == "phrase_overlap_with_at_a_glance"
+        assert downgrades[0]["reason"] == _REASON_PHRASE_OVERLAP
         assert downgrades[0]["overlap_count"] >= 3
 
     def test_single_window_overlap_does_not_downgrade(self):
@@ -1029,3 +1230,35 @@ class TestOverlapDepthDowngrade:
         assert len(downgrades) == 1
         assert downgrades[0]["original_depth"] == "widely-reported"
         assert downgrades[0]["recomputed_depth"] == "corroborated"
+
+
+class TestFallbackOutputsNoInternalKeyLeak:
+    def test_fallback_output_has_no_underscore_keys(self):
+        """_fallback_outputs runs _validated_output (which adds internal
+        _override_counts / _source_depth_downgrades) when config is set; those
+        bookkeeping keys must be popped before the artifact is returned, so the
+        saved cross_domain_output never contains _-prefixed keys. Regression for
+        the fallback path leaking internal keys into the artifact.
+        """
+        domain_analysis = {
+            "geopolitics": {
+                "items": [
+                    {
+                        "headline": "Test",
+                        "facts": "Facts",
+                        "analysis": "Analysis",
+                        "links": [],
+                    }
+                ]
+            }
+        }
+        config = {"llm": {"provider": "fireworks"}}
+        result = _fallback_outputs(
+            domain_analysis,
+            reason="llm_error",
+            message="boom",
+            raw_sources={"rss": []},
+            config=config,
+        )
+        out = result["cross_domain_output"]
+        assert not any(k.startswith("_") for k in out)

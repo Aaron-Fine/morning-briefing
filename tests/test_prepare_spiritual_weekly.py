@@ -7,7 +7,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from stages.prepare_spiritual_weekly import run
+from stages.prepare_spiritual_weekly import generate_weekly_guide, run
+from tests.conftest import llm_result
 
 
 def _context():
@@ -28,7 +29,7 @@ def test_generates_weekly_artifact(mock_llm, tmp_path):
     artifact_dir = tmp_path / "artifacts"
     guide_dir.mkdir()
     (guide_dir / "2026-01-05.md").write_text("# Purpose\nServe carefully", encoding="utf-8")
-    mock_llm.return_value = {
+    mock_llm.return_value = llm_result({
         "week_start": "2026-01-05",
         "cfm_range": "Mosiah 1-3",
         "weekly_purpose": "Serve carefully",
@@ -57,7 +58,7 @@ def test_generates_weekly_artifact(mock_llm, tmp_path):
         "applications": [],
         "conspicuous_absences": [],
         "proposed_sequence": {"monday": "focus-1"},
-    }
+    })
 
     with patch("stages.prepare_spiritual_weekly._GUIDE_DIR", guide_dir):
         with patch("stages.prepare_spiritual_weekly._ARTIFACT_DIR", artifact_dir):
@@ -73,6 +74,7 @@ def test_generates_weekly_artifact(mock_llm, tmp_path):
         unit["kind"] == "misuse_correction"
         for unit in written["daily_units"]
     )
+    assert result["llm_usage"]
 
 
 @patch("stages.prepare_spiritual_weekly.call_llm")
@@ -96,8 +98,8 @@ def test_missing_guide_auto_generates_then_builds_artifact(mock_llm, tmp_path):
     artifact_dir = tmp_path / "artifacts"
     guide_dir.mkdir()
     mock_llm.side_effect = [
-        "# Lesson Overview\nGenerated guide",
-        {
+        llm_result("# Lesson Overview\nGenerated guide"),
+        llm_result({
             "week_start": "2026-01-05",
             "cfm_range": "Mosiah 1-3",
             "weekly_purpose": "Generated purpose",
@@ -119,7 +121,7 @@ def test_missing_guide_auto_generates_then_builds_artifact(mock_llm, tmp_path):
             "applications": [],
             "conspicuous_absences": [],
             "proposed_sequence": {"monday": "focus-1"},
-        },
+        }),
     ]
 
     with patch("stages.prepare_spiritual_weekly._GUIDE_DIR", guide_dir):
@@ -129,3 +131,52 @@ def test_missing_guide_auto_generates_then_builds_artifact(mock_llm, tmp_path):
     assert (guide_dir / "2026-01-05.md").exists()
     assert result["spiritual_weekly"]["weekly_purpose"] == "Generated purpose"
     assert mock_llm.call_count == 2
+
+
+@patch("stages.prepare_spiritual_weekly.call_llm")
+def test_cached_guide_path_does_not_crash(mock_llm, tmp_path):
+    """Regression: cached-guide branch must return (path, None) not bare Path.
+
+    Before the fix, generate_weekly_guide returned a bare Path on the cached
+    branch, causing ``TypeError: cannot unpack non-iterable PosixPath`` at the
+    caller's ``guide_path, guide_usage = generate_weekly_guide(...)`` unpack.
+    """
+    guide_dir = tmp_path / "guides"
+    artifact_dir = tmp_path / "artifacts"
+    guide_dir.mkdir()
+    # Pre-create the guide file so generate_weekly_guide takes the cached branch.
+    (guide_dir / "2026-01-05.md").write_text("# Cached Guide\nAlready written.", encoding="utf-8")
+    mock_llm.return_value = llm_result({
+        "week_start": "2026-01-05",
+        "cfm_range": "Mosiah 1-3",
+        "weekly_purpose": "Serve God",
+        "daily_units": [
+            {
+                "id": "focus-1",
+                "kind": "key_scripture",
+                "title": "Service as covenant",
+                "anchor_ref": "Mosiah 2:17",
+                "source_refs": ["Mosiah 2:17"],
+                "core_claim": "Service is covenantal.",
+                "supporting_excerpt": "Already written.",
+                "enhancement": "",
+                "application": "Serve quietly today.",
+                "prompt_hint": "",
+            }
+        ],
+        "misuses": [],
+        "applications": [],
+        "conspicuous_absences": [],
+        "proposed_sequence": {"monday": "focus-1"},
+    })
+
+    with patch("stages.prepare_spiritual_weekly._GUIDE_DIR", guide_dir):
+        with patch("stages.prepare_spiritual_weekly._ARTIFACT_DIR", artifact_dir):
+            result = run(_context(), {}, model_config={"provider": "fireworks"})
+
+    # Must not crash; guide generation LLM call must NOT have been made.
+    assert mock_llm.call_count == 1  # only the artifact call, not the guide call
+    assert "spiritual_weekly" in result
+    assert isinstance(result["llm_usage"], list)
+    # The cached guide produces no guide_usage (None), so it must NOT appear in the list.
+    assert all(u is not None for u in result["llm_usage"])

@@ -325,6 +325,52 @@ class TestRunPipeline:
         assert "collect" in captured["run_meta"]["stage_timings"]
         assert captured["run_meta"]["stage_failures"] == []
 
+    def test_failed_non_critical_stage_persists_empty_artifact(self, tmp_path):
+        """A non-critical stage that raises must still write its (empty) output
+        artifact so a later --stage rerun's _load_artifact returns the empty dict
+        instead of None. Regression for the failure-path save-loop being skipped.
+        """
+
+        class CollectModule:
+            @staticmethod
+            def run(context, config, model_config, **kwargs):
+                return {"raw_sources": {"rss": []}}
+
+        class FailingWeatherModule:
+            @staticmethod
+            def run(context, config, model_config, **kwargs):
+                raise RuntimeError("weather provider down")
+
+        def load_stage(name):
+            return {
+                "collect": CollectModule,
+                "prepare_weather": FailingWeatherModule,
+            }[name]
+
+        config = {
+            "pipeline": {
+                "stages": [
+                    {"name": "collect"},
+                    {"name": "prepare_weather"},
+                ],
+                "retry": {"max_retries": 0, "backoff_base_seconds": 0},
+            }
+        }
+
+        with (
+            patch("pipeline._setup_logging"),
+            patch("pipeline.load_config", return_value=config),
+            patch("pipeline._artifact_dir", return_value=tmp_path),
+            patch("pipeline._prune_artifacts"),
+            patch("pipeline._load_stage_module", side_effect=load_stage),
+        ):
+            run_pipeline(dry_run=True)
+
+        # The empty weather output (per _empty_stage_output("prepare_weather"))
+        # must have been written to the artifact dir despite the stage failing.
+        assert _load_artifact(tmp_path, "weather") == {}
+        assert (tmp_path / "weather.json").exists()
+
 
 class TestPruneArtifacts:
     def test_prunes_old_directories(self, tmp_path):

@@ -203,7 +203,7 @@ def run(
     )
 
     try:
-        result = call_llm(
+        result, usage = call_llm(
             system_prompt,
             user_content,
             model_config,
@@ -226,4 +226,4 @@ def run(
         f"{pattern_count} recurring patterns"
     )
 
-    return {"coverage_gaps": result}
+    return {"coverage_gaps": result, "llm_usage": [usage]}
