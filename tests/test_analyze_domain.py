@@ -11,6 +11,7 @@ from tests.conftest import llm_result
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from morning_digest.llm import LLMUsage
 from stages.analyze_domain import (
     _collect_research_requests,
     _filter_rss,
@@ -18,6 +19,7 @@ from stages.analyze_domain import (
     _fmt_rss_items,
     _fmt_transcripts,
     _fmt_markets,
+    _run_domain_research,
     _successful_research_by_domain,
     _empty_domain_result,
     _resolve_domain_configs,
@@ -695,6 +697,35 @@ class TestDomainResearch:
         assert requests[0]["source"] == "Open"
         assert requests[1]["status"] == "rejected_unknown_url"
         assert "research_requests" not in domain_analysis["ai_tech"]
+
+    @patch("stages.analyze_domain._normalize_one")
+    def test_run_domain_research_unpacks_normalize_one_tuple(self, mock_normalize, tmp_path):
+        # Regression: _normalize_one returns (record, usage); _run_domain_research
+        # must unpack it. A bare-tuple record crashes on record.get(...). Only a
+        # real full run with a selected research request exercises this path.
+        mock_normalize.return_value = (
+            {"status": "ok", "native_length": 5, "fetched_length": 10,
+             "source_text_origin": "fetched"},
+            LLMUsage("m", "fireworks", 1, 1),
+        )
+        rss_items = [{
+            "category": "ai-tech", "source": "Open", "title": "Open article",
+            "url": "https://example.com/open", "summary": "s",
+        }]
+        domain_analysis = {"ai_tech": {"items": [], "research_requests": [
+            {"url": "https://example.com/open", "claim": "c",
+             "reason": "thin", "priority": "high"},
+        ]}}
+        config = {"domain_research": {"enabled": True}, "enrich_articles": {},
+                  "rss": {"feeds": []}, "_test_cache_dir": str(tmp_path)}
+        research_cfg = {"enabled": True, "max_requests_per_desk": 2,
+                        "max_requests_total": 10, "allow_browser_fetch": False}
+        artifact = _run_domain_research(
+            domain_analysis, {"ai_tech": _DOMAIN_CONFIGS["ai_tech"]},
+            rss_items, config, {}, research_cfg,
+        )
+        assert artifact["results"][0]["status"] == "ok"
+        mock_normalize.assert_called_once()
 
     def test_collect_research_requests_enforces_caps(self):
         rss_items = [

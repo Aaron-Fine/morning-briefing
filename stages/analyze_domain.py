@@ -1117,7 +1117,10 @@ def _run_domain_research(
         item = deepcopy(request["_source_item"])
         feed_conf = feeds_by_name.get(item.get("source"), {})
         native_text, native_origin = best_native_text(item)
-        record = _normalize_one(
+        # _normalize_one returns (record, usage); the research-pass canonical
+        # summary usage is not surfaced into run_meta metrics today (only the
+        # desk-pass LLM usage is). Unpack and discard to keep the record a dict.
+        record, _research_usage = _normalize_one(
             item,
             feed_conf,
             http_fetch_allowed=True,
