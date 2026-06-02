@@ -1,6 +1,12 @@
 services:
   morning-digest:
-    build: .
+    build:
+      context: .
+      args:
+        # Match the container user to the host user so bind-mounted output/
+        # files aren't root-owned. Override in .env for non-1000 hosts.
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
     container_name: morning-digest
     restart: unless-stopped
     environment:
