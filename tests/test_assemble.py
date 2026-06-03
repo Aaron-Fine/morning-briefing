@@ -106,6 +106,38 @@ class TestInlineSeamAnnotations:
             "The non-Western read:"
         )
 
+    def test_hedged_seam_annotation_is_not_dropped_at_render(self, caplog):
+        """PR-A #15 sweep: assemble no longer filters/flags hedged one_line text;
+        the seam prompt enforces named-perspective voice instead.
+
+        The real _select_inline_seam_annotations takes (at_a_glance, seam_annotations)
+        where seam_annotations is a dict with a "per_item" list, and returns the
+        at_a_glance list with a "seam_annotation" attached per item. The removed
+        override (_HEDGED_SEAM_RE) emitted a warning for hedged voice; after removal
+        the hedged annotation survives with no hedge warning.
+        """
+        items = [{"item_id": "ai_tech-abc", "headline": "Story"}]
+        annotations = {
+            "per_item": [
+                {
+                    "item_id": "ai_tech-abc",
+                    "one_line": "Some analysts argue the benchmark gain is overstated.",
+                    "seam_type": "credible_dissent",
+                    "confidence": "high",
+                }
+            ]
+        }
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            result = _select_inline_seam_annotations(items, annotations)
+
+        # The hedged one_line survives selection (not dropped).
+        assert result[0]["seam_annotation"]["one_line"].startswith("Some analysts")
+        # No hedge-voice warning is emitted (override removed).
+        assert not any("hedged voice" in rec.getMessage() for rec in caplog.records)
+
     def test_keeps_highest_confidence_annotation(self):
         items = [{"item_id": "item-1", "headline": "Story"}]
         annotations = {

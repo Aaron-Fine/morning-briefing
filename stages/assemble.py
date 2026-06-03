@@ -19,7 +19,6 @@ sanitized by morning_digest.validate and then wrapped in Markup() before templat
 """
 
 import logging
-import re
 from markupsafe import Markup
 
 from morning_digest.contracts import (
@@ -49,11 +48,6 @@ _TAG_LABELS = {
     "biotech": "Biotech",
 }
 _CONFIDENCE_RANK = {"high": 3, "medium": 2, "low": 1}
-_HEDGED_SEAM_RE = re.compile(
-    r"^\s*(some analysts argue|critics say|observers (?:say|believe)|"
-    r"some experts (?:say|argue)|there are concerns)\b",
-    re.IGNORECASE,
-)
 
 
 def _item_to_glance(item: dict) -> dict:
@@ -158,10 +152,6 @@ def _select_inline_seam_annotations(
         one_line = str(annotation.get("one_line", "")).strip()
         if not item_id or not one_line:
             continue
-        if _HEDGED_SEAM_RE.match(one_line):
-            log.warning(
-                f"assemble: seam annotation for {item_id!r} starts with hedged voice"
-            )
         existing = candidates.get(item_id)
         rank = _CONFIDENCE_RANK.get(str(annotation.get("confidence", "")).lower(), 0)
         existing_rank = _CONFIDENCE_RANK.get(
