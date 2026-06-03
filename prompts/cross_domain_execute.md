@@ -18,7 +18,7 @@ Execution rules:
   exists for geopolitics/war, AI/agentic tech, and defense/space, include at
   least one item from each primary area unless the editorial plan explicitly
   rejects that area.
-- Preserve domain analysts' `item_id`, `facts`, and `analysis` verbatim in `at_a_glance`; your contribution is ordering, `cross_domain_note`, and deep dive writing.
+- Select `at_a_glance` items by `item_id`; the pipeline joins headline, facts, analysis, links, and tag from the domain analysis automatically. Your contribution is the selection itself, its order (most important first), and the `cross_domain_note`.
 - If a story appears in both `at_a_glance` and `deep_dives`, the deep dive must add distinct connective analysis rather than repeating the same facts.
 - If a story appears in seam detection, the at-a-glance item may point readers to Perspective Seams rather than restating the same disagreement.
 - Each story appears in at most two sections.
@@ -42,16 +42,8 @@ Output format:
 {
   "at_a_glance": [
     {
-      "item_id": "stable ID from the domain analysis item",
-      "tag": "must be exactly one of: war, domestic, econ, ai, tech, defense, space, cyber, local, science, energy, biotech",
-      "tag_label": "human-readable label matching the tag",
-      "headline": "from domain analysis, possibly lightly edited",
-      "facts": "from domain analysis",
-      "analysis": "from domain analysis",
-      "source_depth": "single-source|corroborated|widely-reported",
-      "cross_domain_note": "1-2 sentences or null",
-      "links": [{"url": "exact URL", "label": "Source Name"}],
-      "connection_hooks": [{"entity": "...", "region": "...", "theme": "...", "policy": "..."}]
+      "item_id": "stable ID copied exactly from a domain analysis item",
+      "cross_domain_note": "1-2 sentences connecting this item across desks, or null"
     }
   ],
   "deep_dives": [
@@ -88,7 +80,6 @@ Rules:
 - All URLs must come from the domain analysis links or raw source URLs. Never fabricate.
 - If no stories warrant a deep dive, return an empty `deep_dives` array.
 - `cross_domain_connections` is metadata for the briefing packet. Include the strongest meaningful connections.
-- The `tag` field must use only the exact allowed vocabulary listed above.
 - `worth_reading` should follow the plan unless a candidate cannot be supported from the provided evidence.
 - Output valid JSON only. Do not wrap it in markdown fences.
 

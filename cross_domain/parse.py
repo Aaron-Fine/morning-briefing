@@ -4,136 +4,12 @@ import logging
 import re
 
 from morning_digest.tags import TAG_LABELS as _TAG_LABELS
+from morning_digest.tags import label_for_tag
 from utils.urls import collect_known_urls, registered_domain, url_known
 
 log = logging.getLogger(__name__)
 
 _REASON_PHRASE_OVERLAP = "phrase_overlap_with_at_a_glance"
-
-_VALID_TAGS = {
-    "war",
-    "domestic",
-    "econ",
-    "ai",
-    "tech",
-    "defense",
-    "space",
-    "cyber",
-    "local",
-    "science",
-    "energy",
-    "biotech",
-}
-
-_TAG_KEYWORDS: list[tuple[str, str]] = [
-    ("iran", "war"),
-    ("israel", "war"),
-    ("ukraine", "war"),
-    ("russia", "war"),
-    ("military", "war"),
-    ("combat", "war"),
-    ("war", "war"),
-    ("conflict", "war"),
-    ("attack", "war"),
-    ("strike", "war"),
-    ("missile", "war"),
-    ("troops", "war"),
-    ("ceasefire", "war"),
-    ("nato", "war"),
-    ("hormuz", "war"),
-    ("hostage", "war"),
-    ("defense", "defense"),
-    ("pentagon", "defense"),
-    ("f-35", "defense"),
-    ("f-15", "defense"),
-    ("procurement", "defense"),
-    ("dod", "defense"),
-    ("special forces", "defense"),
-    ("recovery", "defense"),
-    ("basing", "defense"),
-    ("space", "space"),
-    ("lunar", "space"),
-    ("orbit", "space"),
-    ("satellite", "space"),
-    ("cislunar", "space"),
-    ("launch", "space"),
-    ("nasa", "space"),
-    ("ai", "ai"),
-    ("llm", "ai"),
-    ("artificial intelligence", "ai"),
-    ("machine learning", "ai"),
-    ("openai", "ai"),
-    ("anthropic", "ai"),
-    ("developer", "ai"),
-    ("tooling", "ai"),
-    ("model", "ai"),
-    ("tech", "tech"),
-    ("software", "tech"),
-    ("open source", "tech"),
-    ("github", "tech"),
-    ("cyber", "cyber"),
-    ("hack", "cyber"),
-    ("security breach", "cyber"),
-    ("ransomware", "cyber"),
-    ("malware", "cyber"),
-    ("econ", "econ"),
-    ("market", "econ"),
-    ("trade", "econ"),
-    ("tariff", "econ"),
-    ("inflation", "econ"),
-    ("fed", "econ"),
-    ("gdp", "econ"),
-    ("labor", "econ"),
-    ("wage", "econ"),
-    ("food", "econ"),
-    ("supply chain", "econ"),
-    ("wto", "econ"),
-    ("imf", "econ"),
-    ("energy", "energy"),
-    ("oil", "energy"),
-    ("gas", "energy"),
-    ("grid", "energy"),
-    ("utility", "energy"),
-    ("mining", "energy"),
-    ("critical mineral", "energy"),
-    ("lithium", "energy"),
-    ("solar", "energy"),
-    ("wind power", "energy"),
-    ("nuclear power", "energy"),
-    ("electricity", "energy"),
-    ("biotech", "biotech"),
-    ("pharmaceutical", "biotech"),
-    ("drug approval", "biotech"),
-    ("clinical trial", "biotech"),
-    ("gene therapy", "biotech"),
-    ("crispr", "biotech"),
-    ("vaccine", "biotech"),
-    ("fda", "biotech"),
-    ("nih", "biotech"),
-    ("science", "science"),
-    ("climate", "science"),
-    ("research", "science"),
-    ("study", "science"),
-    ("discovery", "science"),
-    ("experiment", "science"),
-    ("peer-reviewed", "science"),
-    ("local", "local"),
-    ("utah", "local"),
-    ("cache valley", "local"),
-    ("logan", "local"),
-    ("community", "local"),
-    ("municipal", "local"),
-    ("county", "local"),
-    ("trump", "domestic"),
-    ("congress", "domestic"),
-    ("senate", "domestic"),
-    ("white house", "domestic"),
-    ("election", "domestic"),
-    ("domestic", "domestic"),
-    ("administration", "domestic"),
-    ("politics", "domestic"),
-    ("gop", "domestic"),
-]
 
 _DEFAULT_PRIMARY_GLANCE_TAGS = ("war", "ai", "defense")
 _DEFAULT_PRIMARY_DOMAIN_TAGS = {
@@ -163,18 +39,6 @@ def _primary_domain_tags(config: dict | None) -> dict[str, str]:
     if not isinstance(raw, dict):
         return dict(_DEFAULT_PRIMARY_DOMAIN_TAGS)
     return {str(k): str(v) for k, v in raw.items()}
-
-
-def _normalize_tag(raw: str) -> str:
-    """Map a raw LLM tag to the standard CSS vocabulary."""
-    normalized = raw.strip().lower()
-    if normalized in _VALID_TAGS:
-        return normalized
-    for keyword, tag in _TAG_KEYWORDS:
-        if keyword in normalized:
-            return tag
-    log.debug(f"cross_domain: unknown tag '{raw}' — defaulting to 'domestic'")
-    return "domestic"
 
 
 def _source_names(item: dict) -> set[str]:
@@ -575,6 +439,55 @@ def _downgrade_overlap_depth(result: dict) -> dict:
     return result
 
 
+def _index_domain_items(domain_analysis: dict) -> dict[str, dict]:
+    """Map item_id -> the desk item dict, across all desks."""
+    index: dict[str, dict] = {}
+    for domain_result in domain_analysis.values():
+        if not isinstance(domain_result, dict):
+            continue
+        for item in domain_result.get("items", []) or []:
+            if isinstance(item, dict) and item.get("item_id"):
+                index[item["item_id"]] = item
+    return index
+
+
+def _join_at_a_glance(selection: list[dict], domain_analysis: dict) -> list[dict]:
+    """Build full at_a_glance items from an LLM selection of item_ids.
+
+    The execute LLM emits only {item_id, cross_domain_note}; array order is the
+    ranking. Code joins headline/facts/analysis/links/connection_hooks/source_depth
+    from the desk item, derives `tag` from the desk item (desk-of-origin) and
+    `tag_label` from `tag`. Selections whose item_id is unknown are dropped.
+    """
+    index = _index_domain_items(domain_analysis)
+    joined: list[dict] = []
+    dropped = 0
+    for sel in selection:
+        if not isinstance(sel, dict):
+            continue
+        item_id = str(sel.get("item_id", "")).strip()
+        source = index.get(item_id)
+        if source is None:
+            dropped += 1
+            continue
+        tag = str(source.get("tag", "")).strip()
+        joined.append({
+            "item_id": item_id,
+            "tag": tag,
+            "tag_label": label_for_tag(tag),
+            "headline": str(source.get("headline", "")).strip(),
+            "facts": str(source.get("facts", "")),
+            "analysis": str(source.get("analysis", "")),
+            "source_depth": source.get("source_depth", "single-source"),
+            "cross_domain_note": sel.get("cross_domain_note") or None,
+            "links": list(source.get("links", []) or []),
+            "connection_hooks": list(source.get("connection_hooks", []) or []),
+        })
+    if dropped:
+        log.info("  cross_domain: dropped %s at_a_glance selection(s) with unknown item_id", dropped)
+    return joined
+
+
 def _validated_output(
     result: dict,
     domain_analysis: dict,
@@ -590,8 +503,6 @@ def _validated_output(
         result["market_context"] = econ.get("market_context", "")
 
     result["_override_counts"] = {
-        "normalize_tag": 0,
-        "tag_label": 0,
         "recompute_source_depth": 0,
         "ensure_primary_glance_coverage": 0,
         "overlap_downgrade": 0,
@@ -600,16 +511,10 @@ def _validated_output(
 
     known_urls = collect_known_urls(raw_sources, domain_analysis)
 
-    for item in result["at_a_glance"]:
-        raw_tag = item.get("tag", "")
-        norm = _normalize_tag(raw_tag)
-        if norm != raw_tag:
-            counts["normalize_tag"] += 1
-        item["tag"] = norm
-        new_label = _TAG_LABELS.get(item["tag"], item.get("tag_label", ""))
-        if new_label != item.get("tag_label", ""):
-            counts["tag_label"] += 1
-        item["tag_label"] = new_label
+    # The execute LLM emits only {item_id, cross_domain_note}; join the full
+    # item (headline/facts/analysis/links/tag/...) from the desk-of-origin and
+    # derive tag/tag_label there. Unknown item_ids are dropped (logged).
+    result["at_a_glance"] = _join_at_a_glance(result["at_a_glance"], domain_analysis)
 
     for item in result["at_a_glance"]:
         item["links"] = [

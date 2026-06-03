@@ -171,3 +171,14 @@ def test_cross_domain_applies_turn_overrides(mock_llm):
     assert first_cfg["max_tokens"] == 4000
     assert second_cfg["temperature"] == 0.2
     assert second_cfg["max_tokens"] == 9000
+
+
+def test_at_a_glance_normalizer_tolerates_minimal_selection_shape():
+    from morning_digest.contracts import normalize_cross_domain_output_artifact
+
+    raw = {"at_a_glance": [{"item_id": "ai_tech-x", "cross_domain_note": "note"}]}
+    out, issues = normalize_cross_domain_output_artifact(raw)
+    entry = out["at_a_glance"][0]
+    assert entry["item_id"] == "ai_tech-x"
+    assert entry["cross_domain_note"] == "note"
+    assert entry["facts"] == ""  # joined later in _validated_output, empty here

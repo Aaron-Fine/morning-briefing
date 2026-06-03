@@ -2,6 +2,8 @@
   "at_a_glance": [
     {
       "analysis": "a",
+      "connection_hooks": [],
+      "cross_domain_note": null,
       "facts": "f",
       "headline": "h1",
       "item_id": "g1",
