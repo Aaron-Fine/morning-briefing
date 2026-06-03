@@ -25,7 +25,7 @@ Execution rules:
 - Every appearance must add distinct value.
 
 Deep dives:
-- Write exactly ${deep_dive_count} deep dives unless the available evidence makes one of the planned topics unsupported.
+- Write up to ${deep_dive_count} deep dives; write fewer when the available evidence makes a planned topic unsupported.
 - For each deep dive, write a body of 4-8 HTML paragraphs.
 - Do not repeat the at-a-glance facts and analysis. Reference them and go deeper.
 - Focus on what the story connects to that is not obvious from the headline.
@@ -35,7 +35,7 @@ Deep dives:
 - Include 2-4 `further_reading` links drawn from the domain analysis links.
 
 Worth reading:
-- Return exactly ${worth_reading_count} entries unless the plan includes an unsupported topic.
+- Return up to ${worth_reading_count} entries; fewer is fine when the plan includes an unsupported topic.
 - Favor durable analysis and explainers over short incremental updates.
 
 Output format:

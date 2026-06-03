@@ -1335,3 +1335,21 @@ class TestContractIssueLogging:
         with caplog.at_level("WARNING", logger="cross_domain.stage"):
             run(self._context(), {"llm": {"provider": "fireworks"}})
         assert "contract" not in caplog.text.lower()
+
+
+def test_plan_accepts_underproduction_and_caps_overproduction():
+    from cross_domain.parse import _normalize_cross_domain_plan
+
+    # Underproduction: 1 connection where 3 requested — accepted as-is.
+    under = _normalize_cross_domain_plan(
+        {"cross_domain_connections": [{"description": "a"}]},
+        deep_dive_count=2, worth_reading_count=3, connection_count=3,
+    )
+    assert len(under["cross_domain_connections"]) == 1
+
+    # Overproduction: 5 deep_dives where 2 requested — capped to 2.
+    over = _normalize_cross_domain_plan(
+        {"deep_dives": [{"topic": str(i)} for i in range(5)]},
+        deep_dive_count=2, worth_reading_count=3, connection_count=3,
+    )
+    assert len(over["deep_dives"]) == 2
