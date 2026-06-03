@@ -516,6 +516,10 @@ def _validated_output(
     # derive tag/tag_label there. Unknown item_ids are dropped (logged).
     result["at_a_glance"] = _join_at_a_glance(result["at_a_glance"], domain_analysis)
 
+    # Prune unknown-URL links before the coverage step: _ensure_primary_glance_coverage
+    # dedups appended fallback items by a signature that includes link URLs, so pruning
+    # must happen first for signatures to compare on known-URL links. (The second prune
+    # below then covers the fallback items the coverage step appends.)
     for item in result["at_a_glance"]:
         item["links"] = [
             lnk

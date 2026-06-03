@@ -17,15 +17,15 @@ Each pipeline stage consumes keys from `context` and produces new keys. When cha
 
 ### Tag vocabulary
 
-Tags: `war`, `ai`, `domestic`, `defense`, `space`, `tech`, `local`, `science`, `econ`, `cyber`, `energy`, `biotech`. These are defined in 5 synchronized surfaces — all must stay in sync:
+Tags: `war`, `ai`, `domestic`, `defense`, `space`, `tech`, `local`, `science`, `econ`, `cyber`, `energy`, `biotech`. The **canonical definition** lives in `morning_digest/tags.py` (`TAG_LABELS`, `VALID_TAGS`, and `label_for_tag` to derive a tag's display label). Everything else derives from it or must stay consistent with it:
 
-1. `morning_digest/validate.py` — `VALID_TAGS` and `VALID_TAG_LABELS`
-2. `stages/cross_domain.py` — `_VALID_TAGS`, `_TAG_LABELS`, and `_TAG_KEYWORDS`
-3. `stages/assemble.py` — `_TAG_LABELS`
-4. `templates/email_template.py` — CSS `--tag-*-text` / `--tag-*-bg` variables
-5. `prompts/cross_domain_execute.md` — tag list in the output schema
+1. `morning_digest/tags.py` — canonical `TAG_LABELS` / `VALID_TAGS` / `label_for_tag`
+2. `morning_digest/validate.py` and `stages/cross_domain.py` — re-export the canonical names for back-compat; do not redefine the vocabulary here
+3. `stages/assemble.py` — derives each item's `tag_label` via `label_for_tag` (no local map)
+4. `templates/email_template.py` — CSS `--tag-*-text` / `--tag-*-bg` variables must cover every tag
+5. `stages/analyze_domain.py` — `_DOMAIN_CONFIGS[*]["tags"]` per-desk allowed-tag strings: cross_domain derives each at-a-glance item's `tag` from its desk-of-origin, so the desk configs are where item tags originate (the execute prompt no longer asks the LLM for a tag)
 
-Contract tests in `tests/test_contracts.py` verify consistency across all surfaces.
+Contract tests in `tests/test_contracts.py` verify consistency across these surfaces.
 
 ### Desk manifest
 
