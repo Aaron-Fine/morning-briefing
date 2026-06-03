@@ -66,7 +66,7 @@ Voice requirements:
 Rules:
 
 - Use only item IDs present in DOMAIN ANALYSES.
-- Return at most 6 `per_item` annotations. Choose the strongest evidence, not the most interesting speculation.
+- Return only annotations that clear the evidence gate and novelty filter — quality over quantity. The pipeline keeps the highest-confidence annotations per item, so do not pad.
 - At most one high-quality annotation per item. If several are possible, choose the one with the strongest evidence and clearest cost-bearing consequence.
 - Cross-domain seams are not rendered. Prefer leaving `cross_domain` empty unless two or more item IDs genuinely pull against each other and the tension is useful for later editorial planning.
 - Do not use `embedded_premise`. Assumption tracking is out of scope.
