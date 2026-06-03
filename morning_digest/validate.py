@@ -16,38 +16,16 @@ from typing import Any
 
 from urllib.parse import urlparse
 
+from morning_digest.tags import TAG_LABELS, label_for_tag
 from utils.urls import canonicalize_url, collect_canonical_urls, collect_known_urls
 
 log = logging.getLogger(__name__)
 
-VALID_TAGS = {
-    "war",
-    "ai",
-    "domestic",
-    "defense",
-    "space",
-    "tech",
-    "local",
-    "science",
-    "econ",
-    "cyber",
-    "energy",
-    "biotech",
-}
-VALID_TAG_LABELS = {
-    "war": "Conflict",
-    "ai": "AI",
-    "domestic": "Politics",
-    "defense": "Defense",
-    "space": "Space",
-    "tech": "Technology",
-    "local": "Local",
-    "science": "Science",
-    "econ": "Economy",
-    "cyber": "Cyber",
-    "energy": "Energy",
-    "biotech": "Biotech",
-}
+# Tag vocabulary now lives in morning_digest.tags (single source of truth).
+# Re-exported here as a mutable set / dict for backward compatibility with the
+# modules and tests that import these names from validate.
+VALID_TAGS = set(TAG_LABELS)
+VALID_TAG_LABELS = dict(TAG_LABELS)
 
 # HTML tags allowed in deep dive body fields after sanitization
 _ALLOWED_HTML_TAGS = {"p", "em", "strong", "a", "ul", "li", "ol", "br"}
@@ -239,7 +217,7 @@ def _validate_at_a_glance(
         # Schema-preserving: copy all fields, then overwrite validated ones
         entry = dict(item)
         entry["tag"] = tag
-        entry["tag_label"] = item.get("tag_label") or VALID_TAG_LABELS.get(tag, tag.capitalize())
+        entry["tag_label"] = item.get("tag_label") or label_for_tag(tag)
         entry["headline"] = headline
         entry["context"] = str(item.get("context", ""))
         entry["links"] = _drop_empty_url_links(

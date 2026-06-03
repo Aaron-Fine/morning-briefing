@@ -11,6 +11,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from morning_digest.tags import TAG_LABELS as _TAG_LABELS
 from stages.assemble import (
     _item_to_glance,
     _domain_item_to_deep_dive,
@@ -18,7 +19,6 @@ from stages.assemble import (
     _extract_peripheral_data,
     _visible_stage_failures,
     _select_inline_seam_annotations,
-    _TAG_LABELS,
     run,
 )
 
@@ -63,10 +63,11 @@ class TestItemToGlance:
         result = _item_to_glance(item)
         assert result["context"] == ""
 
-    def test_tag_label_fallback_to_capitalized_tag(self):
+    def test_tag_label_fallback_to_titlecased_tag(self):
         item = {"tag": "unknown_tag"}
         result = _item_to_glance(item)
-        assert result["tag_label"] == "Unknown_tag"
+        # Unknown tags fall back to label_for_tag's safe titlecase.
+        assert result["tag_label"] == "Unknown_Tag"
 
     def test_tag_label_uses_tag_labels_mapping(self):
         for tag, expected_label in _TAG_LABELS.items():

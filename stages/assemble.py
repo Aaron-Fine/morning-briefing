@@ -26,27 +26,13 @@ from morning_digest.contracts import (
     normalize_domain_analysis,
     normalize_seam_annotations_artifact,
 )
+from morning_digest.tags import label_for_tag
 from templates.email_template import render_email
 from utils.time import format_display_date, format_display_time, now_local, tz_abbrev
 from utils.urls import registered_domain
 
 log = logging.getLogger(__name__)
 
-# Tag → label mapping for display
-_TAG_LABELS = {
-    "war": "Conflict",
-    "domestic": "Politics",
-    "econ": "Economy",
-    "ai": "AI",
-    "tech": "Technology",
-    "defense": "Defense",
-    "space": "Space",
-    "cyber": "Cyber",
-    "local": "Local",
-    "science": "Science",
-    "energy": "Energy",
-    "biotech": "Biotech",
-}
 _CONFIDENCE_RANK = {"high": 3, "medium": 2, "low": 1}
 
 
@@ -67,7 +53,7 @@ def _item_to_glance(item: dict) -> dict:
     return {
         "item_id": item.get("item_id", ""),
         "tag": tag,
-        "tag_label": item.get("tag_label") or _TAG_LABELS.get(tag, tag.capitalize()),
+        "tag_label": item.get("tag_label") or label_for_tag(tag),
         "headline": item.get("headline", ""),
         "facts": facts,
         "analysis": analysis,

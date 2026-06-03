@@ -23,7 +23,7 @@ from stages.cross_domain import (
     _TAG_LABELS,
     _VALID_TAGS,
 )
-from stages.assemble import _TAG_LABELS as ASSEMBLE_TAG_LABELS
+from morning_digest.tags import TAG_LABELS as ASSEMBLE_TAG_LABELS
 from stages.prepare_calendar import _parse_date
 from stages.prepare_local import CONSUMED_RSS_CATEGORIES
 

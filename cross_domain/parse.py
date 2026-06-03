@@ -3,6 +3,7 @@
 import logging
 import re
 
+from morning_digest.tags import TAG_LABELS as _TAG_LABELS
 from utils.urls import collect_known_urls, registered_domain, url_known
 
 log = logging.getLogger(__name__)
@@ -22,21 +23,6 @@ _VALID_TAGS = {
     "science",
     "energy",
     "biotech",
-}
-
-_TAG_LABELS = {
-    "war": "Conflict",
-    "domestic": "Politics",
-    "econ": "Economy",
-    "ai": "AI",
-    "tech": "Technology",
-    "defense": "Defense",
-    "space": "Space",
-    "cyber": "Cyber",
-    "local": "Local",
-    "science": "Science",
-    "energy": "Energy",
-    "biotech": "Biotech",
 }
 
 _TAG_KEYWORDS: list[tuple[str, str]] = [
