@@ -772,6 +772,26 @@ class TestCrossDomainRun:
         assert usage[0].tokens_in == 900 and usage[1].tokens_out == 300
 
 
+def test_domains_bridged_derived_from_further_reading():
+    from cross_domain.parse import _derive_domains_bridged
+
+    domain_analysis = {
+        "geopolitics_events": {"items": [
+            {"item_id": "geopolitics_events-1", "links": [{"url": "https://reuters.com/x"}]},
+        ]},
+        "defense_space": {"items": [
+            {"item_id": "defense_space-1", "links": [{"url": "https://janes.com/y"}]},
+        ]},
+    }
+    result = {"deep_dives": [
+        {"headline": "H", "further_reading": [
+            {"url": "https://reuters.com/x"}, {"url": "https://janes.com/y"},
+        ]},
+    ]}
+    _derive_domains_bridged(result, domain_analysis)
+    assert set(result["deep_dives"][0]["domains_bridged"]) == {"geopolitics_events", "defense_space"}
+
+
 def test_join_at_a_glance_builds_full_items_from_selection():
     from cross_domain.parse import _join_at_a_glance
 

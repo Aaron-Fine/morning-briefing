@@ -52,8 +52,7 @@ Output format:
       "body": "<p>HTML body text...</p>",
       "why_it_matters": "1-2 sentence summary",
       "further_reading": [{"url": "exact URL", "label": "Source Name: Article Title"}],
-      "source_depth": "from the original domain item",
-      "domains_bridged": ["geopolitics_events", "defense_space"]
+      "source_depth": "from the original domain item"
     }
   ],
   "cross_domain_connections": [

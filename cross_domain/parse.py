@@ -451,6 +451,32 @@ def _index_domain_items(domain_analysis: dict) -> dict[str, dict]:
     return index
 
 
+def _url_to_desk(domain_analysis: dict) -> dict[str, str]:
+    """Map each source URL to the desk whose items reference it."""
+    mapping: dict[str, str] = {}
+    for desk_key, domain_result in domain_analysis.items():
+        if not isinstance(domain_result, dict):
+            continue
+        for item in domain_result.get("items", []) or []:
+            for link in item.get("links", []) or []:
+                url = str(link.get("url", "")).strip()
+                if url:
+                    mapping.setdefault(url, desk_key)
+    return mapping
+
+
+def _derive_domains_bridged(result: dict, domain_analysis: dict) -> None:
+    """Set each deep dive's domains_bridged from the desks of its further_reading URLs."""
+    url_desk = _url_to_desk(domain_analysis)
+    for dive in result.get("deep_dives", []) or []:
+        desks: list[str] = []
+        for link in dive.get("further_reading", []) or []:
+            desk = url_desk.get(str(link.get("url", "")).strip())
+            if desk and desk not in desks:
+                desks.append(desk)
+        dive["domains_bridged"] = desks
+
+
 def _join_at_a_glance(selection: list[dict], domain_analysis: dict) -> list[dict]:
     """Build full at_a_glance items from an LLM selection of item_ids.
 
@@ -547,6 +573,10 @@ def _validated_output(
     for read in result["worth_reading"]:
         if not url_known(read.get("url", ""), known_urls):
             read["url"] = ""
+
+    # Derive domains_bridged from the desks of each dive's (now pruned) further_reading
+    # URLs, so only known URLs contribute. The execute LLM no longer emits this field.
+    _derive_domains_bridged(result, domain_analysis)
 
     # Recompute source_depth from distinct domains before enforcing caps
     result = _downgrade_same_outlet_depth(result)
