@@ -34,6 +34,7 @@ Hard evidence gate:
 - Each cited source must include an excerpt or source-language paraphrase that makes the disagreement legible.
 - If you cannot provide two contrasting sourced excerpts, drop the annotation.
 - Do not cite the domain analyst as evidence. Use raw sources, linked source summaries, or transcript summaries.
+- Do not emit URLs. The pipeline attaches the authoritative source links per item from the domain analysis; your evidence is the source name, excerpt, and framing only.
 
 Novelty filter:
 
