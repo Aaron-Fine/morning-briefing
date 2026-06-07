@@ -33,6 +33,13 @@ run captures both. Committed files:
 
 `output/` is gitignored, so these were added with `git add -f`.
 
+**Re-captured after PR-A (2026-06-06),** which changed the execute/plan/seam
+prompts — the baseline now reflects the selection-join schema (at_a_glance emits
+`item_id` + `cross_domain_note` only; no `tag`/`tag_label`/`domains_bridged`
+request) and the "up to N" quotas. The three committed files were refreshed in
+place; `cross_domain__02.txt` (Turn 2) remains non-byte-reproducible per the
+caveat below.
+
 ## IMPORTANT — multi-turn determinism caveat
 
 `cross_domain` is a **two-turn** stage: Turn 2's prompt is assembled from Turn 1's

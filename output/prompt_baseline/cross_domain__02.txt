@@ -19,14 +19,14 @@ Execution rules:
   exists for geopolitics/war, AI/agentic tech, and defense/space, include at
   least one item from each primary area unless the editorial plan explicitly
   rejects that area.
-- Preserve domain analysts' `item_id`, `facts`, and `analysis` verbatim in `at_a_glance`; your contribution is ordering, `cross_domain_note`, and deep dive writing.
+- Select `at_a_glance` items by `item_id`; the pipeline joins headline, facts, analysis, links, and tag from the domain analysis automatically. Your contribution is the selection itself, its order (most important first), and the `cross_domain_note`.
 - If a story appears in both `at_a_glance` and `deep_dives`, the deep dive must add distinct connective analysis rather than repeating the same facts.
 - If a story appears in seam detection, the at-a-glance item may point readers to Perspective Seams rather than restating the same disagreement.
 - Each story appears in at most two sections.
 - Every appearance must add distinct value.
 
 Deep dives:
-- Write exactly 2 deep dives unless the available evidence makes one of the planned topics unsupported.
+- Write up to 2 deep dives; write fewer when the available evidence makes a planned topic unsupported.
 - For each deep dive, write a body of 4-8 HTML paragraphs.
 - Do not repeat the at-a-glance facts and analysis. Reference them and go deeper.
 - Focus on what the story connects to that is not obvious from the headline.
@@ -36,23 +36,15 @@ Deep dives:
 - Include 2-4 `further_reading` links drawn from the domain analysis links.
 
 Worth reading:
-- Return exactly 3 entries unless the plan includes an unsupported topic.
+- Return up to 3 entries; fewer is fine when the plan includes an unsupported topic.
 - Favor durable analysis and explainers over short incremental updates.
 
 Output format:
 {
   "at_a_glance": [
     {
-      "item_id": "stable ID from the domain analysis item",
-      "tag": "must be exactly one of: war, domestic, econ, ai, tech, defense, space, cyber, local, science, energy, biotech",
-      "tag_label": "human-readable label matching the tag",
-      "headline": "from domain analysis, possibly lightly edited",
-      "facts": "from domain analysis",
-      "analysis": "from domain analysis",
-      "source_depth": "single-source|corroborated|widely-reported",
-      "cross_domain_note": "1-2 sentences or null",
-      "links": [{"url": "exact URL", "label": "Source Name"}],
-      "connection_hooks": [{"entity": "...", "region": "...", "theme": "...", "policy": "..."}]
+      "item_id": "stable ID copied exactly from a domain analysis item",
+      "cross_domain_note": "1-2 sentences connecting this item across desks, or null"
     }
   ],
   "deep_dives": [
@@ -61,8 +53,7 @@ Output format:
       "body": "<p>HTML body text...</p>",
       "why_it_matters": "1-2 sentence summary",
       "further_reading": [{"url": "exact URL", "label": "Source Name: Article Title"}],
-      "source_depth": "from the original domain item",
-      "domains_bridged": ["geopolitics_events", "defense_space"]
+      "source_depth": "from the original domain item"
     }
   ],
   "cross_domain_connections": [
@@ -89,7 +80,6 @@ Rules:
 - All URLs must come from the domain analysis links or raw source URLs. Never fabricate.
 - If no stories warrant a deep dive, return an empty `deep_dives` array.
 - `cross_domain_connections` is metadata for the briefing packet. Include the strongest meaningful connections.
-- The `tag` field must use only the exact allowed vocabulary listed above.
 - `worth_reading` should follow the plan unless a candidate cannot be supported from the provided evidence.
 - Output valid JSON only. Do not wrap it in markdown fences.
 
@@ -1124,11 +1114,6 @@ Note on source material: Item summaries are canonicalized from the best availabl
   Nikkei Asia: https://asia.nikkei.com/business/media-entertainment/poke-bubble-japanese-trading-cards-fetch-sky-high-prices
   Nikkei Asia: https://asia.nikkei.com/business/markets/oil-tumbles-nearly-15-after-iran-says-strait-of-hormuz-completely-open
 
-=== CONTINUITY — Yesterday's digest included these stories ===
-At a glance: Iran reopens Hormuz but US maintains naval blockade, creating parallel pipelines | Oil plunges on Hormuz reopening but underlying inflation remains too hot for Fed | Army seeks Paladin production halt, citing Ukraine lessons on mobility | Japan abandons arms export restrictions as US reliability concerns mount | Space Force targets on-orbit refueling and space tugs by 2030 in new Objective Force plan | $475M injection reverses hypersonic interceptor delays by several years | NIST will no longer enrich most CVEs, reducing vulnerability data quality
-Deep dives: The Hormuz Paradox: Why US Energy Independence Made the Blockade Politically Sustainable | Paladin, Space Tugs, and the Quiet Rewrite of the Defense Industrial Base
-If any of today's stories are developments in these ongoing narratives, note "continuing from yesterday" or "new development" in your analysis field. Do NOT repeat yesterday's analysis — just acknowledge the thread. If none of today's stories connect to yesterday, ignore this section entirely.
-
 === WORTH READING ===
 Prioritize substantial long-form pieces from the source data that reward slow reading over incremental breaking news. Include a worth_reading section in the final output.
 
@@ -1137,91 +1122,95 @@ Prioritize substantial long-form pieces from the source data that reward slow re
   "schema_version": 1,
   "cross_domain_connections": [
     {
-      "description": "US energy independence removes the domestic political brake on Middle East coercion, making the Hormuz blockade sustainable in ways that would have been impossible for prior administrations",
+      "description": "US energy self-sufficiency removes the historical political brake on Middle East military action, while Hormuz reopening creates a bifurcated sanctions/commerce regime that looks stable but isn't",
       "domains": [
         "geopolitics_events",
-        "economics"
+        "economics",
+        "energy/materials"
       ],
       "entities": [
-        "US Fifth Fleet",
-        "Iranian Oil Exports",
+        "Strait of Hormuz",
+        "US naval blockade",
         "Federal Reserve",
-        "Saudi Arabia"
+        "oil markets",
+        "Trump administration"
       ],
-      "rationale": "This is the most consequential causal chain in the material. The FT's analysis of US energy self-sufficiency as a foreign policy enabler directly explains why Trump can maintain a naval blockade on Iranian ports while simultaneously declaring Hormuz 'open'\u2014American voters don't feel gasoline price spikes the way they did in 1973 or 2008. The Fed's inflation dilemma (Klein) becomes secondary because energy shocks no longer transmit to core political economy. This transforms alliance management: Gulf states lose leverage, Japan and Pakistan face unilateral energy anxiety, and the US can pursue coercive diplomacy without the historical constraint of domestic consumer pain. Editorial value lies in making visible the mechanism that makes the Hormuz paradox politically stable."
+      "rationale": "This matters editorially because it reveals a dangerous structural illusion: Washington can now pursue aggressive Iran policy without domestic voter punishment at the pump, while the 'reopened' Hormuz still has a US military blockade attached. The Fed's inflation dilemma (Klein) and the energy market's 15% price swing both operate in a world where the US has, in effect, decoupled its foreign policy from its energy import vulnerability. That's a historically novel configuration that explains why the Trump administration can maintain contradictory positions\u2014thanking Gulf states for reopening while keeping the blockade\u2014that would have been politically impossible two decades ago."
     },
     {
-      "description": "Japan's arms export reversal and China's Mediterranean energy pivot are complementary responses to the same perceived US reliability collapse, reshaping the Indo-Pacific and Mediterranean security architectures simultaneously",
+      "description": "Japan's arms export reversal and China's Mediterranean pivot are parallel hedges against US alliance reliability, driven by the same Hormuz shock but producing opposite strategic effects",
       "domains": [
         "geopolitics_events",
-        "defense/space"
-      ],
-      "entities": [
-        "Japanese defense industry",
-        "US-Japan alliance",
-        "China Merchants Holdings",
-        "Lee Jae-myung administration"
-      ],
-      "rationale": "Both Japan and China are reading the same signal\u2014US security commitments are becoming conditional, transactional, and potentially ephemeral. But their responses diverge in ways that create new competitive dynamics. Japan hedges by building autonomous defense industrial capacity and deepening middle-power partnerships (India-South Korea). China hedges by creating alternative supply chain geography in North Africa. These aren't isolated national adjustments; they're competitive decoupling strategies that will interact. Japanese arms exports to Southeast Asian South China Sea claimants could accelerate precisely as Chinese Mediterranean infrastructure comes online, creating a two-front competition for influence that the US may find itself outside of. The editorial opportunity is to treat these as a single structural shift rather than two bilateral stories."
-    },
-    {
-      "description": "The Space Force's orbital logistics doctrine and the Army's Paladin halt represent convergent lessons from Ukraine about mobility and survivability, applied differently across domains but sharing a common industrial base stress",
-      "domains": [
         "defense/space",
         "culture/structural"
       ],
       "entities": [
-        "Space Force",
-        "Paladin",
-        "Dan Driscoll",
-        "Troy Meink",
-        "SDA"
+        "Japan Three Principles",
+        "China Mediterranean infrastructure",
+        "US-Japan alliance",
+        "Hormuz closure",
+        "South China Sea"
       ],
-      "rationale": "Both the Space Force's space tugs and the Army's Paladin cancellation reflect the same operational insight from Ukraine: fixed, predictable, heavy assets die. But they point in opposite industrial directions. Space Force wants to make satellites maneuverable and sustainable (more complex, more expensive per unit, but more survivable). Army wants to stop buying a platform that can't move fast enough (fewer heavy brigades, more distributed fires). The tension is in the industrial base: multi-year procurement deals (Meink) assume stable production lines, but Paladin's cancellation and space tug development both require disruptive retooling. The Pentagon is simultaneously asking Congress for long-term production commitments while demonstrating that current programs may not survive contact with operational reality. This contradiction matters for understanding whether the 'rearmament' narrative is incremental or transformative."
+      "rationale": "Both Tokyo and Beijing watched the same Hormuz crisis and concluded US security guarantees are becoming conditional. But their responses diverge sharply: Japan seeks autonomous defense industrial capacity to reduce US dependency, while China seeks geographic diversification to reduce chokepoint dependency. The editorial significance is that these aren't bilateral adjustments to Washington\u2014they're structural repositionings that will interact. Japanese arms exports to Southeast Asian nations with South China Sea disputes will encounter Chinese Mediterranean infrastructure investments that could create alternative logistics networks. The US alliance system is being hollowed out from both ends simultaneously."
+    },
+    {
+      "description": "Space Force's orbital logistics doctrine and Air Force's multi-year procurement push both assume a production base that the Paladin cancellation and recruiting success reveal is under competing pressures",
+      "domains": [
+        "defense/space",
+        "economics"
+      ],
+      "entities": [
+        "Space Force Objective Force",
+        "Troy Meink",
+        "Paladin howitzer",
+        "Air Force recruiting",
+        "multi-year procurement"
+      ],
+      "rationale": "The services want to lock in production capacity for satellites and aircraft across multi-year deals while the Army is trying to cancel a major artillery line and the Air Force just hit its best recruiting numbers in 20 years. The editorial thread is industrial base triage: you can't simultaneously expand space logistics, sustain crewed aircraft, and absorb Army modernization cuts without revealing which capabilities the Pentagon actually believes are future-oriented versus legacy. The Paladin cancellation (justified by Ukraine drone warfare lessons) and the CCA operational handoff (autonomous systems replacing crewed platforms) suggest the multi-year deals Meink wants may be buying into yesterday's force structure unless they're carefully targeted."
     }
   ],
   "deep_dives": [
     {
-      "topic": "The Hormuz Paradox: US Energy Independence as Coercion Enabler",
-      "angle": "How the disappearance of the gasoline-price political constraint transforms American Middle East strategy and what it means for allies who still depend on Gulf energy",
-      "why_selected": "Continuing from yesterday with new development: the Pakistan fighter escort detail and Japan's naphtha crunch sharpen the picture of how unilateral US energy security creates asymmetric burdens. This connects geopolitics, economics, and alliance politics in a way that reveals structural rather than tactical change. The seam detection found no contested narratives, which is itself notable\u2014this framework is being adopted across outlets without critical examination of its implications for US alliance durability."
+      "topic": "Japan's arms export reversal and the post-American alliance architecture",
+      "angle": "How the Three Principles revision reveals Tokyo's calculation that US reliability has shifted from assumption to variable, and what defense industrial autonomy means for regional deterrence dynamics",
+      "why_selected": "Seam detection was quiet, but this is where assumption vulnerability lives: the US-Japan alliance has been treated as structurally permanent in most analysis, and this move treats it as contingent. Cross-domain hooks to defense procurement, geopolitical alignment, and the Hormuz crisis that accelerated the timing. Directly aligned with Aaron's interest in defense technology and geopolitical shifts affecting US posture."
     },
     {
-      "topic": "Japan's Arms Export Reversal and the Post-American Indo-Pacific",
-      "angle": "The end of Japan's 1967 arms export ban as a constitutional moment, not merely a policy adjustment, and its implications for regional deterrence architecture",
-      "why_selected": "This is the most significant defense policy shift in the material, with direct relevance to Aaron's interests in alliance restructuring and defense technology. It connects to the India-South Korea realignment, China's Mediterranean pivot, and the broader theme of middle-power autonomy. The single-source depth (SCMP/Yomiuri) is a limitation, but the structural significance warrants treatment. The angle should examine which specific capabilities (likely maritime surveillance, missile defense components) will be exportable first and to which customers, as this determines whether Japan becomes a genuine alternative defense supplier or merely a niche player."
+      "topic": "The Hormuz bifurcation: commercial reopening versus sanctions blockade as a template for 21st-century economic statecraft",
+      "angle": "Why the US can maintain a naval blockade while thanking partners for reopening a strait, and what this teaches about the decoupling of American energy security from American foreign policy constraints",
+      "why_selected": "Connects geopolitics, energy markets, and economics with a genuinely novel structural development. The FT piece on US energy self-sufficiency provides the analytical frame; the Hormuz events provide the empirical case. This is where second-order effects concentrate: Pakistan's fighter escorts, India's flagged vessels, Japan's energy anxiety, and the Fed's inflation dilemma all radiate from this single chokepoint decision."
     }
   ],
   "worth_reading": [
     {
-      "topic": "Adam Tooze \u2014 Chartbook: 'Title 1074: The Last Prewar Tankers' and 'Chartbook 441: The Two-Faced Present'",
-      "why_worth_reading": "Tooze's long-form economic history provides the temporal depth missing from daily Hormuz coverage. The 'last prewar tankers' framing connects current energy market disruptions to the longer arc of maritime logistics and great power transition. Worth reading because it rewards the reader who wants to understand why Hormuz matters structurally, not just today, and because Tooze's dual focus on present uncertainty and historical pattern offers a methodological model for digest readers."
+      "topic": "Adam Tooze \u2014 Chartbook: 'The Last Prewar Tankers' and global uncertainty links compilation",
+      "why_worth_reading": "Tooze's historical framing of maritime energy logistics as a system approaching structural stress provides essential context for the Hormuz reopening's fragility. The compilation format also surfaces connections between shipping, finance, and great-power competition that single-desk reporting misses. Rewards slow reading because the argument builds across multiple linked crises rather than resolving into a single headline."
     },
     {
-      "topic": "War on the Rocks: 'Winning in the Donbas: What Russia's 2014-2015 Campaign Reveals About Modern War'",
-      "why_worth_reading": "The Army's Paladin cancellation is justified by 'Ukraine lessons,' but most coverage treats these lessons as self-evident. This piece provides the operational history that makes those lessons legible\u2014how Russian artillery-tank integration worked, why fixed positions became death traps, and what 'maneuver' actually means in a drone-saturated battlespace. Durable analysis that will outlast the procurement headline cycle and deepen understanding of why Driscoll's statement matters beyond budget politics."
+      "topic": "The Atlantic: 'Iran Deterrence and the Strait of Hormuz' (April 2026)",
+      "why_worth_reading": "Long-form examination of how deterrence theory fails when applied to asymmetric chokepoint control, with implications for the current 'reopened but blockaded' configuration. The theoretical rigor provides a counterweight to the daily news cycle's assumption that declared policy changes equate to stable outcomes."
     },
     {
-      "topic": "The Atlantic: 'Iran Deterrence and the Strait of Hormuz' (international coverage)",
-      "why_worth_reading": "The Atlantic's Iran deterrence analysis provides the strategic theory that the daily news cycle assumes but rarely examines. In a digest heavy on operational and economic detail, this piece offers the framework question: what does deterrence mean when the US no longer shares energy vulnerability with its allies? It complements the deep dive directly and provides readers with the conceptual vocabulary to assess whether current policy is coherent or merely opportunistic."
+      "topic": "War on the Rocks: 'How to Counter the Houthis Without Strengthening Them'",
+      "why_worth_reading": "Relevant beyond the Yemen case to the broader problem of kinetic operations that produce perverse strategic effects. The analytical framework applies directly to the current Hormuz situation, where US military presence stabilizes and destabilizes simultaneously. Durable piece that rewards rereading as the Iran negotiations evolve."
     }
   ],
   "rejected_alternatives": [
     {
-      "topic": "Space Force on-orbit refueling and space tugs by 2030",
-      "reason": "Strong candidate with genuine doctrinal significance, but yesterday's digest already treated space mobility as a deep dive. The new material adds the 2030 timeline and vendor competition details, but not enough fresh analytical substance to justify repetition. Would reconsider if tomorrow brings contract awards or congressional reaction."
+      "topic": "Space Force orbital logistics and on-orbit refueling by 2030",
+      "reason": "Strong candidate with genuine doctrinal significance, but the source depth is single-source (Breaking Defense only) and the industrial base implications are more speculative than the Japan arms export story. Would have been third deep dive if count allowed. Saved for future development if Space Force releases additional implementation detail."
     },
     {
-      "topic": "Army Paladin production halt",
-      "reason": "Yesterday's deep dive covered this; today's material adds Driscoll's explicit Ukraine invocation and potential congressional pushback, but the core argument (Ukraine lessons driving procurement reversal) is established. The industrial base tension with multi-year procurement deals is better handled as a cross-domain connection than a standalone deep dive."
+      "topic": "Army Paladin production halt and Ukraine lessons",
+      "reason": "Compelling procurement story with clear operational rationale, but the single-source limitation and the narrower domain focus (primarily defense/space with limited cross-domain reach) made it less central than the Hormuz bifurcation or Japan alignment shift. The Ukraine lessons angle is important but has been treated extensively elsewhere; the Japan story is more novel."
     },
     {
       "topic": "China's Mediterranean energy hub acceleration",
-      "reason": "Important structural story, but single-source (SCMP) with high execution-risk narrative. The biotech AI parallel (CSPC/RemeGen deals) is interesting but not yet clearly connected to the Mediterranean pivot. Would elevate if corroboration emerges from Algerian or Moroccan sources, or if specific project timelines are announced."
+      "reason": "Interesting as a China hedging story, but SCMP single-source and the speculative quality of 'acceleration' claims (projects that were already underway) made it less robust than the Japan arms export move, which has clearer policy documentation. The biotech AI angle in the same SCMP filing was weaker still and not seriously considered."
     },
     {
-      "topic": "US extends Russia oil purchase waivers",
-      "reason": "Significant policy tension with European allies, but the story is underdeveloped in the source material\u2014single-source, no detail on which waivers, which countries, or European reactions. The Pakistan IMF angle is more interesting but better treated as a Hormuz deep dive subplot than standalone."
+      "topic": "Anthropic Opus 4.7 quality criticism and local LLM competitive pressure",
+      "reason": "AI/tech had no deep dive candidate that matched Aaron's primary interests in AI and national security. The developer-community criticism of a flagship model is technically interesting but lacks the national security or geopolitical framing that would justify deep-dive treatment in this digest. The local-LLM-on-consumer-hardware story is a trend to watch but not yet a structural shift."
     }
   ],
   "planning_scope": {

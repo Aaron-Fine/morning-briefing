@@ -51,7 +51,7 @@ the validated checklist behind it). See the epic for detail.
 - [ ] **PR-0** — per-run `run_metrics.json` observability (per-stage
       cost/usage, override firing counts, item-flow, domain_research loop).
       Capture the PR-B rendered-prompt baseline at the end.
-- [ ] **PR-A** — work the Appendix A override checklist; drop `tag_label`,
+- [x] **PR-A** — work the Appendix A override checklist; drop `tag_label`,
       derive `tag` from desk-of-origin, switch cross_domain to item_id
       selection, relax "exactly N" → "up to N", regex sweep.
 - [ ] **PR-B** — `audience.yaml` as single source of truth; thread into the
