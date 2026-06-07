@@ -14,11 +14,11 @@ Voice:
 
 Task 1: Cross-Domain Connection Discovery
 - Identify the most meaningful causal chains, shared actors, contradictions across desks, and second-order effects.
-- Return exactly 3 `cross_domain_connections`.
+- Return up to 3 `cross_domain_connections` — fewer is correct when the evidence does not support that many.
 - Each connection should explain why it matters editorially, not just state that two desks overlap.
 
 Task 2: Deep Dive Selection
-- Return exactly 2 `deep_dives`.
+- Return up to 2 `deep_dives`.
 - Prioritize:
   1. stories with cross-domain connections
   2. stories where seam detection found contested narratives or assumption vulnerabilities
@@ -26,7 +26,7 @@ Task 2: Deep Dive Selection
 - Each deep dive entry should identify the topic, the angle, and why it was selected.
 
 Task 3: Worth Reading Selection
-- Return exactly 3 `worth_reading` entries.
+- Return up to 3 `worth_reading` entries.
 - Favor durable long-form analysis, essays, and explainers over incremental breaking-news updates.
 - Pick pieces that reward slow reading and deepen the digest's editorial range.
 
@@ -1106,11 +1106,6 @@ Note on source material: Item summaries are canonicalized from the best availabl
   Nikkei Asia: https://asia.nikkei.com/spotlight/big-in-asia/asia-s-muslims-keep-faith-with-mecca-pilgrimage-despite-iran-war-fears
   Nikkei Asia: https://asia.nikkei.com/business/media-entertainment/poke-bubble-japanese-trading-cards-fetch-sky-high-prices
   Nikkei Asia: https://asia.nikkei.com/business/markets/oil-tumbles-nearly-15-after-iran-says-strait-of-hormuz-completely-open
-
-=== CONTINUITY — Yesterday's digest included these stories ===
-At a glance: Iran reopens Hormuz but US maintains naval blockade, creating parallel pipelines | Oil plunges on Hormuz reopening but underlying inflation remains too hot for Fed | Army seeks Paladin production halt, citing Ukraine lessons on mobility | Japan abandons arms export restrictions as US reliability concerns mount | Space Force targets on-orbit refueling and space tugs by 2030 in new Objective Force plan | $475M injection reverses hypersonic interceptor delays by several years | NIST will no longer enrich most CVEs, reducing vulnerability data quality
-Deep dives: The Hormuz Paradox: Why US Energy Independence Made the Blockade Politically Sustainable | Paladin, Space Tugs, and the Quiet Rewrite of the Defense Industrial Base
-If any of today's stories are developments in these ongoing narratives, note "continuing from yesterday" or "new development" in your analysis field. Do NOT repeat yesterday's analysis — just acknowledge the thread. If none of today's stories connect to yesterday, ignore this section entirely.
 
 === WORTH READING ===
 Prioritize substantial long-form pieces from the source data that reward slow reading over incremental breaking news. Include a worth_reading section in the final output.

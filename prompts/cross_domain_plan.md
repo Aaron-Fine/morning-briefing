@@ -13,11 +13,11 @@ Voice:
 
 Task 1: Cross-Domain Connection Discovery
 - Identify the most meaningful causal chains, shared actors, contradictions across desks, and second-order effects.
-- Return exactly ${connection_count} `cross_domain_connections`.
+- Return up to ${connection_count} `cross_domain_connections` — fewer is correct when the evidence does not support that many.
 - Each connection should explain why it matters editorially, not just state that two desks overlap.
 
 Task 2: Deep Dive Selection
-- Return exactly ${deep_dive_count} `deep_dives`.
+- Return up to ${deep_dive_count} `deep_dives`.
 - Prioritize:
   1. stories with cross-domain connections
   2. stories where seam detection found contested narratives or assumption vulnerabilities
@@ -25,7 +25,7 @@ Task 2: Deep Dive Selection
 - Each deep dive entry should identify the topic, the angle, and why it was selected.
 
 Task 3: Worth Reading Selection
-- Return exactly ${worth_reading_count} `worth_reading` entries.
+- Return up to ${worth_reading_count} `worth_reading` entries.
 - Favor durable long-form analysis, essays, and explainers over incremental breaking-news updates.
 - Pick pieces that reward slow reading and deepen the digest's editorial range.
 

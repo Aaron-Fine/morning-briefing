@@ -495,6 +495,7 @@ canonical example; everything below is in addition.
    - Cheaper: drop `tag_label` from the schema; assign in code from the
      `tag` field via the existing `_TAG_LABELS` map. Saves prompt tokens
      and removes a way for the LLM to drift the labels.
+   > **Disposition (PR-A, 2026-06-06):** removed — Task 4 made `TAG_LABELS` a single source of truth derived in code; `tag_label` dropped from the execute schema in Task 5.
 
 2. **`tag` normalization to the 12-value vocabulary**
    - Location: `prompts/cross_domain_execute.md:46` requires
@@ -508,6 +509,7 @@ canonical example; everything below is in addition.
      each item came from already implies the tag set
      (`_DEFAULT_PRIMARY_DOMAIN_TAGS`, `parse.py:151-156`). For the
      ambiguous cases, run `_normalize_tag` on the headline once.
+   > **Disposition (PR-A, 2026-06-06):** removed — Task 5 derives `tag` from the desk-of-origin via the selection-join; `_normalize_tag` and `_TAG_KEYWORDS` deleted.
 
 3. **`item_id` / `facts` / `analysis` "verbatim" copying**
    - Location: `prompts/cross_domain_execute.md:21,45` instruct the LLM
@@ -526,6 +528,7 @@ canonical example; everything below is in addition.
      `domain_analysis[*]["items"]` by ID and copies `facts`/`analysis`
      deterministically. This eliminates an entire class of "LLM
      mangled the verbatim copy" diagnostics.
+   > **Disposition (PR-A, 2026-06-06):** removed — Task 5 has the LLM emit only a selection (`item_id` + `cross_domain_note`); code joins `facts`/`analysis` from `domain_analysis` by ID.
 
 4. **Seam annotation `links` field**
    - Location: `prompts/seam_annotations.md` schema; `links` are
@@ -536,6 +539,7 @@ canonical example; everything below is in addition.
    - Cheaper: already correct deterministically. Documentation
      cleanup — the prompt should not imply LLM-supplied evidence
      URLs are kept.
+   > **Disposition (PR-A, 2026-06-06):** removed — Task 7 added the prompt note ("Do not emit URLs") and a code comment marking `_links_by_item_id` authoritative; behavior was already correct.
 
 5. **"Exactly N" quotas in cross_domain plan**
    - Location: `prompts/cross_domain_plan.md:16,20,28` require
@@ -549,6 +553,7 @@ canonical example; everything below is in addition.
      in code be the cap. The "exactly" wording wastes attention and
      overconstrains low-evidence days where 1 connection is more
      honest than 3.
+   > **Disposition (PR-A, 2026-06-06):** removed — Task 2 relaxed the plan prompts to "up to N"; the code truncation remains the cap.
 
 6. **Cross-domain seam `linked_item_ids ≥ 2` rule**
    - Location: `prompts/seam_annotations.md` and the prompt for
@@ -561,6 +566,7 @@ canonical example; everything below is in addition.
      §5 already proposes — compute candidates from
      `connection_hooks` and let the LLM only write the `one_line`
      framing for surviving pairs.
+   > **Disposition (PR-A, 2026-06-06):** deferred to PR-D/PR-I — depends on graph candidate generation from `connection_hooks`; not a prompt-only change.
 
 7. **Seam annotation evidence gate (≥2 distinct sources, ≥2 useful excerpts)**
    - Location: `prompts/seam_annotations.md:31-36` ("Hard evidence gate").
@@ -569,6 +575,7 @@ canonical example; everything below is in addition.
    - Cheaper: keep the prompt-side gate as a hint, but recognize the
      code is the source of truth. Could be a graph constraint per §5.
      (Already cited in §3; included here for completeness.)
+   > **Disposition (PR-A, 2026-06-06):** deferred to PR-D/PR-I — becomes a graph constraint; code is already the source of truth, so no PR-A change.
 
 8. **Per-outlet cap enforcement (three implementations)**
    - Location: implicit in the cross_domain plan/execute prompts as
@@ -579,6 +586,7 @@ canonical example; everything below is in addition.
      enforcement layers for "don't oversample one outlet."
    - Cheaper: collapse to one (assemble), drop the LLM-side
      "diversity" wording. Already cited in §3 #3.
+   > **Disposition (PR-A, 2026-06-06):** deferred to PR-C — consolidating the three cap implementations into assemble is its own change.
 
 ### MEDIUM
 
@@ -588,6 +596,7 @@ canonical example; everything below is in addition.
      truncates regardless. The prompt cap is decorative.
    - Cheaper: remove the prompt-side number; let code be the limit.
      Saves nothing big but matches the pattern.
+    > **Disposition (PR-A, 2026-06-06):** not doing — the `coverage_gaps` stage is slated for wholesale deletion in the epic's dead-code removals; no point editing its prompt.
 
 10. **`per_item` annotations capped at 6 in two places**
     - Location: `prompts/seam_annotations.md:69` ("Return at most 6
@@ -600,6 +609,7 @@ canonical example; everything below is in addition.
     - Cheaper: remove the prompt-side cap entirely; the per-item
       collapse in assemble is the real constraint. The LLM is being
       asked to plan a budget that two later layers override.
+    > **Disposition (PR-A, 2026-06-06):** removed — Task 3 dropped the prompt-side "at most 6" cap; code truncation + per-item collapse are the constraint.
 
 11. **`_ensure_primary_glance_coverage` re-injects missing primary tags**
     - Location: `prompts/cross_domain_plan.md:9-12` and
@@ -613,6 +623,7 @@ canonical example; everything below is in addition.
       adapter against the desk-tag map, then ask the LLM only to
       *order* the resulting set. The selection problem is what the
       LLM is bad at; the ordering/voicing is what it's good at.
+    > **Disposition (PR-A, 2026-06-06):** deferred to PR-D — a deterministic inverted-index coverage check (then LLM-orders the result) needs the graph layer; not prompt-only.
 
 12. **`domains_bridged` on deep dives**
     - Location: `prompts/cross_domain_execute.md:64` schema requires
@@ -625,6 +636,7 @@ canonical example; everything below is in addition.
     - Cheaper: derive from `further_reading` link → desk lookup
       after the LLM picks a dive. One join, no LLM tokens spent on
       ID metadata.
+    > **Disposition (PR-A, 2026-06-06):** removed — Task 6 derives `domains_bridged` in `_validated_output` from the desks of each dive's pruned `further_reading` URLs; dropped from the execute schema.
 
 13. **`analyze_domain` "merge multiple sources covering the same event into ONE item"**
     - Location: `prompts/analyze_domain_system.md` via `_SHARED_RULES`
@@ -637,6 +649,7 @@ canonical example; everything below is in addition.
       easy cases before the LLM runs, and a post-LLM check could
       flag suspected duplicates. This is also the "items_sharing"
       query from §5.
+    > **Disposition (PR-A, 2026-06-06):** deferred to PR-E — the same-event merge safety net belongs with the clustering pre-pass.
 
 14. **`source_depth` per-item label in `analyze_domain`**
     - Location: `prompts/analyze_domain_system.md` schema
@@ -651,6 +664,7 @@ canonical example; everything below is in addition.
       and code overrides both.
     - Cheaper: drop `source_depth` from the desk schema entirely;
       it's a cheap function of `links` and can be computed on read.
+    > **Disposition (PR-A, 2026-06-06):** deferred to PR-E — settle `_recompute_source_depth` on the cluster form once, rather than touching the desk schema now.
 
 ### LOW
 
@@ -661,6 +675,7 @@ canonical example; everything below is in addition.
       compression.
     - Cheaper: tell the LLM "be concise" and post-clip in code, or
       accept length is judgment-based and stop passing the number.
+    > **Disposition (PR-A, 2026-06-06):** not doing now — outside the named regex sweep; revisit if compression length drifts. The named sweep target `_HEDGED_SEAM_RE` was removed (Task 1).
 
 ### Summary
 15 findings (8 HIGH, 6 MEDIUM, 1 LOW). The `tag` / `tag_label` /

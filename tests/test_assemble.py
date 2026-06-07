@@ -11,6 +11,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from morning_digest.tags import TAG_LABELS as _TAG_LABELS
 from stages.assemble import (
     _item_to_glance,
     _domain_item_to_deep_dive,
@@ -18,7 +19,6 @@ from stages.assemble import (
     _extract_peripheral_data,
     _visible_stage_failures,
     _select_inline_seam_annotations,
-    _TAG_LABELS,
     run,
 )
 
@@ -63,10 +63,11 @@ class TestItemToGlance:
         result = _item_to_glance(item)
         assert result["context"] == ""
 
-    def test_tag_label_fallback_to_capitalized_tag(self):
+    def test_tag_label_fallback_to_titlecased_tag(self):
         item = {"tag": "unknown_tag"}
         result = _item_to_glance(item)
-        assert result["tag_label"] == "Unknown_tag"
+        # Unknown tags fall back to label_for_tag's safe titlecase.
+        assert result["tag_label"] == "Unknown_Tag"
 
     def test_tag_label_uses_tag_labels_mapping(self):
         for tag, expected_label in _TAG_LABELS.items():
@@ -105,6 +106,38 @@ class TestInlineSeamAnnotations:
         assert result[0]["seam_annotation"]["one_line"].startswith(
             "The non-Western read:"
         )
+
+    def test_hedged_seam_annotation_is_not_dropped_at_render(self, caplog):
+        """PR-A #15 sweep: assemble no longer filters/flags hedged one_line text;
+        the seam prompt enforces named-perspective voice instead.
+
+        The real _select_inline_seam_annotations takes (at_a_glance, seam_annotations)
+        where seam_annotations is a dict with a "per_item" list, and returns the
+        at_a_glance list with a "seam_annotation" attached per item. The removed
+        override (_HEDGED_SEAM_RE) emitted a warning for hedged voice; after removal
+        the hedged annotation survives with no hedge warning.
+        """
+        items = [{"item_id": "ai_tech-abc", "headline": "Story"}]
+        annotations = {
+            "per_item": [
+                {
+                    "item_id": "ai_tech-abc",
+                    "one_line": "Some analysts argue the benchmark gain is overstated.",
+                    "seam_type": "credible_dissent",
+                    "confidence": "high",
+                }
+            ]
+        }
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            result = _select_inline_seam_annotations(items, annotations)
+
+        # The hedged one_line survives selection (not dropped).
+        assert result[0]["seam_annotation"]["one_line"].startswith("Some analysts")
+        # No hedge-voice warning is emitted (override removed).
+        assert not any("hedged voice" in rec.getMessage() for rec in caplog.records)
 
     def test_keeps_highest_confidence_annotation(self):
         items = [{"item_id": "item-1", "headline": "Story"}]

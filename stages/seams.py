@@ -341,6 +341,8 @@ def _valid_item_ids(domain_analysis: dict) -> set[str]:
     return ids
 
 
+# Authoritative: seam annotation links come from domain_analysis, not the LLM.
+# The prompt deliberately does not ask for URLs (see prompts/seam_annotations.md).
 def _links_by_item_id(domain_analysis: dict) -> dict[str, list[dict]]:
     links: dict[str, list[dict]] = {}
     for domain_result in domain_analysis.values():
