@@ -1,5 +1,21 @@
 # Agent Guidelines
 
+## Docker / Pipeline
+
+Never run `pipeline.py` directly on the host. All pipeline execution must happen inside Docker — dependencies (yt-dlp, feedparser, anthropic, etc.) exist only in the container image.
+
+## Commit Policy
+
+- Commit after completing each feature or logical unit of work. Do not accumulate unrelated changes in a single commit.
+- Always commit at the end of your turn if there are staged or modified tracked files.
+- Stage new files explicitly (`git add <file>`). Never use `git add -A` or `git add .` — risks committing secrets or large binaries.
+- Write commit messages that explain *why*, not just *what*.
+
+## Push Policy
+
+- Push at least once per batch of features, or at the end of a work session.
+- Do not push mid-feature if the code is in a broken or partial state.
+
 ## Testing
 
 Dependencies (yt-dlp, feedparser, anthropic, etc.) are only installed inside the Docker container. Always rebuild and run tests there:
@@ -37,4 +53,13 @@ Seven analysis desks are configured in `config/pipeline.yaml` under `desks:` and
 
 ### Coverage gaps
 
-`stages/coverage_gaps.py` is a diagnostic stage that runs after `cross_domain`. It identifies blind spots in source coverage and appends to `output/coverage_gaps_history.jsonl` for recurring pattern detection. Output is artifacts-only — it never appears in the sent email.
+`stages/coverage_gaps.py` is a diagnostic stage that runs after `cross_domain`. It identifies blind spots in source coverage and appends to `output/coverage_gaps_history.jsonl` for recurring pattern detection. Output is artifacts-only — it never appears in the sent email. (Scheduled for deletion in the Graph Epic's Phase 1 dead-code removals.)
+
+## Article Enrichment
+
+- `enrich_articles` normalizes RSS items to canonical sanitized summaries.
+- Enrichment budgets are **tiered by source health**: `enrichment_required` feeds get uncapped fetches + browser-fetch fallback; `active`/`low_frequency` share the standard cap; `headline_radar`/`degraded`/`broken` are never fetched. See `config/pipeline.yaml` under `enrich_articles.tier_caps`.
+- Inspect `output/artifacts/YYYY-MM-DD/enrich_articles.json` for per-item provenance, status, tier, and before/after lengths.
+- Use `scripts/audit_rss_quality.py` to measure feed quality and tune `rss.feeds[].enrich.strategy`.
+- Use `scripts/source_health.py` to inspect per-feed `source_health.json` artifacts and monitor status transitions.
+- Cookie files for authenticated fetches live in `cookies/` and must not be committed.

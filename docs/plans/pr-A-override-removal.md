@@ -14,7 +14,7 @@
 
 **Scope (locked with stakeholder):** Core named set (#1 `tag_label`, #2 `tag`, #3 verbatim copy, #5 exactly-N, prompt-side duplicate caps, regex sweep) **plus** #4 (seam-links doc cleanup) and #12 (`domains_bridged` derive). **Deferred and explicitly out of scope:** #14 `source_depth` desk-schema drop → PR-E (don't touch `_recompute_source_depth` twice); #8 per-outlet cap consolidation → PR-C; #11 `_ensure_primary_glance_coverage` → PR-D; #13 dedup safety net → PR-E; #6/#7 seam evidence-gate graph queries → PR-D/PR-I; #9 `coverage_gaps` cap → moot (stage being deleted wholesale); #15 LOW `compress.py` target-words → deferred (not part of the named sweep).
 
-**Reference:** Master checklist is `docs/exploration/lemongraph-seams-assessment.md` Appendix A (15 findings). Epic: `docs/superpowers/plans/2026-05-24-Graph-Epic.md`. The epic's first success criterion requires every Appendix A finding be either removed or moved to the "not doing on purpose" bucket with a one-line reason (Task 9).
+**Reference:** Master checklist is `docs/exploration/lemongraph-seams-assessment.md` Appendix A (15 findings). Epic: `docs/plans/2026-05-24-Graph-Epic.md`. The epic's first success criterion requires every Appendix A finding be either removed or moved to the "not doing on purpose" bucket with a one-line reason (Task 9).
 
 ---
 

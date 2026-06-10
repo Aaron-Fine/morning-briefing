@@ -1,7 +1,7 @@
 # PR-0 — Instrumentation & Observability (design spec)
 
 **Date:** 2026-05-30
-**Epic:** `docs/superpowers/plans/2026-05-24-Graph-Epic.md` (Phase 1, leading PR)
+**Epic:** `docs/plans/2026-05-24-Graph-Epic.md` (Phase 1, leading PR)
 **Status:** design approved, ready for implementation plan
 
 ## Goal

@@ -12,7 +12,7 @@
 
 **Tech Stack:** Python 3.12, pytest, `unittest.mock`, stdlib `logging`/`threading`, OpenAI SDK (Fireworks), Anthropic SDK.
 
-**Spec:** `docs/superpowers/specs/2026-05-30-pr0-instrumentation-design.md`
+**Spec:** `docs/specs/2026-05-30-pr0-instrumentation-design.md`
 
 ---
 

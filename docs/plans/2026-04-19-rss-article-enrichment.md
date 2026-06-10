@@ -12,7 +12,7 @@
 
 **Tech Stack:** Python 3.12, `feedparser`, `curl-cffi` (new), `trafilatura` (new), `pytest`, Fireworks LLM via existing `morning_digest.llm.call_llm`, Docker (`python:3.12-slim` base).
 
-**Spec:** `docs/superpowers/specs/2026-04-19-rss-article-enrichment-design.md`
+**Spec:** `docs/specs/2026-04-19-rss-article-enrichment-design.md`
 
 **Commit/push discipline:** One feature per commit; stage files explicitly (`git add <file>`); commit at end of every task; push at each of the three natural batches (Task 2 end, Task 9 end, Task 13 end). Never `git add -A` / `git add .`.
 

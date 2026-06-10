@@ -15,7 +15,7 @@ Last updated: 2026-06-09
 
 The current body of work is the **Graph-Shaped Substrate and Seams
 Reconstruction** epic:
-`docs/superpowers/plans/2026-05-24-Graph-Epic.md`, based on the assessment in
+`docs/plans/2026-05-24-Graph-Epic.md`, based on the assessment in
 `docs/exploration/lemongraph-seams-assessment.md` (its Appendix A is the
 master override-removal checklist).
 
