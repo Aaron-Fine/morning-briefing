@@ -26,7 +26,6 @@ def test_comparable_stage_names_matches_expected_manifest_subset():
         "prepare_spiritual",
         "seams",
         "cross_domain",
-        "coverage_gaps",
     ]
 
 

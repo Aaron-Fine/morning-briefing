@@ -299,16 +299,6 @@ def _log_stage_observability(stage_name: str, outputs: dict) -> None:
             f"anomaly warning(s) across {anomaly_report.get('checks_run', 0)} checks"
         )
 
-    coverage_gaps = outputs.get("coverage_gaps")
-    if isinstance(coverage_gaps, dict):
-        gap_count = len(coverage_gaps.get("gaps", []) or [])
-        pattern_count = len(coverage_gaps.get("recurring_patterns", []) or [])
-        if gap_count or pattern_count:
-            log.info(
-                f"Stage '{stage_name}' coverage diagnostics: {gap_count} gap(s), "
-                f"{pattern_count} recurring pattern(s)"
-            )
-
 
 def _fold_stage_metrics(run_meta, stage_name, outputs, latency_s, retries):
     """Pop reserved metric keys from outputs and fold into run_meta['metrics'].
@@ -481,21 +471,6 @@ _STAGE_METADATA = {
         "model_defaults": {},
         "turn_model_overrides": None,
         "before_run": _prepare_cross_domain_context,
-    },
-    "coverage_gaps": {
-        "artifact_key": "coverage_gaps",
-        "context_keys": ["coverage_gaps"],
-        "non_critical": True,
-        "empty_output": {
-            "coverage_gaps": {
-                "schema_version": 1,
-                "date": "",
-                "gaps": [],
-                "recurring_patterns": [],
-            }
-        },
-        "model_defaults": {},
-        "turn_model_overrides": None,
     },
     "assemble": {
         "artifact_key": "digest_json",

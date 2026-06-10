@@ -373,7 +373,6 @@ def run(
     domain_failures = context.get("domain_analysis_failures", [])
     raw_rss_count = len(raw_sources.get("rss", []))
     analysis_unavailable = bool(domain_failures) and not at_a_glance and raw_rss_count > 0
-    coverage_gap_diagnostics = context.get("coverage_gaps", {}) if dry_run else {}
     stage_failures = _visible_stage_failures(context, config, dry_run)
     at_a_glance = _select_inline_seam_annotations(at_a_glance, seam_annotations)
 
@@ -392,7 +391,6 @@ def run(
         "contested_narratives": seam_data.get("contested_narratives", []),
         "coverage_gaps": seam_data.get("coverage_gaps", []),
         "key_assumptions": seam_data.get("key_assumptions", []),
-        "coverage_gap_diagnostics": coverage_gap_diagnostics,
         "local_items": local_items,
         "regional_items": regional_items,
         "market_context": market_context,

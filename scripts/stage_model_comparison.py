@@ -45,7 +45,6 @@ DEFAULT_STAGE_ORDER = (
     "prepare_spiritual",
     "seams",
     "cross_domain",
-    "coverage_gaps",
 )
 
 
@@ -376,10 +375,6 @@ def patch_stage(stage_name: str, tracer: TracedLLM):
             )
             stack.enter_context(
                 _patched_attr("stages.prepare_spiritual_weekly", "_write_artifact", lambda _path, _artifact: None)
-            )
-        if stage_name == "coverage_gaps":
-            stack.enter_context(
-                _patched_attr("stages.coverage_gaps", "_append_history", lambda _result: None)
             )
         yield
 
@@ -741,25 +736,6 @@ def _evaluate_cross_domain(outputs: dict[str, Any], _context: dict[str, Any]) ->
     )
 
 
-def _evaluate_coverage_gaps(outputs: dict[str, Any], _context: dict[str, Any]) -> OrderedDict[str, Any]:
-    data = (outputs or {}).get("coverage_gaps", {}) or {}
-    gaps = data.get("gaps", []) or []
-    recurring = data.get("recurring_patterns", []) or []
-    high = sum(1 for gap in gaps if gap.get("significance") == "high")
-    score = 100
-    if not data:
-        score = 0
-    return OrderedDict(
-        [
-            ("quality_score", max(score, 0)),
-            ("status", "ok" if data else "empty"),
-            ("gaps", len(gaps)),
-            ("high_significance", high),
-            ("recurring_patterns", len(recurring)),
-        ]
-    )
-
-
 _EVALUATORS: dict[str, Callable[[dict[str, Any], dict[str, Any]], OrderedDict[str, Any]]] = {
     "enrich_articles": _evaluate_enrich_articles,
     "compress": _evaluate_compress,
@@ -768,7 +744,6 @@ _EVALUATORS: dict[str, Callable[[dict[str, Any], dict[str, Any]], OrderedDict[st
     "prepare_spiritual": _evaluate_spiritual,
     "seams": _evaluate_seams,
     "cross_domain": _evaluate_cross_domain,
-    "coverage_gaps": _evaluate_coverage_gaps,
 }
 
 
