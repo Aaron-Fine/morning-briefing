@@ -1,5 +1,17 @@
 # PR-B prompt baseline
 
+> **WARNING (2026-06-09 audit): this baseline is not usable as-is for PR-B.**
+> (1) The frozen fixture it was rendered from no longer exists — no surviving
+> `output/artifacts/` day matches its content, and `output/artifacts/baseline/`
+> is gone (it likely lived in the PR-A worktree's `output/`, deleted at merge).
+> (2) The fixture was degenerate: every rendered `Item ID:` is **empty** and
+> tags are off-vocabulary (`middle-east-conflict`), i.e. it predates current
+> contracts. (3) Coverage is seams + cross_domain only; PR-B's bulk
+> (`analyze_domain_system.md` voice posture) has no captured baseline.
+> **Before PR-B:** stage a modern fixture (2026-05-01 has 51/51 item_ids),
+> pin it in git (`git add -f`), re-capture from `--stage analyze_domain` so
+> desk prompts are covered, and replace the files here.
+
 This directory's sibling `output/prompt_baseline/` holds the **rendered-prompt
 baseline** captured at the end of PR-0. PR-B (audience.yaml threading) re-runs the
 identical frozen fixture and diffs its rendered prompts against this baseline:
