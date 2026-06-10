@@ -775,56 +775,37 @@ class TestDomainResearch:
         assert [item["summary"] for item in grouped["econ"]] == ["Cached"]
 
 
-class TestCategoryRebalance:
-    def test_prepends_item_for_missing_category(self):
-        from stages.analyze_domain import _rebalance_categories
+class TestCategoryShareCap:
+    def test_no_synthetic_item_for_missing_category(self):
+        """Graph Epic: an unrepresented category stays silent — no manufactured item."""
+        from stages.analyze_domain import _enforce_category_share_cap
 
         desk_result = {"items": [{"item_id": "x", "category": "non-western"}]}
         desk_cfg = {"categories": {"non-western", "western-analysis"}}
-        rss_items = [
-            {"category": "non-western", "title": "A", "url": "https://a.com", "source": "A"},
-            {"category": "western-analysis", "title": "B", "url": "https://b.com", "source": "B"},
-        ]
-        result, log = _rebalance_categories("geopolitics", desk_result, desk_cfg, rss_items, [])
-        assert len(result["items"]) == 2
-        assert result["items"][0]["item_id"] == "geopolitics-western-analysis-rebalanced"
-        assert len(log) == 1
-
-    def test_noop_when_all_categories_represented(self):
-        from stages.analyze_domain import _rebalance_categories
-
-        desk_result = {
-            "items": [
-                {"item_id": "x", "category": "non-western"},
-                {"item_id": "y", "category": "western-analysis"},
-            ]
-        }
-        desk_cfg = {"categories": {"non-western", "western-analysis"}}
-        rss_items = [
-            {"category": "non-western", "title": "A", "url": "https://a.com"},
-            {"category": "western-analysis", "title": "B", "url": "https://b.com"},
-        ]
-        result, log = _rebalance_categories("geopolitics", desk_result, desk_cfg, rss_items, [])
-        assert len(result["items"]) == 2
-        assert len(log) == 0
-
-    def test_can_disable_rebalance_per_desk(self):
-        from stages.analyze_domain import _rebalance_categories
-
-        desk_result = {"items": [{"item_id": "x", "category": "non-western"}]}
-        desk_cfg = {
-            "categories": {"non-western", "western-analysis"},
-            "category_rebalance": {"enabled": False},
-        }
-        rss_items = [
-            {"category": "western-analysis", "title": "B", "url": "https://b.com", "source": "B"},
-        ]
-        result, log = _rebalance_categories("geopolitics", desk_result, desk_cfg, rss_items, [])
+        result, log = _enforce_category_share_cap("geopolitics", desk_result, desk_cfg, [])
         assert result["items"] == [{"item_id": "x", "category": "non-western"}]
         assert log == []
 
+    def test_can_disable_per_desk(self):
+        from stages.analyze_domain import _enforce_category_share_cap
+
+        desk_result = {
+            "items": [
+                {"item_id": "a", "category": "non-western"},
+                {"item_id": "b", "category": "non-western"},
+                {"item_id": "c", "category": "western-analysis"},
+            ]
+        }
+        desk_cfg = {
+            "categories": {"non-western", "western-analysis"},
+            "category_rebalance": {"enabled": False, "max_category_share": 0.34},
+        }
+        result, log = _enforce_category_share_cap("geopolitics", desk_result, desk_cfg, [])
+        assert len(result["items"]) == 3
+        assert log == []
+
     def test_category_share_cap_drops_excess_dominant_items(self):
-        from stages.analyze_domain import _rebalance_categories
+        from stages.analyze_domain import _enforce_category_share_cap
 
         desk_result = {
             "items": [
@@ -838,7 +819,7 @@ class TestCategoryRebalance:
             "categories": {"non-western", "western-analysis"},
             "category_rebalance": {"enabled": True, "max_category_share": 0.5},
         }
-        result, log = _rebalance_categories("geopolitics", desk_result, desk_cfg, [], [])
+        result, log = _enforce_category_share_cap("geopolitics", desk_result, desk_cfg, [])
         assert [item["item_id"] for item in result["items"]] == ["a", "b", "d"]
         assert any(entry["action"] == "dropped_for_category_share_cap" for entry in log)
 
