@@ -12,3 +12,16 @@ cache/rss_fetch_state.json
 cache/article_bodies/
 cookies/
 state/spiritual/weekly/*.md
+
+# Agent/IDE environment mounts and local tool config
+.bash_profile
+.bashrc
+.gitconfig
+.gitmodules
+.idea
+.mcp.json
+.profile
+.ripgreprc
+.vscode
+.zprofile
+.zshrc
