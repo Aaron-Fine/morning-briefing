@@ -1,5 +1,9 @@
 # PR-A: Appendix A Override Removal — Implementation Plan
 
+> **Status: COMPLETE.** Merged to main as PR #3 (2026-06-07). Appendix A
+> dispositions recorded in `docs/exploration/lemongraph-seams-assessment.md`;
+> prompt baseline re-captured. Kept as historical record.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Remove the deterministic-override sprawl in the cross_domain/seams path so the LLM does selection + judgment only, and Python does the joins, derivations, and caps — eliminating the "LLM emits it, code rewrites it" pattern for `tag`, `tag_label`, verbatim `facts`/`analysis`, `domains_bridged`, the "exactly N" quotas, the hedged-seam regex, and the duplicate prompt-side caps.

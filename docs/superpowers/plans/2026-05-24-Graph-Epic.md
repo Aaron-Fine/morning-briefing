@@ -16,7 +16,7 @@ These three classes of debt have a common root: the Python/LLM boundary is drawn
 
 The redesigned pipeline applies a single principle systematically: **LLMs do judgment and generation; Python does counting, joins, structural transforms, and quota enforcement; embeddings do semantic similarity. Every override pattern in the current pipeline is the LLM being asked to do Python work.**
 
-From this principle, four operating rules follow.
+From this principle, five operating rules follow.
 
 First, **wherever the prompt asks the LLM to do something the code then overrides, remove the prompt instruction**. If Python can derive the value, drop the schema field and derive it. If the LLM should reliably produce it, tighten the prompt and remove the override. Either direction eliminates the "LLM does it, code corrects it" pattern.
 
@@ -58,7 +58,7 @@ Because nothing is delivered daily, the only data available through Phases 1–4
 
 **Phase 1: Structural cleanup.** PR-0 (instrumentation) leads — it ships first so every subsequent PR has observability to reason from. The three working PRs that follow (PR-A, PR-B, PR-C) plus the dead-code removals are independent of graph work and shippable in any order among themselves.
 
-PR-0 instrumentation. Originally framed narrowly as a domain_research usage counter "so we have data before Phase 5." That framing is stale — there are no daily runs accumulating a time-series until Phase 4/5 (see verification section) — but the *capability* is more valuable than first scoped, not less, because every conditional decision in this epic is now "reason from inspected test runs," and instrumentation is what those test runs surface. So PR-0 ships a **per-run observability artifact** (`run_metrics.json`, rendered into the Phase 5 smoke-detector surface) rather than a single counter. It is cheap, always-on, and append-friendly so that whenever delivery does resume it begins accumulating a history. What it records, and the decision each field feeds:
+PR-0 instrumentation. Originally framed narrowly as a domain_research usage counter "so we have data before Phase 5." That framing is stale — there are no daily runs accumulating a time-series until Phase 4/5 (see verification section) — but the *capability* is more valuable than first scoped, not less, because every conditional decision in this epic is now "reason from inspected test runs," and instrumentation is what those test runs surface. So PR-0 ships a **per-run observability artifact** (shipped as the `metrics` key of `run_meta.json`, rendered into the Phase 5 smoke-detector surface) rather than a single counter. It is cheap, always-on, and append-friendly so that whenever delivery does resume it begins accumulating a history. What it records, and the decision each field feeds:
 
 - **Per-stage cost/usage** — model used, tokens in/out, latency, retry/parse-failure count, estimated cost, per stage. *Feeds:* the model strategy (fifth operating rule) — validates that the cheap schema-reliable model holds across stages and quantifies the Kimi→MiniMax savings; also surfaces parse-failure rates that gate the post-Phase-4 cheap-model re-test.
 - **Override firing counts** — for each deterministic override in Appendix A, how often per run it actually *mutated* LLM output (e.g. `_recompute_source_depth` changed the value N times, `_normalize_tag` remapped M off-vocabulary tags, `_ensure_primary_glance_coverage` re-injected K items, `_rebalance_categories` synthesized J fallback items). *Feeds:* PR-A — turns override removal from a judgment call into evidence. An override that fires zero times across test runs is dead weight to delete outright; one that fires often is proof the LLM genuinely can't do that work, so the fix is "derive in Python, drop the prompt instruction," not "tighten the prompt."
@@ -120,7 +120,7 @@ Anomaly stage absorbs source_health (currently a separate script with a 14-day w
 
 New checks: galaxy-brained over-coverage (flag when source_depth is concentrated in a short time window, suggesting attention-economy distortion rather than genuine importance), genre confusion (finer per-article reliability tiering that distinguishes op-eds inside primary-reporting outlets from straight reporting), local fallback in `prepare_local.py` (try Cache Valley first, fall back to Utah-wide, fall back to Mountain West if both are dry; 3-day grace period before the anomaly check fires on missing local), Sigma-rules refactor (refactor anomaly into `config/anomaly_rules.yaml` *only* if adding the next two checks brings the total to five — three current plus two new — otherwise defer the framework refactor).
 
-Domain_research loop decision lives here, informed by PR-0's `run_metrics.json` across the test runs accumulated through Phases 1–4 (and any production history once delivery resumes): keep if the loop fires routinely and produces value, simplify if it fires but adds little, drop if it rarely fires at all.
+Domain_research loop decision lives here, informed by PR-0's `run_meta.json` metrics across the test runs accumulated through Phases 1–4 (and any production history once delivery resumes): keep if the loop fires routinely and produces value, simplify if it fires but adds little, drop if it rarely fires at all.
 
 ## What we are not doing, and why
 

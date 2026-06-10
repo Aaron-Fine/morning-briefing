@@ -1,5 +1,9 @@
 # PR-0 Instrumentation & Observability Implementation Plan
 
+> **Status: COMPLETE.** Merged to main as PR #2 (2026-06-02). Metrics land
+> under `run_meta.json` → `metrics`; the PR-B prompt baseline lives in
+> `output/prompt_baseline/` (re-captured after PR-A). Kept as historical record.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add per-run observability (LLM usage, override-firing counts, item-flow) into `run_meta.json`, plus live mid-run progress logging with a heartbeat, and a `--capture-prompts` flag that produces the PR-B baseline — all observe-only, no pipeline behavior change.

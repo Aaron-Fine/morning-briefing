@@ -1,5 +1,8 @@
 # Stage Contract Hardening Plan
 
+> **Status: COMPLETE.** All five phases implemented (2026-04-22/23); full
+> Dockerized suite passed (924 tests). Kept as historical record.
+
 Date: 2026-04-22
 
 ## Problem

@@ -144,6 +144,7 @@ python pipeline.py --sources-only          # collect and dump output/sources.jso
 python pipeline.py --lookback-hours 72     # override YouTube lookback window
 python pipeline.py --stage cross_domain    # re-run from a specific stage (loads prior artifacts)
 python pipeline.py --stage cross_domain --from-plan  # reuse today's editorial plan, re-run execution only
+python pipeline.py --capture-prompts <dir>           # also write each rendered LLM prompt to <dir> (observe-only)
 ```
 
 ### Checking output

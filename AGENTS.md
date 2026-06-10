@@ -29,11 +29,11 @@ Contract tests in `tests/test_contracts.py` verify consistency across these surf
 
 ### Desk manifest
 
-Seven analysis desks are configured in `config.yaml` under `desks:` and implemented in `stages/analyze_domain.py` (`_DOMAIN_CONFIGS`). Each desk maps RSS feed categories to a specialist analysis pass. Desks run in parallel via `ThreadPoolExecutor`.
+Seven analysis desks are configured in `config/pipeline.yaml` under `desks:` and implemented in `stages/analyze_domain.py` (`_DOMAIN_CONFIGS`). Each desk maps RSS feed categories to a specialist analysis pass. Desks run in parallel via `ThreadPoolExecutor`.
 
 ### Two-turn stages
 
-`seams` and `cross_domain` use a two-turn LLM pattern (scan → synthesis and plan → execute respectively). Per-turn model overrides are configured in `config.yaml` under `turns.<turn_name>`.
+`seams` and `cross_domain` use a two-turn LLM pattern (scan → synthesis and plan → execute respectively). Per-turn model overrides are configured in `config/pipeline.yaml` under `pipeline.stages[].turns.<turn_name>`.
 
 ### Coverage gaps
 

@@ -1,6 +1,6 @@
 # Morning Digest — TODO
 
-Last updated: 2026-05-30
+Last updated: 2026-06-09
 
 > **Design-intent note.** When triaging items marked "stale" or "unused,"
 > first ask whether the feature was *intentional but silently broken* (e.g.
@@ -36,7 +36,8 @@ source of truth for personalization, and reconstruct seams. The pipeline is
       exist; line numbers drift — grep by symbol at PR time).
 - [x] Replace the stale personalization "five files" claim with the real
       ~dozen-file inventory (mostly prompt markdown) — see PR-B.
-- [x] Expand PR-0 into a per-run observability artifact (`run_metrics.json`)
+- [x] Expand PR-0 into a per-run observability artifact (`run_meta.json` →
+      `metrics`)
       that feeds every later keep-or-drop decision.
 - [x] **PR-0 leads Phase 1** — built up front (observe-only), extended by
       later phases. The PR-B rendered-prompt baseline is captured at the *end
@@ -45,15 +46,19 @@ source of truth for personalization, and reconstruct seams. The pipeline is
 
 ## Next: Phase 1 (structural cleanup)
 
-PR-0 leads; PR-A/B/C are order-independent after it (lead with PR-A — it has
-the validated checklist behind it). See the epic for detail.
+PR-0 (merged 2026-06-02, PR #2) and PR-A (merged 2026-06-07, PR #3) have
+landed. PR-B and PR-C are order-independent; **PR-B is next** — its
+rendered-prompt baseline was re-captured post-PR-A and is current. See the
+epic for detail.
 
-- [ ] **PR-0** — per-run `run_metrics.json` observability (per-stage
-      cost/usage, override firing counts, item-flow, domain_research loop).
-      Capture the PR-B rendered-prompt baseline at the end.
+- [x] **PR-0** — per-run observability in `run_meta.json` (`metrics` key:
+      per-stage cost/usage, override firing counts, item-flow,
+      domain_research loop). PR-B rendered-prompt baseline captured at the
+      end (`output/prompt_baseline/`, see `docs/prompt-baseline-README.md`).
 - [x] **PR-A** — work the Appendix A override checklist; drop `tag_label`,
       derive `tag` from desk-of-origin, switch cross_domain to item_id
-      selection, relax "exactly N" → "up to N", regex sweep.
+      selection, relax "exactly N" → "up to N", regex sweep. Dispositions
+      recorded in the assessment's Appendix A.
 - [ ] **PR-B** — `audience.yaml` as single source of truth; thread into the
       ~dozen files in the inventory (mostly prompts). Prompt-diff verification.
 - [ ] **PR-C** — consolidate per-outlet caps to assemble; reliability-tier

@@ -1,5 +1,9 @@
 # RSS Article Enrichment Implementation Plan
 
+> **Status: COMPLETE.** Landed via `feat/rss-article-enrichment` (in main as
+> of 2026-05-01, including the source-quality follow-ups; see TODO.md
+> "Completed work"). Kept as historical record.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Normalize every RSS item to the same downstream contract: a sanitized, canonical `summary` field with comparable density and length, regardless of whether the source text came from RSS `summary`, RSS `description`, RSS `content:encoded`, an anonymous article fetch, or an authenticated article fetch.
