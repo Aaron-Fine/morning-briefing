@@ -355,10 +355,13 @@ class TestAssembleRun:
         assert result["template_data"]["worth_reading"] == []
 
     @patch("stages.assemble.render_email")
-    def test_malformed_cross_domain_output_falls_back_to_domain_analysis(
+    def test_malformed_cross_domain_output_produces_empty_digest_with_drift(
         self, mock_render
     ):
-        mock_render.return_value = "<html>fallback</html>"
+        """Phase 1 fallback removed: malformed editor output yields an empty
+        digest plus contract-drift records, never a digest rebuilt from raw
+        domain_analysis."""
+        mock_render.return_value = "<html>empty</html>"
         context = {
             "cross_domain_output": {"at_a_glance": "bad"},
             "domain_analysis": {
@@ -366,7 +369,7 @@ class TestAssembleRun:
                     "items": [
                         {
                             "tag": "ai",
-                            "headline": "Domain fallback",
+                            "headline": "Domain item",
                             "facts": "Facts",
                             "analysis": "Analysis",
                             "links": [],
@@ -386,9 +389,8 @@ class TestAssembleRun:
 
         result = run(context, config)
 
-        assert result["template_data"]["at_a_glance"][0]["headline"] == (
-            "Domain fallback"
-        )
+        assert result["template_data"]["at_a_glance"] == []
+        assert result["template_data"]["deep_dives"] == []
         assert {
             "artifact": "cross_domain_output",
             "path": "cross_domain_output.at_a_glance",
