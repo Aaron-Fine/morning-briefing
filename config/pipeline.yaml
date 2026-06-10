@@ -85,7 +85,6 @@ pipeline:
         temperature: 0.3
   - name: assemble
   - name: anomaly
-  - name: briefing_packet
   - name: send
 desks:
 - name: geopolitics_events

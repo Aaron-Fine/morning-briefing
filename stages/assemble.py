@@ -404,7 +404,7 @@ def run(
 
     # digest_json mirrors template_data but with:
     # - deep dive body as plain string (not Markup) for artifact storage
-    # - cross_domain metadata preserved for briefing_packet and future use
+    # - cross_domain metadata preserved for artifact inspection and future use
     digest_json = dict(template_data)
     digest_json["deep_dives"] = deep_dives_raw
     digest_json["cross_domain_connections"] = cross_domain_output.get(

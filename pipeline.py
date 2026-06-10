@@ -492,14 +492,6 @@ _STAGE_METADATA = {
         "model_defaults": None,
         "turn_model_overrides": None,
     },
-    "briefing_packet": {
-        "artifact_key": "briefing_packet",
-        "context_keys": ["briefing_packet"],
-        "non_critical": True,
-        "empty_output": {"briefing_packet": {}},
-        "model_defaults": None,
-        "turn_model_overrides": None,
-    },
     "send": {
         "artifact_key": "send_result",
         "context_keys": ["send_result"],
