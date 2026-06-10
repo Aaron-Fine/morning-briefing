@@ -68,6 +68,17 @@ epic for detail.
 
 Phases 2–5 are detailed in the epic and not expanded here until Phase 1 lands.
 
+> **Stress-test amendments (2026-06-09), recorded in the epic — read them
+> before writing the PR-C/PR-D plan docs:** PR-D gains four spec requirements
+> (deterministic key canonicalization, hub-key damping, connected
+> components + degree stats as deep-dive candidates, serialized per-run
+> index artifact) — driven by real 2026-05-01 hook data showing hub-key
+> candidate explosion (`defense-procurement` on 35/51 items) and key
+> fragmentation (`US` vs `United States`). Also: the one-graph invariant
+> (PR-D index and PR-E clusters are one structure), PR-C's
+> selection-under-constraints framing, the narrowed Phase 3 embedding
+> gate, and Phase 5's galaxy-brained check as a degree query.
+
 ---
 
 ## Open deferred cleanup (carried over, not yet done)
