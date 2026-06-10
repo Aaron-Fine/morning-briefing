@@ -14,8 +14,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from morning_digest.tags import TAG_LABELS as _TAG_LABELS
 from stages.assemble import (
     _item_to_glance,
-    _domain_item_to_deep_dive,
-    _build_from_domain_analysis,
     _extract_peripheral_data,
     _visible_stage_failures,
     _select_inline_seam_annotations,
@@ -151,239 +149,6 @@ class TestInlineSeamAnnotations:
         result = _select_inline_seam_annotations(items, annotations)
 
         assert result[0]["seam_annotation"]["one_line"] == "High."
-
-
-class TestDomainItemToDeepDive:
-    def test_basic_conversion(self):
-        item = {
-            "headline": "Deep dive headline",
-            "tag": "war",
-            "facts": "<p>Facts paragraph.</p>",
-            "analysis": "<p>Analysis paragraph.</p>",
-            "deep_dive_rationale": "Why this matters.",
-            "links": [{"url": "https://example.com", "label": "Example"}],
-            "source_depth": "corroborated",
-        }
-        result = _domain_item_to_deep_dive(item)
-        assert result["headline"] == "Deep dive headline"
-        assert result["tag"] == "war"
-        assert result["why_it_matters"] == "Why this matters."
-        assert result["further_reading"] == [
-            {"url": "https://example.com", "label": "Example"}
-        ]
-        assert result["source_depth"] == "corroborated"
-        assert "<p>Facts paragraph.</p>" in result["body"]
-        assert "<p>Analysis paragraph.</p>" in result["body"]
-
-    def test_body_joins_facts_and_analysis(self):
-        item = {"facts": "F1", "analysis": "A1"}
-        result = _domain_item_to_deep_dive(item)
-        assert result["body"] == "<p>F1</p>\n<p>A1</p>"
-
-    def test_body_only_facts(self):
-        item = {"facts": "F1", "analysis": ""}
-        result = _domain_item_to_deep_dive(item)
-        assert result["body"] == "<p>F1</p>"
-
-    def test_body_only_analysis(self):
-        item = {"facts": "", "analysis": "A1"}
-        result = _domain_item_to_deep_dive(item)
-        assert result["body"] == "<p>A1</p>"
-
-    def test_empty_body(self):
-        item = {"facts": "", "analysis": ""}
-        result = _domain_item_to_deep_dive(item)
-        assert result["body"] == ""
-
-    def test_missing_fields_defaults(self):
-        item = {}
-        result = _domain_item_to_deep_dive(item)
-        assert result["headline"] == ""
-        assert result["tag"] == ""
-        assert result["body"] == ""
-        assert result["why_it_matters"] == ""
-        assert result["further_reading"] == []
-        assert result["source_depth"] == ""
-
-
-class TestBuildFromDomainAnalysis:
-    def test_basic_extraction(self):
-        context = {
-            "domain_analysis": {
-                "ai_tech": {
-                    "items": [
-                        {
-                            "tag": "ai",
-                            "headline": "AI story",
-                            "facts": "Facts",
-                            "analysis": "Analysis",
-                        },
-                        {
-                            "tag": "tech",
-                            "headline": "Tech story",
-                            "facts": "Tech facts",
-                            "analysis": "Tech analysis",
-                        },
-                    ]
-                },
-                "geopolitics": {
-                    "items": [
-                        {
-                            "tag": "war",
-                            "headline": "War story",
-                            "facts": "War facts",
-                            "analysis": "War analysis",
-                        }
-                    ]
-                },
-            }
-        }
-        config = {
-            "digest": {
-                "at_a_glance": {"max_items": 14, "normal_items": 10},
-                "deep_dives": {"count": 2},
-            }
-        }
-        at_a_glance, deep_dives, market_context = _build_from_domain_analysis(
-            context, config
-        )
-        assert len(at_a_glance) == 3
-        assert len(deep_dives) == 0
-        assert market_context == ""
-
-    def test_market_context_from_econ(self):
-        context = {
-            "domain_analysis": {
-                "econ": {
-                    "market_context": "Markets are up today.",
-                    "items": [],
-                }
-            }
-        }
-        config = {
-            "digest": {
-                "at_a_glance": {"max_items": 14, "normal_items": 10},
-                "deep_dives": {"count": 2},
-            }
-        }
-        _, _, market_context = _build_from_domain_analysis(context, config)
-        assert market_context == "Markets are up today."
-
-    def test_deep_dive_candidates_extracted(self):
-        context = {
-            "domain_analysis": {
-                "ai_tech": {
-                    "items": [
-                        {
-                            "tag": "ai",
-                            "headline": "AI deep dive",
-                            "facts": "Facts",
-                            "analysis": "Analysis",
-                            "deep_dive_candidate": True,
-                            "deep_dive_rationale": "Important AI topic.",
-                        },
-                        {
-                            "tag": "tech",
-                            "headline": "Regular tech story",
-                            "facts": "Tech facts",
-                            "analysis": "Tech analysis",
-                        },
-                    ]
-                }
-            }
-        }
-        config = {
-            "digest": {
-                "at_a_glance": {"max_items": 14, "normal_items": 10},
-                "deep_dives": {"count": 2},
-            }
-        }
-        at_a_glance, deep_dives, _ = _build_from_domain_analysis(context, config)
-        assert len(at_a_glance) == 1
-        assert len(deep_dives) == 1
-        assert deep_dives[0]["headline"] == "AI deep dive"
-
-    def test_deep_dive_count_capped(self):
-        candidates = [
-            {
-                "tag": "ai",
-                "headline": f"Deep dive {i}",
-                "facts": f"Facts {i}",
-                "analysis": f"Analysis {i}",
-                "deep_dive_candidate": True,
-            }
-            for i in range(5)
-        ]
-        context = {"domain_analysis": {"ai_tech": {"items": candidates}}}
-        config = {
-            "digest": {
-                "at_a_glance": {"max_items": 14, "normal_items": 10},
-                "deep_dives": {"count": 2},
-            }
-        }
-        _, deep_dives, _ = _build_from_domain_analysis(context, config)
-        assert len(deep_dives) == 2
-
-    def test_sorting_by_source_depth(self):
-        items = [
-            {
-                "tag": "ai",
-                "headline": "Single",
-                "facts": "F",
-                "source_depth": "single-source",
-            },
-            {
-                "tag": "war",
-                "headline": "Widely",
-                "facts": "F",
-                "source_depth": "widely-reported",
-            },
-            {
-                "tag": "tech",
-                "headline": "Corroborated",
-                "facts": "F",
-                "source_depth": "corroborated",
-            },
-        ]
-        context = {"domain_analysis": {"misc": {"items": items}}}
-        config = {
-            "digest": {
-                "at_a_glance": {"max_items": 14, "normal_items": 10},
-                "deep_dives": {"count": 2},
-            }
-        }
-        at_a_glance, _, _ = _build_from_domain_analysis(context, config)
-        headlines = [i["headline"] for i in at_a_glance]
-        assert headlines == ["Widely", "Corroborated", "Single"]
-
-    def test_at_a_glance_cap_enforced(self):
-        items = [
-            {"tag": "ai", "headline": f"Item {i}", "facts": "F"} for i in range(20)
-        ]
-        context = {"domain_analysis": {"misc": {"items": items}}}
-        config = {
-            "digest": {
-                "at_a_glance": {"max_items": 7, "normal_items": 10},
-                "deep_dives": {"count": 2},
-            }
-        }
-        at_a_glance, _, _ = _build_from_domain_analysis(context, config)
-        assert len(at_a_glance) == 7
-
-    def test_empty_domain_analysis(self):
-        context = {"domain_analysis": {}}
-        config = {
-            "digest": {
-                "at_a_glance": {"max_items": 14, "normal_items": 10},
-                "deep_dives": {"count": 2},
-            }
-        }
-        at_a_glance, deep_dives, market_context = _build_from_domain_analysis(
-            context, config
-        )
-        assert at_a_glance == []
-        assert deep_dives == []
-        assert market_context == ""
 
 
 class TestExtractPeripheralData:
@@ -536,8 +301,9 @@ class TestAssembleRun:
         mock_render.assert_called_once()
 
     @patch("stages.assemble.render_email")
-    def test_phase_1_domain_analysis(self, mock_render):
-        mock_render.return_value = "<html>phase1</html>"
+    def test_domain_analysis_alone_produces_empty_digest(self, mock_render):
+        """Phase 1 fallback removed: without cross_domain_output the digest is empty."""
+        mock_render.return_value = "<html>empty</html>"
         context = {
             "domain_analysis": {
                 "ai_tech": {
@@ -549,10 +315,6 @@ class TestAssembleRun:
                             "analysis": "Analysis",
                         }
                     ]
-                },
-                "econ": {
-                    "market_context": "Econ context.",
-                    "items": [],
                 },
             },
             "seam_data": {
@@ -567,19 +329,14 @@ class TestAssembleRun:
                 "at_a_glance": {"max_items": 14, "normal_items": 10},
                 "deep_dives": {"count": 2},
             },
-            "rss": {"feeds": [{"name": "TechCrunch"}]},
-            "local_news": {"sources": [{"name": "Local Paper"}]},
-            "youtube": {"analysis_channels": [{"name": "AI Channel"}]},
         }
 
         result = run(context, config)
 
         assert "html" in result
-        assert len(result["template_data"]["at_a_glance"]) == 1
-        assert result["template_data"]["market_context"] == "Econ context."
+        assert result["template_data"]["at_a_glance"] == []
+        assert result["template_data"]["deep_dives"] == []
         assert result["template_data"]["worth_reading"] == []
-        assert result["template_data"]["rss_source_names"] == "TechCrunch, Local Paper"
-        assert result["template_data"]["yt_source_names"] == "AI Channel"
 
     @patch("stages.assemble.render_email")
     def test_empty_fallback_produces_valid_output(self, mock_render):
