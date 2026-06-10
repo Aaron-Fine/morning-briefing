@@ -1,16 +1,12 @@
 """Stage: assemble — Merge all stage outputs and render the HTML digest.
 
-Supports two pipeline configurations:
-  Phase 3+: cross_domain_output present → use editor-in-chief output
-  Phase 1:  domain_analysis present → merge domain artifacts into template format
-
-Inputs (Phase 3+):
+Inputs:
   cross_domain_output (dict), calendar (dict), weather (dict),
   spiritual (dict), local_items (list), seam_data (dict), raw_sources (dict)
 
-Inputs (Phase 1):
-  domain_analysis (dict), calendar (dict), weather (dict),
-  spiritual (dict), local_items (list), seam_data (dict), raw_sources (dict)
+A missing or empty cross_domain_output produces an empty digest rather than
+falling back to raw domain_analysis (the legacy Phase 1 fallback was removed
+as Graph Epic Phase 1 dead code; that situation no longer occurs upstream).
 
 Outputs: html (str), template_data (dict), digest_json (dict)
 
@@ -160,67 +156,6 @@ def _select_inline_seam_annotations(
     return rendered
 
 
-def _domain_item_to_deep_dive(item: dict) -> dict:
-    """Convert a deep_dive_candidate domain item to deep_dives format."""
-    facts = item.get("facts", "")
-    analysis = item.get("analysis", "")
-
-    body_parts = []
-    if facts:
-        body_parts.append(f"<p>{facts}</p>")
-    if analysis:
-        body_parts.append(f"<p>{analysis}</p>")
-
-    return {
-        "headline": item.get("headline", ""),
-        "tag": item.get("tag", ""),  # preserved for anomaly detection
-        "body": "\n".join(body_parts),
-        "why_it_matters": item.get(
-            "deep_dive_rationale", ""
-        ),  # rendered in callout box
-        "further_reading": item.get("links", []),
-        "source_depth": item.get("source_depth", ""),
-    }
-
-
-def _build_from_domain_analysis(context: dict, config: dict) -> tuple[list, list, str]:
-    """Build at_a_glance, deep_dives, market_context from domain_analysis artifact."""
-    domain_analysis = context.get("domain_analysis", {})
-
-    all_items: list[dict] = []
-    deep_dive_candidates: list[dict] = []
-    market_context = ""
-
-    for domain_key, domain_result in domain_analysis.items():
-        if domain_key == "econ" and domain_result.get("market_context"):
-            market_context = domain_result["market_context"]
-        for item in domain_result.get("items", []):
-            if item.get("deep_dive_candidate"):
-                deep_dive_candidates.append(item)
-            else:
-                all_items.append(item)
-
-    # Sort all items: widely-reported first, then corroborated, then single-source
-    _depth_order = {"widely-reported": 0, "corroborated": 1, "single-source": 2, "": 3}
-    all_items.sort(key=lambda i: _depth_order.get(i.get("source_depth", ""), 3))
-
-    # Enforce at_a_glance count limits from config (Phase 1 fallback only;
-    # Phase 3 cross_domain enforces caps via its LLM prompt).
-    digest_cfg = config.get("digest", {}).get("at_a_glance", {})
-    max_items = digest_cfg.get("max_items", 7)
-    normal_items = digest_cfg.get("normal_items", 5)
-    cap = min(max_items, max(normal_items, len(all_items)))
-
-    at_a_glance = [_item_to_glance(i) for i in all_items[:cap]]
-
-    # Select up to 3 deep dives from candidates
-    max_dives = config.get("digest", {}).get("deep_dives", {}).get("count", 2)
-    selected_dives = deep_dive_candidates[:max_dives]
-    deep_dives = [_domain_item_to_deep_dive(i) for i in selected_dives]
-
-    return at_a_glance, deep_dives, market_context
-
-
 def _extract_peripheral_data(context: dict, raw_sources: dict) -> dict:
     """Extract spiritual, weather, calendar, and local data from context with raw_sources fallback."""
     spiritual = context.get("spiritual")
@@ -289,7 +224,6 @@ def run(
 
     today = now_local()
 
-    # --- Select pipeline mode ---
     use_cross_domain_output = bool(
         cross_domain_output.get("at_a_glance")
         or cross_domain_output.get("deep_dives")
@@ -298,23 +232,14 @@ def run(
         or cross_domain_output.get("cross_domain_connections")
     )
     if use_cross_domain_output:
-        log.info("assemble: using cross_domain_output (Phase 3 mode)")
         xd = cross_domain_output
         at_a_glance = [_item_to_glance(i) for i in xd.get("at_a_glance", [])]
         deep_dives_raw = xd.get("deep_dives", [])
         market_context = xd.get("market_context", "")
         worth_reading = xd.get("worth_reading", [])
-
-    elif domain_analysis:
-        log.info("assemble: using domain_analysis artifacts (Phase 1 mode)")
-        at_a_glance, deep_dives_raw, market_context = _build_from_domain_analysis(
-            {**context, "domain_analysis": domain_analysis}, config
-        )
-        worth_reading = []
-
     else:
         log.error(
-            "assemble: no pipeline output found in context — producing empty digest"
+            "assemble: no usable cross_domain_output — producing empty digest"
         )
         at_a_glance = []
         deep_dives_raw = []
@@ -373,7 +298,6 @@ def run(
     domain_failures = context.get("domain_analysis_failures", [])
     raw_rss_count = len(raw_sources.get("rss", []))
     analysis_unavailable = bool(domain_failures) and not at_a_glance and raw_rss_count > 0
-    coverage_gap_diagnostics = context.get("coverage_gaps", {}) if dry_run else {}
     stage_failures = _visible_stage_failures(context, config, dry_run)
     at_a_glance = _select_inline_seam_annotations(at_a_glance, seam_annotations)
 
@@ -392,7 +316,6 @@ def run(
         "contested_narratives": seam_data.get("contested_narratives", []),
         "coverage_gaps": seam_data.get("coverage_gaps", []),
         "key_assumptions": seam_data.get("key_assumptions", []),
-        "coverage_gap_diagnostics": coverage_gap_diagnostics,
         "local_items": local_items,
         "regional_items": regional_items,
         "market_context": market_context,
@@ -406,7 +329,7 @@ def run(
 
     # digest_json mirrors template_data but with:
     # - deep dive body as plain string (not Markup) for artifact storage
-    # - cross_domain metadata preserved for briefing_packet and future use
+    # - cross_domain metadata preserved for artifact inspection and future use
     digest_json = dict(template_data)
     digest_json["deep_dives"] = deep_dives_raw
     digest_json["cross_domain_connections"] = cross_domain_output.get(

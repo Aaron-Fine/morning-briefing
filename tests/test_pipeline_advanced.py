@@ -327,7 +327,6 @@ class TestStageMetadataConsistency:
             "cross_domain",
             "assemble",
             "anomaly",
-            "briefing_packet",
             "send",
         ]
         for stage in known_stages:
@@ -357,12 +356,11 @@ class TestStageArtifactKeyMapping:
             "cross_domain",
             "assemble",
             "anomaly",
-            "briefing_packet",
             "send",
         ]
         for stage in known_stages:
             key = _stage_artifact_key(stage)
-            if stage in {"briefing_packet", "enrich_articles"}:
+            if stage == "enrich_articles":
                 continue  # intentionally maps to itself
             assert key != stage, (
                 f"Stage '{stage}' falls through to identity fallback"

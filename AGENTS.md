@@ -51,10 +51,6 @@ Seven analysis desks are configured in `config/pipeline.yaml` under `desks:` and
 
 `seams` and `cross_domain` use a two-turn LLM pattern (scan → synthesis and plan → execute respectively). Per-turn model overrides are configured in `config/pipeline.yaml` under `pipeline.stages[].turns.<turn_name>`.
 
-### Coverage gaps
-
-`stages/coverage_gaps.py` is a diagnostic stage that runs after `cross_domain`. It identifies blind spots in source coverage and appends to `output/coverage_gaps_history.jsonl` for recurring pattern detection. Output is artifacts-only — it never appears in the sent email. (Scheduled for deletion in the Graph Epic's Phase 1 dead-code removals.)
-
 ## Article Enrichment
 
 - `enrich_articles` normalizes RSS items to canonical sanitized summaries.

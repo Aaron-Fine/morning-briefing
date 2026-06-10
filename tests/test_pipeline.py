@@ -95,7 +95,6 @@ class TestStageArtifactKey:
             "cross_domain": "cross_domain_output",
             "assemble": "digest_json",
             "anomaly": "anomaly_report",
-            "briefing_packet": "briefing_packet",
             "send": "send_result",
         }
         for stage, expected_key in mappings.items():
@@ -152,10 +151,6 @@ class TestEmptyStageOutput:
         output = _empty_stage_output("anomaly")
         assert "anomaly_report" in output
         assert "anomalies" in output["anomaly_report"]
-
-    def test_briefing_packet_returns_empty_dict(self):
-        output = _empty_stage_output("briefing_packet")
-        assert "briefing_packet" in output
 
     def test_unknown_stage_returns_empty_dict(self):
         output = _empty_stage_output("nonexistent_stage")
@@ -283,7 +278,7 @@ class TestArtifactPersistence:
 
 
 class TestRunPipeline:
-    def test_run_meta_is_available_to_briefing_packet_stage(self, tmp_path):
+    def test_run_meta_is_available_to_downstream_stage(self, tmp_path):
         captured = {}
 
         class CollectModule:
@@ -291,23 +286,23 @@ class TestRunPipeline:
             def run(context, config, model_config, **kwargs):
                 return {"raw_sources": {"rss": []}}
 
-        class BriefingPacketModule:
+        class MetaProbeModule:
             @staticmethod
             def run(context, config, model_config, **kwargs):
                 captured["run_meta"] = context.get("run_meta")
-                return {"briefing_packet": {"metadata": context.get("run_meta", {})}}
+                return {"meta_probe": {"metadata": context.get("run_meta", {})}}
 
         def load_stage(name):
             return {
                 "collect": CollectModule,
-                "briefing_packet": BriefingPacketModule,
+                "meta_probe": MetaProbeModule,
             }[name]
 
         config = {
             "pipeline": {
                 "stages": [
                     {"name": "collect"},
-                    {"name": "briefing_packet"},
+                    {"name": "meta_probe"},
                 ]
             }
         }

@@ -57,8 +57,6 @@ from utils.prompts import load_prompt
 
 log = logging.getLogger(__name__)
 
-_ACTION_PREPENDED_REBALANCED = "prepended_rebalanced_item"
-
 # ---------------------------------------------------------------------------
 # Domain configuration: source categories and transcript channel names
 # ---------------------------------------------------------------------------
@@ -757,17 +755,18 @@ def _resolve_domain_configs(config: dict) -> dict[str, dict]:
     return resolved or deepcopy(_DOMAIN_CONFIGS)
 
 
-def _rebalance_categories(
+def _enforce_category_share_cap(
     desk_key: str,
     desk_result: dict,
     desk_cfg: dict,
-    rss_items: list[dict],
     rebalance_log: list[dict],
 ) -> tuple[dict, list[dict]]:
-    """Ensure each category mapped to a desk contributes at least one item when raw items exist.
+    """Cap any single category's share of a desk's items (drop only, never synthesize).
 
-    Post-LLM rebalance: if any category has raw items but zero selected items,
-    prepend the highest-priority raw item from that category to the desk output.
+    The former synthetic-item rebalance (manufacturing a fallback item when a
+    category had raw items but no desk selection) was removed per the Graph
+    Epic's no-manufactured-content rule; the honest output for an empty
+    category is silence.
     """
     categories = desk_cfg.get("categories", set())
     rebalance_cfg = desk_cfg.get("category_rebalance", {}) or {}
@@ -775,58 +774,6 @@ def _rebalance_categories(
         return desk_result, rebalance_log
 
     items = desk_result.get("items", [])
-    selected_categories = {item.get("category", "") for item in items}
-
-    # Count raw items per category for this desk
-    raw_by_category: dict[str, list[dict]] = {}
-    for item in rss_items:
-        cat = item.get("category", "")
-        if cat in categories:
-            raw_by_category.setdefault(cat, []).append(item)
-
-    for cat, raw_items in raw_by_category.items():
-        if cat in selected_categories:
-            continue
-        if not raw_items:
-            continue
-        # Pick the highest-priority raw item (shortest native text first,
-        # then most recent). We don't have native text here, so use title
-        # length as a rough heuristic and prefer items with URLs.
-        candidate = max(
-            raw_items,
-            key=lambda ri: (
-                bool(ri.get("url")),
-                len(ri.get("title", "")),
-            ),
-        )
-        synthetic_item = {
-            "item_id": f"{desk_key}-{cat}-rebalanced",
-            "tag": "domestic",
-            "tag_label": "Politics",
-            "headline": candidate.get("title", "Untitled"),
-            "facts": f"Rebalanced from {cat}: {candidate.get('summary', '')[:200]}",
-            "analysis": f"Category rebalance: {cat} had {len(raw_items)} raw item(s) but was not represented in the desk output.",
-            "source_depth": "single-source",
-            "connection_hooks": [],
-            "links": [{"url": candidate.get("url", ""), "label": candidate.get("source", "")}],
-            "deep_dive_candidate": False,
-            "deep_dive_rationale": None,
-            "category": cat,
-        }
-        items.insert(0, synthetic_item)
-        rebalance_log.append(
-            {
-                "desk": desk_key,
-                "category": cat,
-                "action": _ACTION_PREPENDED_REBALANCED,
-                "item_id": synthetic_item["item_id"],
-                "raw_count": len(raw_items),
-            }
-        )
-        log.warning(
-            f"analyze_domain[{desk_key}]: category rebalance prepended item from {cat}"
-        )
-
     max_share = float(rebalance_cfg.get("max_category_share", 1.0) or 1.0)
     if 0 < max_share < 1 and items:
         max_per_category = max(1, ceil(len(items) * max_share))
@@ -889,18 +836,17 @@ def run(
             contract_issues.append({"domain": key, **issue})
         total_items += len(val.get("items", []))
 
-    # Category rebalance: ensure low-volume categories get representation
+    # Category share cap: keep one category from dominating a desk's output
     rebalance_log = []
     for desk_key in domain_configs:
         if desk_key not in domain_analysis:
             continue
         if len(domain_configs.get(desk_key, {}).get("categories", set())) <= 1:
             continue
-        domain_analysis[desk_key], rebalance_log = _rebalance_categories(
+        domain_analysis[desk_key], rebalance_log = _enforce_category_share_cap(
             desk_key,
             domain_analysis[desk_key],
             domain_configs.get(desk_key, {}),
-            rss_items,
             rebalance_log,
         )
 
@@ -919,10 +865,6 @@ def run(
             f"analyze_domain: {len(still_failed)} domain(s) still failed after retry: "
             f"{', '.join(still_failed)}"
         )
-
-    rebalance_synthesized = sum(
-        1 for entry in rebalance_log if entry.get("action") == _ACTION_PREPENDED_REBALANCED
-    )
 
     # Derive domain_research_metrics from the research pass results (observe-only).
     # fired: desks that had successful fetches and triggered the second pass.
@@ -945,7 +887,6 @@ def run(
         "domain_analysis_contract_issues": contract_issues,
         "category_rebalance_log": rebalance_log,
         "llm_usage": llm_usages,
-        "override_counts": {"rebalance_categories": rebalance_synthesized},
         "domain_research_metrics": domain_research_metrics,
     }
 

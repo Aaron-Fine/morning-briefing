@@ -83,17 +83,8 @@ pipeline:
       execute:
         max_tokens: 16000
         temperature: 0.3
-  - name: coverage_gaps
-    retry:
-      max_retries: 0
-    model:
-      provider: fireworks
-      model: accounts/fireworks/models/minimax-m2p7
-      max_tokens: 3000
-      temperature: 0.5
   - name: assemble
   - name: anomaly
-  - name: briefing_packet
   - name: send
 desks:
 - name: geopolitics_events

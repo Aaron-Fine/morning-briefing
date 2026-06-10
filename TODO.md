@@ -63,8 +63,12 @@ epic for detail.
       ~dozen files in the inventory (mostly prompts). Prompt-diff verification.
 - [ ] **PR-C** — consolidate per-outlet caps to assemble; reliability-tier
       propagation.
-- [ ] Dead-code removals (`_rebalance_categories`, assemble Phase 1 fallback,
-      `briefing_packet`, `coverage_gaps`, never-built `audit_provenance`).
+- [x] Dead-code removals (2026-06-09): `coverage_gaps` and `briefing_packet`
+      stages, `_rebalance_categories` synthetic items (share cap survives as
+      `_enforce_category_share_cap`), assemble Phase 1 fallback, and the dead
+      prompt files (`chat_briefer_prompt.md`, `perspective_system.md`,
+      `cross_domain_system.md`). `audit_provenance` was never built — its
+      anchoring-check constraint lives in the epic's Editor-stage notes.
 
 Phases 2–5 are detailed in the epic and not expanded here until Phase 1 lands.
 

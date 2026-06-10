@@ -782,7 +782,7 @@ class TestSchemaPreservation:
         assert item["connection_hooks"] == [{"entity": "China", "region": "Asia", "theme": "trade"}]
 
     def test_deep_dives_preserves_downstream_fields(self):
-        """briefing_packet and assemble need source_depth, domains_bridged."""
+        """assemble (and anomaly) need source_depth, domains_bridged."""
         dives = [
             {
                 "headline": "Deep Dive",

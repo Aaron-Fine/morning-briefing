@@ -21,10 +21,10 @@ def test_runner_folds_llm_usage():
 def test_runner_folds_override_counts():
     rm = {"metrics": {"stages": {}, "overrides": {}, "totals": {}}}
     pipeline._fold_stage_metrics(rm, "cross_domain",
-        {"override_counts": {"normalize_tag": 3}}, latency_s=0.1, retries=0)
+        {"override_counts": {"recompute_source_depth": 3}}, latency_s=0.1, retries=0)
     pipeline._fold_stage_metrics(rm, "analyze_domain",
-        {"override_counts": {"rebalance_categories": 2, "normalize_tag": 1}}, latency_s=0.1, retries=0)
-    assert rm["metrics"]["overrides"] == {"normalize_tag": 4, "rebalance_categories": 2}
+        {"override_counts": {"overlap_downgrade": 2, "recompute_source_depth": 1}}, latency_s=0.1, retries=0)
+    assert rm["metrics"]["overrides"] == {"recompute_source_depth": 4, "overlap_downgrade": 2}
 
 
 def test_fold_records_items_out():

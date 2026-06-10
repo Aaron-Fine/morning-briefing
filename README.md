@@ -26,10 +26,8 @@ Every morning at 6:00 AM MT, this container:
    - **prepare_*** — Calendar, weather (HTML email-safe chart), spiritual, local news enrichment passes
    - **seams** — Two-turn adversarial review: scan for tensions/absences/assumptions, then synthesize into contested narratives, coverage gaps, key assumptions
    - **cross_domain** — Two-turn editor-in-chief synthesis: plan (editorial decisions) then execute (at-a-glance, deep dives, worth reading)
-   - **coverage_gaps** — Diagnostic blind-spot detection with recurring pattern history; stored as artifacts and shown only in dry-run diagnostics
    - **assemble** — Renders HTML digest from all stage outputs
    - **anomaly** — Post-assembly behavioral checks: category skew, source absence, unusual deep dives, length drift, repeated phrases
-   - **briefing_packet** — Builds compressed JSON context for follow-up chat (writes `output/latest_briefing_packet.json`)
    - **send** — SMTP delivery
 
 3. **Renders** the output into a polished HTML email
@@ -62,11 +60,9 @@ graph TD
     analyze_domain -->|"8 desks in parallel"| prepare["prepare_*"]
     prepare --> seams
     seams -->|"scan → synthesis"| cross_domain
-    cross_domain -->|"plan → execute"| coverage_gaps
-    coverage_gaps --> assemble
+    cross_domain -->|"plan → execute"| assemble
     assemble --> anomaly
-    anomaly --> briefing_packet
-    briefing_packet --> send
+    anomaly --> send
 
     subgraph LLM Providers
         CFG["Configured provider(s) in config/"]
@@ -152,8 +148,7 @@ python pipeline.py --capture-prompts <dir>           # also write each rendered 
 After a `--dry-run`:
 
 - `output/last_digest.html` — full rendered digest (open in browser)
-- `output/latest_briefing_packet.json` — compressed context packet for follow-up chat
-- `output/artifacts/YYYY-MM-DD/` — per-stage JSON artifacts (`raw_sources`, `domain_analysis`, `seam_scan`, `cross_domain_plan`, `coverage_gaps`, `anomaly_report`, etc.)
+- `output/artifacts/YYYY-MM-DD/` — per-stage JSON artifacts (`raw_sources`, `domain_analysis`, `seam_scan`, `cross_domain_plan`, `anomaly_report`, etc.)
 - `output/digest.log` — pipeline log with stage timings
 
 ---
